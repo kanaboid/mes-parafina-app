@@ -122,36 +122,68 @@ def rozpocznij_trase():
     if not dane or not all(k in dane for k in ['start', 'cel', 'otwarte_zawory']):
         return jsonify({"status": "error", "message": "Brak wymaganych pól."}), 400
 
-    start_point = dane['start'] # np. 'R3_OUT'
-    end_point = dane['cel'] # np. 'R5_IN'
-    open_valves_list = dane['otwarte_zawory'] # lista nazw zaworów, np. ['V_R2_R3', 'V_R1_R2', ...]
-
+    start_point = dane['start']
+    end_point = dane['cel']
+    open_valves_list = dane['otwarte_zawory']
     
-    # KROK 1: Znajdź ścieżkę używając naszego serwisu
-    znaleziona_sciezka = get_pathfinder().find_path(start_point, end_point, open_valves_list)
+    # KROK 1: Znajdź ścieżkę
+    pathfinder = get_pathfinder()
+    znaleziona_sciezka_nazwy = pathfinder.find_path(start_point, end_point, open_valves_list)
 
-    if not znaleziona_sciezka:
+    if not znaleziona_sciezka_nazwy:
         return jsonify({
             "status": "error",
             "message": f"Nie znaleziono ścieżki z {start_point} do {end_point} przy podanym ustawieniu zaworów."
         }), 404
 
-    # KROK 2: Sprawdź, czy segmenty na ścieżce nie są już zajęte
-    # (To jest uproszczona wersja, w przyszłości trzeba pobrać ID segmentów)
-    # Na razie zakładamy, że droga jest wolna.
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
 
-    # KROK 3: Uruchom operację (symulacja)
-    # - Zmień stan zaworów w bazie danych
-    # - Stwórz wpis w operacje_log ze statusem 'aktywna'
-    # - Stwórz wpisy w log_uzyte_segmenty dla każdego segmentu na ścieżce
+        # KROK 2: Sprawdź, czy segmenty na ścieżce nie są już zajęte
+        
+        # Przygotowanie placeholderów dla zapytania SQL, np. (%s, %s, %s)
+        placeholders = ', '.join(['%s'] * len(znaleziona_sciezka_nazwy))
+        
+        sql_konflikt = f"""
+            SELECT lus.id_segmentu, s.nazwa_segmentu
+            FROM log_uzyte_segmenty lus
+            JOIN operacje_log ol ON lus.id_operacji_log = ol.id
+            JOIN segmenty s ON lus.id_segmentu = s.id
+            WHERE ol.status_operacji = 'aktywna' AND s.nazwa_segmentu IN ({placeholders})
+        """
+        
+        cursor.execute(sql_konflikt, znaleziona_sciezka_nazwy)
+        konflikty = cursor.fetchall()
 
-    # Na razie tylko zwracamy znalezioną ścieżkę
-    return jsonify({
-        "status": "success",
-        "message": "Trasa została pomyślnie znaleziona i zwalidowana.",
-        "trasa": {
-            "start": start_point,
-            "cel": end_point,
-            "wymagane_segmenty": znaleziona_sciezka
-        }
-    }), 200
+        if konflikty:
+            nazwy_zajetych = [k['nazwa_segmentu'] for k in konflikty]
+            return jsonify({
+                "status": "error",
+                "message": "Nie można rozpocząć operacji. Konflikt zasobów.",
+                "zajete_segmenty": nazwy_zajetych
+            }), 409 # 409 Conflict
+
+        # KROK 3: Uruchom operację (na razie symulacja)
+        # TODO: Dodać transakcję, która:
+        # 1. Zmieni stan zaworów w tabeli `zawory`.
+        # 2. Doda wpis do `operacje_log` ze statusem 'aktywna'.
+        # 3. Doda wpisy do `log_uzyte_segmenty` dla `znaleziona_sciezka_nazwy`.
+        
+        return jsonify({
+            "status": "success",
+            "message": "Trasa została pomyślnie znaleziona i zwalidowana. Brak konfliktów.",
+            "trasa": {
+                "start": start_point,
+                "cel": end_point,
+                "wymagane_segmenty": znaleziona_sciezka_nazwy
+            }
+        }), 200
+
+    except mysql.connector.Error as err:
+        return jsonify({"status": "error", "message": f"Błąd bazy danych: {err}"}), 500
+    finally:
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()

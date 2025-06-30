@@ -1,0 +1,183 @@
+Fantastycznie! Projektowanie bazy danych to jeden z najważniejszych i najciekawszych etapów. To fundament całej aplikacji – jeśli zrobimy to dobrze, dodawanie nowych funkcji będzie znacznie łatwiejsze.
+
+Na podstawie Twoich odpowiedzi i opisu procesu, przygotowałem projekt struktury bazy danych. Najważniejszym założeniem, które musimy zaimplementować, jest **możliwość posiadania przez jedną partię surowca wielu statusów jednocześnie**.
+
+### Wyjaśnienie Projektu Bazy Danych
+
+Standardowe podejście, czyli jedna kolumna `status` w tabeli z partiami, nie zadziała. Zamiast tego, użyjemy profesjonalnego rozwiązania, czyli tzw. **tabeli łączącej (junction table)**. Nasza struktura będzie się składać z 5 głównych tabel:
+
+1.  **`sprzet`**: Lista całego sprzętu (reaktory, filtry, beczki). Przechowuje informacje o samym sprzęcie, jego typie i aktualnym stanie (np. "Pusty", "Dmuchanie filtra", "W czyszczeniu").
+2.  **`partie_surowca`**: Główna tabela przechowująca informacje o każdej partii parafiny. Każdy wiersz to jedna, unikalna partia. Przechowujemy tu jej kod, typ, wagę i **aktualną lokalizację** (w którym sprzęcie się znajduje).
+3.  **`statusy`**: Słownik wszystkich możliwych statusów, jakie może przyjąć partia (np. "Surowy", "Filtrowany", "Dobielony"). Dzięki temu mamy jedno miejsce do zarządzania listą statusów.
+4.  **`partie_statusy`**: Kluczowa tabela łącząca! Wiąże ona partie ze statusami. Jeśli partia o ID 5 ma statusy "Surowy" (ID 1) i "Dobielony" (ID 3), to w tej tabeli będą dwa wiersze: `(5, 1)` i `(5, 3)`. To rozwiązuje nasz problem.
+5.  **`operacje_log`**: Dziennik zdarzeń. Zapisujemy tu każdą wykonaną operację (transfer, filtracja, dodanie ziemi) jako osobny wiersz. To da nam pełną historię każdej partii.
+
+Oto schemat wizualny, jak te tabele będą ze sobą połączone:
+
+
+---
+
+### Krok 1: Stworzenie Tabel w MySQL
+
+Poniżej znajduje się gotowy skrypt SQL, który stworzy wszystkie potrzebne tabele.
+
+**Twoje zadanie:**
+1.  Otwórz swoje narzędzie do zarządzania bazą danych (MySQL Workbench, DBeaver lub nawet terminal `mysql`).
+2.  Stwórz nową bazę danych dla naszego projektu, np. `mes_parafina_db`.
+    ```sql
+    CREATE DATABASE mes_parafina_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+    ```
+3.  Wybierz tę bazę danych do użytku:
+    ```sql
+    USE mes_parafina_db;
+    ```
+4.  Wklej i wykonaj cały poniższy skrypt.
+
+```sql
+-- Usuwa tabele jeśli istnieją, aby można było wykonać skrypt wielokrotnie
+DROP TABLE IF EXISTS operacje_log;
+DROP TABLE IF EXISTS partie_statusy;
+DROP TABLE IF EXISTS statusy;
+DROP TABLE IF EXISTS partie_surowca;
+DROP TABLE IF EXISTS sprzet;
+
+-- Tabela przechowująca informacje o sprzęcie: reaktorach, filtrach, beczkach
+CREATE TABLE sprzet (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    nazwa_unikalna VARCHAR(20) NOT NULL UNIQUE COMMENT 'Np. R1, FZ, B1b, B7c',
+    typ_sprzetu ENUM('reaktor', 'filtr', 'beczka_brudna', 'beczka_czysta', 'apollo') NOT NULL,
+    pojemnosc_kg DECIMAL(10, 2),
+    stan_sprzetu VARCHAR(50) COMMENT 'Np. Pusty, W koło, Przelew, Dmuchanie filtra'
+) COMMENT 'Lista całego sprzętu produkcyjnego i magazynowego';
+
+-- Tabela z głównymi informacjami o każdej partii surowca
+CREATE TABLE partie_surowca (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    unikalny_kod VARCHAR(50) NOT NULL UNIQUE COMMENT 'Identyfikator partii, np. T10-20231027-1430-APOLLO',
+    typ_surowca VARCHAR(50),
+    zrodlo_pochodzenia ENUM('apollo', 'cysterna') NOT NULL,
+    waga_poczatkowa_kg DECIMAL(10, 2) NOT NULL,
+    waga_aktualna_kg DECIMAL(10, 2),
+    data_utworzenia TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    -- Klucz obcy wskazujący, gdzie aktualnie znajduje się partia
+    id_sprzetu INT,
+    FOREIGN KEY (id_sprzetu) REFERENCES sprzet(id) ON DELETE SET NULL
+) COMMENT 'Każdy wiersz to unikalna partia produkcyjna surowca';
+
+-- Tabela słownikowa dla statusów partii
+CREATE TABLE statusy (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    nazwa_statusu VARCHAR(50) NOT NULL UNIQUE COMMENT 'Np. Surowy, Filtrowany, Dobielony, Wydmuch'
+) COMMENT 'Słownik możliwych statusów partii surowca';
+
+-- Tabela łącząca partie ze statusami (relacja wiele-do-wielu)
+CREATE TABLE partie_statusy (
+    id_partii INT NOT NULL,
+    id_statusu INT NOT NULL,
+    data_nadania TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id_partii, id_statusu), -- Zapobiega wielokrotnemu przypisaniu tego samego statusu
+    FOREIGN KEY (id_partii) REFERENCES partie_surowca(id) ON DELETE CASCADE,
+    FOREIGN KEY (id_statusu) REFERENCES statusy(id) ON DELETE CASCADE
+) COMMENT 'Przypisuje wiele statusów do jednej partii';
+
+-- Dziennik wszystkich operacji wykonanych w systemie
+CREATE TABLE operacje_log (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    typ_operacji VARCHAR(50) NOT NULL COMMENT 'Np. TRANSFER, DODANIE_ZIEMI, FILTRACJA_KOŁO',
+    id_partii_surowca INT,
+    id_sprzetu_zrodlowego INT,
+    id_sprzetu_docelowego INT,
+    czas_rozpoczecia DATETIME NOT NULL,
+    czas_zakonczenia DATETIME,
+    ilosc_kg DECIMAL(10, 2),
+    opis TEXT,
+    FOREIGN KEY (id_partii_surowca) REFERENCES partie_surowca(id) ON DELETE SET NULL,
+    FOREIGN KEY (id_sprzetu_zrodlowego) REFERENCES sprzet(id) ON DELETE SET NULL,
+    FOREIGN KEY (id_sprzetu_docelowego) REFERENCES sprzet(id) ON DELETE SET NULL
+) COMMENT 'Log wszystkich zdarzeń i operacji w procesie';
+```
+
+---
+
+### Wypełnienie Bazy Danych Przykładowymi Danymi
+
+Abyśmy mogli coś zobaczyć i przetestować, dodajmy trochę danych startowych. Wykonaj poniższy skrypt SQL.
+
+```sql
+-- Wypełnienie tabeli sprzętu
+INSERT INTO sprzet (nazwa_unikalna, typ_sprzetu, pojemnosc_kg, stan_sprzetu) VALUES
+('R1', 'reaktor', 9000.00, 'Pusty'),
+('R2', 'reaktor', 9000.00, 'Pusty'),
+('R3', 'reaktor', 9000.00, 'Pusty'),
+('R4', 'reaktor', 9000.00, 'Pusty'),
+('R5', 'reaktor', 9000.00, 'Pusty'),
+('FZ', 'filtr', NULL, 'Czysty'),
+('FN', 'filtr', NULL, 'Czysty'),
+('B1b', 'beczka_brudna', 10000.00, 'Pełna'),
+('B1c', 'beczka_czysta', 10000.00, 'Pusta');
+
+-- Wypełnienie słownika statusów
+INSERT INTO statusy (nazwa_statusu) VALUES
+('Surowy'),
+('Filtrowany'),
+('Dobielony'),
+('Dobielony (placek)'),
+('Zawiera wydmuch'),
+('Próbka OK'),
+('Próbka Odrzucona');
+
+-- Stworzenie przykładowej partii surowca
+-- Załóżmy, że tankujemy surowiec z B1b do R1
+INSERT INTO partie_surowca (unikalny_kod, typ_surowca, zrodlo_pochodzenia, waga_poczatkowa_kg, waga_aktualna_kg, id_sprzetu) 
+VALUES ('T10-20231027-1500-APOLLO', 'T-10', 'apollo', 7500.00, 7500.00, 1); -- id_sprzetu = 1 to R1
+
+-- Zaktualizowanie stanu reaktora R1
+UPDATE sprzet SET stan_sprzetu = 'Zatankowany (surowy)', id_partii_surowca = 1 WHERE id = 1;
+
+-- Nadanie statusu "Surowy" nowej partii
+INSERT INTO partie_statusy (id_partii, id_statusu) VALUES (1, 1); -- id_partii=1 to nasza partia, id_statusu=1 to 'Surowy'
+
+-- Zapisanie operacji transferu w logu
+INSERT INTO operacje_log (typ_operacji, id_partii_surowca, id_sprzetu_zrodlowego, id_sprzetu_docelowego, czas_rozpoczecia, czas_zakonczenia, ilosc_kg, opis)
+VALUES ('TRANSFER', 1, 8, 1, '2023-10-27 15:00:00', '2023-10-27 15:15:00', 7500.00, 'Tankowanie z B1b do R1');
+```
+
+### Sprawdzenie Wyników (Przykładowe Zapytanie)
+
+Aby zobaczyć, jak to wszystko działa razem, możemy wykonać zapytanie, które pobierze informacje o partii w reaktorze R1 i jej wszystkich statusach.
+
+```sql
+SELECT
+    p.unikalny_kod,
+    p.typ_surowca,
+    p.waga_aktualna_kg,
+    s.nazwa_unikalna AS lokalizacja,
+    s.stan_sprzetu,
+    GROUP_CONCAT(st.nazwa_statusu SEPARATOR ', ') AS statusy_partii
+FROM
+    partie_surowca p
+JOIN
+    sprzet s ON p.id_sprzetu = s.id
+JOIN
+    partie_statusy ps ON p.id = ps.id_partii
+JOIN
+    statusy st ON ps.id_statusu = st.id
+WHERE
+    s.nazwa_unikalna = 'R1';
+```
+
+Wynik tego zapytania powinien wyglądać mniej więcej tak:
+
+| unikalny_kod                 | typ_surowca | waga_aktualna_kg | lokalizacja | stan_sprzetu           | statusy_partii |
+| ---------------------------- | ----------- | ---------------- | ----------- | ---------------------- | -------------- |
+| T10-20231027-1500-APOLLO     | T-10        | 7500.00          | R1          | Zatankowany (surowy)   | Surowy         |
+
+---
+
+### Następne Kroki
+
+Mamy teraz solidny fundament. Wykonaj powyższe kroki, a gdy Twoja baza danych będzie gotowa i wypełniona danymi, przejdziemy do **Kroku 2: Stworzenia szkieletu aplikacji we Flasku i połączenia jej z naszą nową bazą danych.**
+
+Napiszemy pierwszy, prosty endpoint API, np. `/api/sprzet/R1`, który będzie wykonywał podobne zapytanie jak powyżej i zwracał dane w formacie JSON.
+
+Daj znać, jak poszło
