@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MES - Panel Sterowania Produkcją</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <header>
+        <h1>System Zarządzania Produkcją Parafiny</h1>
+    </header>
+
+    <main>
+        <!-- Sekcja statusu sprzętu (bez zmian) -->
+        <section id="status-section">
+            <h2>Aktualny Stan Sprzętu</h2>
+            <div id="sprzet-container" class="grid-container">
+                <p>Ładowanie stanu sprzętu...</p>
+            </div>
+        </section>
+
+        <!-- NOWA SEKCJA: Stan Zaworów -->
+        <section id="valves-section">
+            <h2>Stan Zaworów</h2>
+            <div id="valves-container" class="grid-container">
+                <p>Ładowanie stanu zaworów...</p>
+            </div>
+        </section>
+
+        <!-- NOWA SEKCJA: Aktywne Operacje -->
+        <section id="active-operations-section">
+            <h2>Aktywne Operacje</h2>
+            <table id="operations-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Typ Operacji</th>
+                        <th>ID Partii</th>
+                        <th>Czas Rozpoczęcia</th>
+                        <th>Opis</th>
+                        <th>Akcja</th>
+                    </tr>
+                </thead>
+                <tbody id="operations-table-body">
+                    <!-- JavaScript wstawi tutaj wiersze -->
+                </tbody>
+            </table>
+        </section>
+
+        <!-- Sekcja uruchamiania operacji i logów (bez zmian) -->
+        <section id="operations-section">
+            <h2>Uruchom Nową Operację</h2>
+            <div class="operation-form">
+                <h3>Trasa: R3 -> FZ -> R5</h3>
+                <button id="run-r3-fz-r5">Uruchom Filtrację</button>
+            </div>
+            <div id="log-operacji">
+                <h3>Logi Systemowe</h3>
+                <pre id="log-output">Czekam na akcję...</pre>
+            </div>
+        </section>
+    </main>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
