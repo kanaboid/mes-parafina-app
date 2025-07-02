@@ -25,14 +25,32 @@ def index():
 # 2. Stworzenie pierwszego, prawdziwego endpointu API
 @bp.route('/api/sprzet', methods=['GET'])
 def get_sprzet():
-    """Zwraca listę całego sprzętu z bazy danych."""
-    
+    """Zwraca listę całego sprzętu WRAZ z informacją o znajdującej się w nim partii."""
+    from .db import get_db_connection
     conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True) # dictionary=True zwraca wiersze jako słowniki
+    cursor = conn.cursor(dictionary=True)
     
-    query = "SELECT id, nazwa_unikalna, typ_sprzetu, pojemnosc_kg, stan_sprzetu FROM sprzet ORDER BY typ_sprzetu, nazwa_unikalna;"
+    # Używamy LEFT JOIN, aby pokazać sprzęt nawet jeśli jest pusty
+    query = """
+        SELECT 
+            s.id, s.nazwa_unikalna, s.typ_sprzetu, s.stan_sprzetu,
+            /* Używamy ANY_VALUE() dla wszystkich kolumn z tabeli 'p', 
+               które nie są w GROUP BY ani w funkcji agregującej */
+            ANY_VALUE(p.id) as id_partii, 
+            ANY_VALUE(p.unikalny_kod) as unikalny_kod, 
+            ANY_VALUE(p.typ_surowca) as typ_surowca, 
+            ANY_VALUE(p.waga_aktualna_kg) as waga_aktualna_kg,
+            
+            /* Ta kolumna już jest zagregowana, więc jej nie ruszamy */
+            GROUP_CONCAT(st.nazwa_statusu SEPARATOR ', ') AS statusy_partii
+        FROM sprzet s
+        LEFT JOIN partie_surowca p ON s.id = p.id_sprzetu
+        LEFT JOIN partie_statusy ps ON p.id = ps.id_partii
+        LEFT JOIN statusy st ON ps.id_statusu = st.id
+        GROUP BY s.id  /* Grupowanie pozostaje bez zmian */
+        ORDER BY s.typ_sprzetu, s.nazwa_unikalna;
+    """
     cursor.execute(query)
-    
     sprzet_list = cursor.fetchall()
     
     cursor.close()
@@ -43,112 +61,162 @@ def get_sprzet():
 # Endpoint do tworzenia nowej partii przez tankowanie
 @bp.route('/api/operacje/tankowanie', methods=['POST'])
 def tankowanie():
-    # Pobranie danych JSON z żądania
-    
     dane = request.get_json()
-    if not dane:
-        return jsonify({"status": "error", "message": "Brak danych w formacie JSON."}), 400
-
-    # Podstawowa walidacja danych wejściowych
-    wymagane_pola = ['id_sprzetu_zrodlowego', 'id_sprzetu_docelowego', 'typ_surowca', 'waga_kg', 'zrodlo_pochodzenia']
-    if not all(pole in dane for pole in wymagane_pola):
-        return jsonify({"status": "error", "message": "Brak wszystkich wymaganych pól."}), 400
+    
+    # Validation
+    wymagane_pola = ['nazwa_portu_zrodlowego', 'nazwa_portu_docelowego', 
+                     'typ_surowca', 'waga_kg', 'zrodlo_pochodzenia']
+    if not dane or not all(k in dane for k in wymagane_pola):
+        return jsonify({'message': 'Brak wymaganych danych'}), 400
 
     conn = None
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(dictionary=True)
 
-        # --- POCZĄTEK TRANSAKCJI ---
-        # Dzięki transakcji wszystkie poniższe operacje albo się udadzą w całości,
-        # albo żadna z nich nie zostanie zapisana w razie błędu.
-        conn.start_transaction()
+        # Get equipment IDs from port names
+        cursor.execute("""
+            SELECT s.id, s.nazwa_unikalna 
+            FROM porty_sprzetu p 
+            JOIN sprzet s ON p.id_sprzetu = s.id 
+            WHERE p.nazwa_portu = %s
+        """, (dane['nazwa_portu_zrodlowego'],))
+        zrodlo = cursor.fetchone()
+        
+        cursor.execute("""
+            SELECT s.id, s.nazwa_unikalna 
+            FROM porty_sprzetu p 
+            JOIN sprzet s ON p.id_sprzetu = s.id 
+            WHERE p.nazwa_portu = %s
+        """, (dane['nazwa_portu_docelowego'],))
+        cel = cursor.fetchone()
 
-        # KROK 1: Sprawdzenie, czy reaktor docelowy jest pusty
-        cursor.execute("SELECT stan_sprzetu FROM sprzet WHERE id = %s", (dane['id_sprzetu_docelowego'],))
+        if not zrodlo or not cel:
+            return jsonify({'message': 'Nieprawidłowy port źródłowy lub docelowy'}), 400
+
+        id_zrodla = zrodlo['id']
+        id_celu = cel['id']
+
+        # Check if target reactor is empty
+        cursor.execute("SELECT stan_sprzetu FROM sprzet WHERE id = %s", (id_celu,))
         stan_reaktora = cursor.fetchone()
-        if not stan_reaktora or stan_reaktora[0] != 'Pusty':
-             return jsonify({"status": "error", "message": "Reaktor docelowy nie jest pusty!"}), 409 # 409 Conflict
+        
+        if not stan_reaktora or stan_reaktora['stan_sprzetu'] != 'Pusty':
+            return jsonify({
+                'message': f"Reaktor docelowy nie jest pusty (stan: {stan_reaktora['stan_sprzetu'] if stan_reaktora else 'nieznany'})"
+            }), 400
 
-        # KROK 2: Stworzenie unikalnego kodu partii
+        # Krok 4: Stworzenie unikalnego kodu partii
         teraz = datetime.now()
         unikalny_kod = f"{dane['typ_surowca']}-{teraz.strftime('%Y%m%d-%H%M%S')}-{dane['zrodlo_pochodzenia'].upper()}"
 
-        # KROK 3: Stworzenie nowej partii surowca
+        # Krok 5: Stworzenie nowej partii surowca
         sql_partia = """
             INSERT INTO partie_surowca 
             (unikalny_kod, typ_surowca, zrodlo_pochodzenia, waga_poczatkowa_kg, waga_aktualna_kg, id_sprzetu) 
             VALUES (%s, %s, %s, %s, %s, %s)
         """
-        partia_dane = (unikalny_kod, dane['typ_surowca'], dane['zrodlo_pochodzenia'], dane['waga_kg'], dane['waga_kg'], dane['id_sprzetu_docelowego'])
+        # UŻYCIE ZMIENNEJ `id_celu`
+        partia_dane = (unikalny_kod, dane['typ_surowca'], dane['zrodlo_pochodzenia'], dane['waga_kg'], dane['waga_kg'], id_celu)
         cursor.execute(sql_partia, partia_dane)
-        nowa_partia_id = cursor.lastrowid # Pobranie ID właśnie wstawionego wiersza
+        nowa_partia_id = cursor.lastrowid
 
-        # KROK 4: Nadanie statusu "Surowy"
-        # ID statusu "Surowy" to 1 (zgodnie z naszymi danymi startowymi)
-        cursor.execute("INSERT INTO partie_statusy (id_partii, id_statusu) VALUES (%s, %s)", (nowa_partia_id, 1))
+        # Krok 6: Nadanie statusu "Surowy"
+        cursor.execute("INSERT IGNORE INTO partie_statusy (id_partii, id_statusu) VALUES (%s, 1)", (nowa_partia_id,))
 
-        # KROK 5: Aktualizacja stanu reaktora docelowego
-        cursor.execute("UPDATE sprzet SET stan_sprzetu = 'Zatankowany (surowy)' WHERE id = %s", (dane['id_sprzetu_docelowego'],))
+        # Krok 7: Aktualizacja stanu reaktora docelowego
+        # UŻYCIE ZMIENNEJ `id_celu`
+        cursor.execute("UPDATE sprzet SET stan_sprzetu = 'Zatankowany (surowy)' WHERE id = %s", (id_celu,))
 
-        # KROK 6: Zapisanie operacji w logu
+        # Krok 8: Zapisanie operacji w logu
         sql_log = """
             INSERT INTO operacje_log 
-            (typ_operacji, id_partii_surowca, id_sprzetu_zrodlowego, id_sprzetu_docelowego, czas_rozpoczecia, ilosc_kg, opis) 
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            (typ_operacji, id_partii_surowca, id_sprzetu_zrodlowego, id_sprzetu_docelowego, czas_rozpoczecia, ilosc_kg, opis, status_operacji) 
+            VALUES (%s, %s, %s, %s, %s, %s, %s, 'zakonczona')
         """
-        log_dane = ('TRANSFER', nowa_partia_id, dane['id_sprzetu_zrodlowego'], dane['id_sprzetu_docelowego'], teraz, dane['waga_kg'], f"Tankowanie partii {unikalny_kod}")
+        # UŻYCIE ZMIENNYCH `id_zrodla` i `id_celu`
+        log_dane = ('TRANSFER', nowa_partia_id, id_zrodla, id_celu, teraz, dane['waga_kg'], f"Tankowanie partii {unikalny_kod}")
         cursor.execute(sql_log, log_dane)
         
-        # --- ZATWIERDZENIE TRANSAKCJI ---
         conn.commit()
-
-        return jsonify({
-            "status": "success", 
-            "message": f"Partia {unikalny_kod} została pomyślnie utworzona i zatankowana.",
-            "nowa_partia_id": nowa_partia_id
-        }), 201 # 201 Created
+        return jsonify({'message': 'Tankowanie rozpoczęte pomyślnie'}), 201
 
     except mysql.connector.Error as err:
-        # W razie błędu wycofaj wszystkie zmiany
-        if conn:
+        if conn: 
             conn.rollback()
-        return jsonify({"status": "error", "message": f"Błąd bazy danych: {err}"}), 500
+        return jsonify({'message': f'Błąd bazy danych: {str(err)}'}), 500
     finally:
-        # Zawsze zamykaj połączenie
         if conn and conn.is_connected():
-            cursor.close()
             conn.close()
-
-# app/routes.py
-# ... (importy i inne endpointy bez zmian) ...
 
 @bp.route('/api/operacje/rozpocznij_trase', methods=['POST'])
 def rozpocznij_trase():
     dane = request.get_json()
-    if not dane or not all(k in dane for k in ['start', 'cel', 'otwarte_zawory', 'typ_operacji', 'id_partii']):
-        return jsonify({"status": "error", "message": "Brak wymaganych pól: start, cel, otwarte_zawory, typ_operacji, id_partii."}), 400
+    if not dane or not all(k in dane for k in ['start', 'cel', 'otwarte_zawory', 'typ_operacji']):
+        return jsonify({"status": "error", "message": "Brak wymaganych pól: start, cel, otwarte_zawory, typ_operacji."}), 400
 
     start_point = dane['start']
     end_point = dane['cel']
     open_valves_list = dane['otwarte_zawory']
     typ_operacji = dane['typ_operacji']
-    id_partii = dane['id_partii']
+    sprzet_posredni = dane.get('sprzet_posredni')
     
-    # KROK 1: Znajdź ścieżkę
     pathfinder = get_pathfinder()
-    znaleziona_sciezka_nazwy = pathfinder.find_path(start_point, end_point, open_valves_list)
+    znaleziona_sciezka_nazwy = []
 
+    # --- POPRAWIONA LOGIKA ZNAJDOWANIA TRASY ---
+    if sprzet_posredni:
+        # Jeśli jest sprzęt pośredni (np. filtr), szukamy trasy w dwóch częściach.
+        posredni_in = f"{sprzet_posredni}_IN"
+        posredni_out = f"{sprzet_posredni}_OUT"
+
+        sciezka_1 = pathfinder.find_path(start_point, posredni_in, open_valves_list)
+        if not sciezka_1:
+            return jsonify({"status": "error", "message": f"Nie znaleziono ścieżki z {start_point} do {posredni_in}."}), 404
+        
+        sciezka_wewnetrzna = pathfinder.find_path(posredni_in, posredni_out, open_valves_list)
+        if not sciezka_wewnetrzna:
+            return jsonify({"status": "error", "message": f"Nie znaleziono ścieżki wewnętrznej w {sprzet_posredni} (z {posredni_in} do {posredni_out})."}), 404
+
+        sciezka_2 = pathfinder.find_path(posredni_out, end_point, open_valves_list)
+        if not sciezka_2:
+            return jsonify({"status": "error", "message": f"Nie znaleziono ścieżki z {posredni_out} do {end_point}."}), 404
+
+        znaleziona_sciezka_nazwy = sciezka_1 + sciezka_wewnetrzna + sciezka_2
+    else:
+        # Jeśli nie ma punktu pośredniego (np. przelew bezpośredni), szukamy jednej, ciągłej ścieżki.
+        znaleziona_sciezka_nazwy = pathfinder.find_path(start_point, end_point, open_valves_list)
+
+    # Sprawdzamy, czy ostatecznie udało się znaleźć trasę.
     if not znaleziona_sciezka_nazwy:
         return jsonify({
             "status": "error",
-            "message": f"Nie znaleziono ścieżki z {start_point} do {end_point} przy podanym ustawieniu zaworów."
+            "message": f"Nie znaleziono kompletnej ścieżki z {start_point} do {end_point} przy podanym ustawieniu zaworów."
         }), 404
 
     conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
+
+
+
+        # KROK 1.5: ZNAJDŹ PARTIĘ W REAKTORZE STARTOWYM
+        # NOWA LOGIKA: Automatyczne znajdowanie partii w urządzeniu startowym.
+        # Na podstawie nazwy portu startowego znajdujemy ID sprzętu, a potem ID partii w tym sprzęcie.
+        sql_znajdz_partie = """
+            SELECT p.id FROM partie_surowca p
+            JOIN porty_sprzetu ps ON p.id_sprzetu = ps.id_sprzetu
+            WHERE ps.nazwa_portu = %s
+        """
+        cursor.execute(sql_znajdz_partie, (start_point,))
+        partia = cursor.fetchone()
+
+        if not partia:
+            return jsonify({"status": "error", "message": f"W urządzeniu startowym ({start_point}) nie znaleziono żadnej partii."}), 404
+        
+        # Mamy ID partii, będziemy go używać do zapisu w logu.
+        id_partii = partia['id']
 
         # KROK 2: Sprawdź konflikty
         placeholders_konflikt = ', '.join(['%s'] * len(znaleziona_sciezka_nazwy))
@@ -182,8 +250,13 @@ def rozpocznij_trase():
 
         # 3b. Stwórz nową operację w logu
         opis_operacji = f"Operacja {typ_operacji} z {start_point} do {end_point}"
-        sql_log = "INSERT INTO operacje_log (typ_operacji, id_partii_surowca, status_operacji, czas_rozpoczecia, opis) VALUES (%s, %s, 'aktywna', NOW(), %s)"
-        write_cursor.execute(sql_log, (typ_operacji, id_partii, opis_operacji))
+        sql_log = """
+            INSERT INTO operacje_log 
+            (typ_operacji, id_partii_surowca, status_operacji, czas_rozpoczecia, opis, punkt_startowy, punkt_docelowy) 
+            VALUES (%s, %s, 'aktywna', NOW(), %s, %s, %s)
+        """
+        # Używamy teraz `id_partii` znalezionego automatycznie.
+        write_cursor.execute(sql_log, (typ_operacji, id_partii, opis_operacji, start_point, end_point))
         nowa_operacja_id = write_cursor.lastrowid
 
         # 3c. Pobierz ID segmentów na trasie
@@ -223,8 +296,9 @@ def rozpocznij_trase():
             if 'write_cursor' in locals() and write_cursor: write_cursor.close()
             conn.close()
 
-@bp.route('/api/operacje/zakoncz', methods=['POST'])
+# app/routes.py
 
+@bp.route('/api/operacje/zakoncz', methods=['POST'])
 def zakoncz_operacje():
     dane = request.get_json()
     if not dane or 'id_operacji' not in dane:
@@ -238,7 +312,13 @@ def zakoncz_operacje():
         cursor = conn.cursor(dictionary=True)
 
         # KROK 1: Sprawdź, czy operacja istnieje i jest aktywna
-        cursor.execute("SELECT status_operacji FROM operacje_log WHERE id = %s", (id_operacji,))
+        # Dodajemy `punkt_startowy`, aby wiedzieć, który reaktor opróżnić
+        sql_operacja = """
+            SELECT status_operacji, typ_operacji, id_partii_surowca, punkt_startowy, punkt_docelowy 
+            FROM operacje_log 
+            WHERE id = %s
+        """
+        cursor.execute(sql_operacja, (id_operacji,))
         operacja = cursor.fetchone()
 
         if not operacja:
@@ -247,21 +327,18 @@ def zakoncz_operacje():
             return jsonify({
                 "status": "error", 
                 "message": f"Nie można zakończyć operacji, ponieważ nie jest aktywna (status: {operacja['status_operacji']})."
-            }), 409 # Conflict
+            }), 409
 
         # --- POCZĄTEK TRANSAKCJI ---
-        # (Transakcja już trwa, bo mamy autocommit=False)
         write_cursor = conn.cursor()
 
-        # KROK 2: Zmień status operacji i dodaj czas zakończenia
+        # KROK 2: Zmień status operacji
         sql_zakoncz = "UPDATE operacje_log SET status_operacji = 'zakonczona', czas_zakonczenia = NOW() WHERE id = %s"
         write_cursor.execute(sql_zakoncz, (id_operacji,))
 
-        # KROK 3: Znajdź zawory używane w tej operacji i zamknij je
-        # To zapytanie znajduje nazwy zaworów powiązanych z segmentami używanymi przez naszą operację
+        # KROK 3: Znajdź i zamknij zawory
         sql_znajdz_zawory = """
-            SELECT DISTINCT z.nazwa_zaworu 
-            FROM zawory z
+            SELECT DISTINCT z.nazwa_zaworu FROM zawory z
             JOIN segmenty s ON z.id = s.id_zaworu
             JOIN log_uzyte_segmenty lus ON s.id = lus.id_segmentu
             WHERE lus.id_operacji_log = %s
@@ -274,7 +351,35 @@ def zakoncz_operacje():
             sql_zamknij_zawory = f"UPDATE zawory SET stan = 'ZAMKNIETY' WHERE nazwa_zaworu IN ({placeholders})"
             write_cursor.execute(sql_zamknij_zawory, zawory_do_zamkniecia)
         
-        # KROK 4: Zatwierdź transakcję
+        # KROK 4: Aktualizacja lokalizacji partii i stanu sprzętu
+        typ_op = operacja['typ_operacji']
+        id_partii = operacja['id_partii_surowca']
+        punkt_startowy = operacja['punkt_startowy']
+        punkt_docelowy = operacja['punkt_docelowy']
+
+        # Sprawdzamy, czy operacja była przelewem (a nie np. operacją "w koło")
+        if id_partii and punkt_startowy and punkt_docelowy and punkt_startowy != punkt_docelowy:
+            # Znajdź ID sprzętu docelowego
+            cursor.execute("SELECT id_sprzetu FROM porty_sprzetu WHERE nazwa_portu = %s", (punkt_docelowy,))
+            sprzet_docelowy = cursor.fetchone()
+            
+            # Znajdź ID sprzętu źródłowego
+            cursor.execute("SELECT id_sprzetu FROM porty_sprzetu WHERE nazwa_portu = %s", (punkt_startowy,))
+            sprzet_zrodlowy = cursor.fetchone()
+
+            if sprzet_docelowy and sprzet_zrodlowy:
+                id_sprzetu_docelowego = sprzet_docelowy['id_sprzetu']
+                id_sprzetu_zrodlowego = sprzet_zrodlowy['id_sprzetu']
+                
+                # 1. Przenieś partię do nowego miejsca
+                sql_przenies = "UPDATE partie_surowca SET id_sprzetu = %s WHERE id = %s"
+                write_cursor.execute(sql_przenies, (id_sprzetu_docelowego, id_partii))
+                
+                # 2. Zaktualizuj stan sprzętu
+                write_cursor.execute("UPDATE sprzet SET stan_sprzetu = 'Zatankowany' WHERE id = %s", (id_sprzetu_docelowego,))
+                write_cursor.execute("UPDATE sprzet SET stan_sprzetu = 'Pusty' WHERE id = %s", (id_sprzetu_zrodlowego,))
+
+        # KROK 5: Zatwierdź transakcję
         conn.commit()
 
         return jsonify({
@@ -284,15 +389,13 @@ def zakoncz_operacje():
         }), 200
 
     except mysql.connector.Error as err:
-        if conn:
-            conn.rollback()
+        if conn: conn.rollback()
         return jsonify({"status": "error", "message": f"Błąd bazy danych: {err}"}), 500
     finally:
         if conn and conn.is_connected():
             if 'cursor' in locals(): cursor.close()
             if 'write_cursor' in locals(): write_cursor.close()
             conn.close()
-
 
 @bp.route('/api/zawory', methods=['GET'])
 def get_wszystkie_zawory():
@@ -343,3 +446,234 @@ def get_aktywne_operacje():
     for op in operacje:
         op['czas_rozpoczecia'] = op['czas_rozpoczecia'].strftime('%Y-%m-%d %H:%M:%S')
     return jsonify(operacje)
+
+# app/routes.py
+# ...
+
+@bp.route('/api/punkty_startowe', methods=['GET'])
+def get_punkty_startowe():
+    """Zwraca listę wszystkich portów wyjściowych (OUT)."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    # Wybieramy porty ze sprzętu, który może być źródłem (np. nie beczki czyste)
+    query = """
+        SELECT p.nazwa_portu, s.nazwa_unikalna as nazwa_sprzetu 
+        FROM porty_sprzetu p
+        JOIN sprzet s ON p.id_sprzetu = s.id
+        WHERE p.typ_portu = 'OUT' AND s.typ_sprzetu != 'beczka_czysta'
+        ORDER BY s.nazwa_unikalna
+    """
+    cursor.execute(query)
+    porty = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return jsonify(porty)
+
+@bp.route('/api/punkty_docelowe', methods=['GET'])
+def get_punkty_docelowe():
+    """Zwraca listę wszystkich portów wejściowych (IN)."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    # Wybieramy porty ze sprzętu, który może być celem (np. nie beczki brudne)
+    query = """
+        SELECT p.nazwa_portu, s.nazwa_unikalna as nazwa_sprzetu 
+        FROM porty_sprzetu p
+        JOIN sprzet s ON p.id_sprzetu = s.id
+        WHERE p.typ_portu = 'IN' AND s.typ_sprzetu NOT IN ('beczka_brudna', 'apollo')
+        ORDER BY s.nazwa_unikalna
+    """
+    cursor.execute(query)
+    porty = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return jsonify(porty)
+
+@bp.route('/api/sprzet/filtry', methods=['GET'])
+def get_filtry():
+    """Zwraca listę filtrów."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT nazwa_unikalna FROM sprzet WHERE typ_sprzetu = 'filtr'")
+    filtry = [row['nazwa_unikalna'] for row in cursor.fetchall()]
+    cursor.close()
+    conn.close()
+    return jsonify(filtry)
+
+# app/routes.py
+# ...
+
+# app/routes.py
+# ...
+
+@bp.route('/api/topologia', methods=['GET'])
+def get_topologia():
+    """Zwraca pełną listę połączeń (segmentów) do wizualizacji."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    # To samo zapytanie, którego używa PathFinder do budowy grafu
+    query = """
+        SELECT 
+            s.id as id_segmentu,
+            s.nazwa_segmentu, 
+            z.nazwa_zaworu,
+            z.stan as stan_zaworu,
+            -- Dodajemy ID dla debugowania
+            s.id_portu_startowego, s.id_wezla_startowego,
+            s.id_portu_koncowego, s.id_wezla_koncowego,
+            COALESCE(p_start.nazwa_portu, w_start.nazwa_wezla) AS punkt_startowy,
+            COALESCE(p_koniec.nazwa_portu, w_koniec.nazwa_wezla) AS punkt_koncowy
+        FROM segmenty s
+        JOIN zawory z ON s.id_zaworu = z.id
+        LEFT JOIN porty_sprzetu p_start ON s.id_portu_startowego = p_start.id
+        LEFT JOIN wezly_rurociagu w_start ON s.id_wezla_startowego = w_start.id
+        LEFT JOIN porty_sprzetu p_koniec ON s.id_portu_koncowego = p_koniec.id
+        LEFT JOIN wezly_rurociagu w_koniec ON s.id_wezla_koncowego = w_koniec.id
+    """
+    cursor.execute(query)
+    segmenty = cursor.fetchall()
+
+    # Dodatkowo, pobierzmy listę aktualnie zajętych segmentów
+    sql_zajete = """
+        SELECT s.id as id_segmentu FROM log_uzyte_segmenty lus
+        JOIN operacje_log ol ON lus.id_operacji_log = ol.id
+        JOIN segmenty s ON lus.id_segmentu = s.id
+        WHERE ol.status_operacji = 'aktywna'
+    """
+    cursor.execute(sql_zajete)
+    zajete_ids = {row['id_segmentu'] for row in cursor.fetchall()}
+
+    # Dodaj informację o zajętości do każdego segmentu
+    for seg in segmenty:
+        seg['zajety'] = seg['id_segmentu'] in zajete_ids
+
+    cursor.close()
+    conn.close()
+    return jsonify(segmenty)
+
+
+
+@bp.route('/api/trasy/sugeruj', methods=['POST'])
+def sugeruj_trase():
+    """
+    Na podstawie punktu startowego, końcowego i pośredniego, znajduje
+    najkrótszą możliwą trasę i zwraca listę segmentów oraz zaworów
+    potrzebnych do jej otwarcia. Ignoruje aktualny stan zaworów.
+    """
+    dane = request.get_json()
+    if not dane or 'start' not in dane or 'cel' not in dane:
+        return jsonify({"status": "error", "message": "Brak wymaganych pól: start, cel."}), 400
+
+    start_point = dane['start']
+    end_point = dane['cel']
+    sprzet_posredni = dane.get('sprzet_posredni')
+    
+    pathfinder = get_pathfinder()
+    
+    # WAŻNE: Do szukania "idealnej" trasy przekazujemy WSZYSTKIE zawory jako otwarte.
+    # W tym celu pobieramy ich nazwy z grafu Pathfindera.
+    wszystkie_zawory = [data['valve_name'] for u, v, data in pathfinder.graph.edges(data=True)]
+    
+    sciezka_segmentow = []
+    sciezka_zaworow = set() # Używamy seta, aby uniknąć duplikatów zaworów
+
+    try:
+        if sprzet_posredni:
+            posredni_in = f"{sprzet_posredni}_IN"
+            posredni_out = f"{sprzet_posredni}_OUT"
+
+            # Trasa do sprzętu pośredniego
+            sciezka_1 = pathfinder.find_path(start_point, posredni_in, wszystkie_zawory)
+            # Trasa wewnątrz sprzętu pośredniego
+            sciezka_wewnetrzna = pathfinder.find_path(posredni_in, posredni_out, wszystkie_zawory)
+            # Trasa od sprzętu pośredniego do celu
+            sciezka_2 = pathfinder.find_path(posredni_out, end_point, wszystkie_zawory)
+
+            if not all([sciezka_1, sciezka_wewnetrzna, sciezka_2]):
+                raise Exception("Nie można zbudować pełnej trasy przez punkt pośredni.")
+
+            sciezka_segmentow = sciezka_1 + sciezka_wewnetrzna + sciezka_2
+        else:
+            sciezka_segmentow = pathfinder.find_path(start_point, end_point, wszystkie_zawory)
+
+        if not sciezka_segmentow:
+            raise Exception("Nie znaleziono ścieżki.")
+
+        # Na podstawie nazw segmentów, znajdź nazwy przypisanych do nich zaworów
+        for segment_name in sciezka_segmentow:
+            # Przeszukujemy krawędzie grafu, aby znaleźć zawór dla danego segmentu
+            for u, v, data in pathfinder.graph.edges(data=True):
+                if data['segment_name'] == segment_name:
+                    sciezka_zaworow.add(data['valve_name'])
+                    break
+        
+        return jsonify({
+            "status": "success",
+            "sugerowane_zawory": sorted(list(sciezka_zaworow)),
+            "segmenty_trasy": sciezka_segmentow
+        })
+
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": f"Nie można było wytyczyć trasy: {e}"
+        }), 404
+
+# app/routes.py
+# ...
+
+@bp.route('/api/operacje/dobielanie', methods=['POST'])
+def dobielanie():
+    dane = request.get_json()
+    if not dane or not all(k in dane for k in ['id_reaktora', 'ilosc_workow', 'waga_worka_kg']):
+        return jsonify({"status": "error", "message": "Brak wymaganych pól: id_reaktora, ilosc_workow, waga_worka_kg."}), 400
+
+    id_reaktora = dane['id_reaktora']
+    ilosc_workow = dane['ilosc_workow']
+    waga_worka_kg = dane['waga_worka_kg']
+    dodana_waga = ilosc_workow * waga_worka_kg
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        # Znajdź partię w podanym reaktorze
+        cursor.execute("SELECT id FROM partie_surowca WHERE id_sprzetu = %s", (id_reaktora,))
+        partia = cursor.fetchone()
+        if not partia:
+            return jsonify({"status": "error", "message": f"W reaktorze o ID {id_reaktora} nie znaleziono żadnej partii."}), 404
+        
+        id_partii = partia['id']
+
+        # --- Transakcja ---
+        write_cursor = conn.cursor()
+
+        # 1. Dodaj wpis do operacje_log
+        opis = f"Dodano {ilosc_workow} worków ziemi ({dodana_waga} kg) do partii {id_partii}"
+        sql_log = "INSERT INTO operacje_log (typ_operacji, id_partii_surowca, czas_rozpoczecia, status_operacji, opis, ilosc_kg) VALUES ('DOBIELANIE', %s, NOW(), 'zakonczona', %s, %s)"
+        write_cursor.execute(sql_log, (id_partii, opis, dodana_waga))
+
+        # 2. Zaktualizuj wagę partii
+        sql_waga = "UPDATE partie_surowca SET waga_aktualna_kg = waga_aktualna_kg + %s WHERE id = %s"
+        write_cursor.execute(sql_waga, (dodana_waga, id_partii))
+
+        # 3. Dodaj status "Dobielony" do partii
+        # Załóżmy, że ID statusu "Dobielony" to 3
+        # Używamy INSERT IGNORE, aby uniknąć błędu, jeśli partia już ma ten status
+        sql_status = "INSERT IGNORE INTO partie_statusy (id_partii, id_statusu) VALUES (%s, 3)"
+        write_cursor.execute(sql_status, (id_partii,))
+        
+        conn.commit()
+
+        return jsonify({"status": "success", "message": opis}), 200
+
+    except mysql.connector.Error as err:
+        if conn: conn.rollback()
+        return jsonify({"status": "error", "message": f"Błąd bazy danych: {err}"}), 500
+    finally:
+        if conn and conn.is_connected():
+
+            cursor.close()
+            conn.close()
+            # ... zamknięcie kursorów i połączenia ...

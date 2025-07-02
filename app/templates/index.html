@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MES - Panel Sterowania Produkcją</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 </head>
 <body>
     <header>
@@ -17,6 +20,21 @@
             <h2>Aktualny Stan Sprzętu</h2>
             <div id="sprzet-container" class="grid-container">
                 <p>Ładowanie stanu sprzętu...</p>
+            </div>
+        </section>
+
+         <!-- NOWA SEKCJA WIZUALIZACJI -->
+        <section id="visualization-section">
+            <h2>Wizualizacja Instalacji</h2>
+            <div class="mermaid">
+                
+            </div>
+        </section>
+
+        <section id="flowchart-section">
+            <h2>Wizualizacja Instalacji (Flowchart)</h2>
+            <div id="flowchart-container" class="mermaid">
+                <!-- Flowchart będzie tutaj -->
             </div>
         </section>
 
@@ -49,16 +67,76 @@
         </section>
 
         <!-- Sekcja uruchamiania operacji i logów (bez zmian) -->
+        <!-- app/templates/index.html -->
+
+        <!-- SEKCJA URUCHAMIANIA OPERACJI (NOWA WERSJA) -->
         <section id="operations-section">
             <h2>Uruchom Nową Operację</h2>
-            <div class="operation-form">
-                <h3>Trasa: R3 -> FZ -> R5</h3>
-                <button id="run-r3-fz-r5">Uruchom Filtrację</button>
+            <form id="route-form" class="operation-form">
+                <div class="form-group">
+                    <label for="start-point">Start:</label>
+                    <select id="start-point" required></select>
+                </div>
+                <div class="form-group">
+                    <label for="intermediate-point">Sprzęt pośredni (opcjonalnie):</label>
+                    <select id="intermediate-point">
+                        <option value="">-- Brak --</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="end-point">Cel:</label>
+                    <select id="end-point" required></select>
+                </div>
+                
+                <button type="submit">1. Znajdź Trasę i Zawory</button>
+            </form>
+<!-- app/templates/index.html -->
+            <hr style="margin: 2rem 0;">
+            <h3>Dobielanie</h3>
+            <form id="bleaching-form" class="operation-form">
+                <div class="form-group">
+                    <label for="bleach-reactor">Reaktor:</label>
+                    <select id="bleach-reactor" required></select>
+                </div>
+                <div class="form-group">
+                    <label for="bleach-bags">Ilość worków:</label>
+                    <input type="number" id="bleach-bags" value="6" required>
+                </div>
+                 <div class="form-group">
+                    <label for="bleach-weight">Waga worka (kg):</label>
+                    <input type="number" id="bleach-weight" value="25" required>
+                </div>
+                <button type="submit">Dodaj Ziemię</button>
+            </form>
+             <!-- NOWY FORMULARZ DO TANKOWANIA -->
+            <h3>Nowe Tankowanie</h3>
+            <form id="tanking-form" class="operation-form">
+                <div class="form-group">
+                    <label for="tanking-source">Źródło:</label>
+                    <select id="tanking-source" required></select>
+                </div>
+                <div class="form-group">
+                    <label for="tanking-dest">Reaktor Docelowy:</label>
+                    <select id="tanking-dest" required></select>
+                </div>
+                <div class="form-group">
+                    <label for="tanking-type">Typ Surowca:</label>
+                    <input type="text" id="tanking-type" required value="T-10">
+                </div>
+                <div class="form-group">
+                    <label for="tanking-weight">Waga (kg):</label>
+                    <input type="number" id="tanking-weight" required value="7500">
+                </div>
+                <button type="submit">Zatankuj</button>
+            </form>
+            
+            <div id="valve-suggestion-container" style="display:none;">
+                <h3>Sugerowane zawory do otwarcia:</h3>
+                <div id="valve-list"></div>
+                <button id="run-operation-btn">2. Uruchom Operację</button>
             </div>
-            <div id="log-operacji">
-                <h3>Logi Systemowe</h3>
-                <pre id="log-output">Czekam na akcję...</pre>
-            </div>
+
+            
         </section>
     </main>
 

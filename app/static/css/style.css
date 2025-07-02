@@ -1,4 +1,5 @@
-body { font-family: sans-serif; margin: 0; background-color: #f4f4f4; color: #333; }
+body { font-family: sans-serif; margin: 0; background-color: #f4f4f4; color: #333; overflow-anchor: none; /* <<< DODAJ TĘ LINIĘ >>> */
+}
 header { background-color: #2c3e50; color: white; padding: 1rem; text-align: center; }
 main { padding: 1rem 2rem; }
 section { background-color: white; padding: 1.5rem; margin-bottom: 1.5rem; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
@@ -66,4 +67,45 @@ h2 { color: #2980b9; border-bottom: 2px solid #ecf0f1; padding-bottom: 0.5rem; }
 }
 .end-operation-btn:hover {
     background-color: #c0392b;
+}
+
+/* app/static/css/style.css */
+#visualization-section .mermaid svg {
+    max-width: 100%;
+    height: auto;
+}
+
+#visualization-section .mermaid, #flowchart-section .mermaid {
+    min-height: 400px; /* Dostosuj tę wartość w razie potrzeby */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #fdfdfd;
+    border: 1px dashed #ccc;
+    border-radius: 5px;
+}
+
+#visualization-section .mermaid svg, #flowchart-section .mermaid svg {
+    max-width: 100%;
+    height: auto;
+}
+
+/* app/static/css/style.css */
+
+.partia-info {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #eee;
+    font-size: 0.85rem;
+    text-align: left;
+    color: #555;
+}
+.partia-info hr { display: none; } /* Ukrywamy <hr> i używamy border-top */
+.partia-info strong {
+    color: #2c3e50;
+}
+
+.status-tags {
+    font-style: italic;
+    color: #2980b9;
 }
