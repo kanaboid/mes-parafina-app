@@ -4,24 +4,50 @@ from flask import Blueprint, jsonify, request, current_app, render_template
 from datetime import datetime, timedelta
 from .sensors import SensorService  # Importujemy serwis czujników
 import mysql.connector
-
+import time
 from .db import get_db_connection  # Importujemy funkcję do połączenia z bazą danych
 from .pathfinder_service import PathFinder
+from mysql.connector.errors import OperationalError
 
 def get_pathfinder():
     """Pobiera instancję serwisu PathFinder z kontekstu aplikacji."""
     return current_app.extensions['pathfinder']
 
+def get_sensor_service():
+    """Pobiera instancję serwisu SensorService z kontekstu aplikacji."""
+    return current_app.extensions['sensor_service']
+
 # 1. Stworzenie obiektu Blueprint
 # Pierwszy argument to nazwa blueprintu, drugi to nazwa modułu (standardowo __name__)
 # 'url_prefix' sprawi, że wszystkie endpointy w tym pliku będą zaczynać się od /api
 bp = Blueprint('api', __name__, url_prefix='/')
-sensor_service = SensorService()
+# sensor_service = SensorService()
+
+
 
 @bp.route('/')
 def index():
     """Serwuje główną stronę aplikacji (frontend)."""
     return render_template('index.html')
+
+# --- DODAJ TĘ NOWĄ FUNKCJĘ ---
+@bp.route('/alarms')
+def show_alarms():
+    """Wyświetla stronę z historią wszystkich alarmów."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        # Pobierz wszystkie alarmy, sortując od najnowszych
+        cursor.execute("""
+            SELECT * FROM alarmy 
+            ORDER BY czas_wystapienia DESC
+        """)
+        all_alarms = cursor.fetchall()
+        return render_template('alarms.html', alarms=all_alarms)
+    finally:
+        cursor.close()
+        conn.close()
+# --- KONIEC NOWEJ FUNKCJI ---
 
 # 2. Stworzenie pierwszego, prawdziwego endpointu API
 @bp.route('/api/sprzet', methods=['GET'])
@@ -708,6 +734,7 @@ def get_aktywne_alarmy():
 def test_sensors():
     """Endpoint testowy do wymuszenia odczytu czujników"""
     try:
+        sensor_service = get_sensor_service() # <--- ZMIEŃ TĘ LINIĘ
         sensor_service.read_sensors()
         return jsonify({'message': 'Odczyt czujników wykonany pomyślnie'})
     except Exception as e:
@@ -792,7 +819,7 @@ def test_alarm():
             
         if typ_alarmu not in ['temperatura', 'cisnienie']:
             return jsonify({'message': 'Nieprawidłowy typ alarmu'}), 400
-            
+        sensor_service = get_sensor_service() # <--- ZMIEŃ TĘ LINIĘ    
         sensor_service.force_alarm(sprzet_id, typ_alarmu)
         return jsonify({'message': f'Wymuszono alarm {typ_alarmu} dla sprzętu ID={sprzet_id}'})
         
@@ -802,21 +829,16 @@ def test_alarm():
         return jsonify({'message': f'Błąd serwera: {str(e)}'}), 500
 
 @bp.route('/api/sprzet/<int:sprzet_id>/temperatura', methods=['POST'])
-def set_temperature(sprzet_id):
-    """Endpoint do ustawiania temperatury przez operatora"""
+def set_temperatura(sprzet_id):
+    """Ustawia docelową temperaturę dla danego sprzętu."""
+    dane = request.get_json()
+    nowa_temperatura = dane['temperatura']
+    
     try:
-        dane = request.get_json()
-        if not dane or 'temperatura' not in dane:
-            return jsonify({'message': 'Brak wymaganego parametru temperatura'}), 400
-            
-        temperatura = float(dane['temperatura'])
-        if temperatura < 0 or temperatura > 200:
-            return jsonify({'message': 'Temperatura poza dozwolonym zakresem (0-200°C)'}), 400
-            
-        sensor_service.set_temperature(sprzet_id, temperatura)
-        return jsonify({'message': f'Ustawiono temperaturę {temperatura}°C'})
+        # Delegujemy całą pracę do serwisu
+        sensor_service = get_sensor_service()
+        sensor_service.set_temperature(sprzet_id, nowa_temperatura)
         
-    except ValueError as ve:
-        return jsonify({'message': str(ve)}), 400
+        return jsonify({"status": "success", "message": "Temperatura ustawiona."})
     except Exception as e:
-        return jsonify({'message': f'Błąd serwera: {str(e)}'}), 500
+        return jsonify({"status": "error", "message": f"Błąd serwera: {e}"}), 500

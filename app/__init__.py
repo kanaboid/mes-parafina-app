@@ -24,7 +24,7 @@ def create_app():
     sensor_service.init_app(app)
     app.extensions = getattr(app, 'extensions', {})
     app.extensions['pathfinder'] = pathfinder
-
+    app.extensions['sensor_service'] = sensor_service
    # Konfiguracja schedulera
     app.config['SCHEDULER_API_ENABLED'] = True
     app.config['SCHEDULER_TIMEZONE'] = "Europe/Warsaw"
@@ -48,7 +48,7 @@ def create_app():
 
     @scheduler.task('interval', 
                    id='check_alarms', 
-                   seconds=1,
+                   seconds=30,
                    max_instances=1)
     def check_alarms():
         """Sprawdzanie alarmów co 5 minut"""

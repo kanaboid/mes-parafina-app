@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}Historia Alarmów - System MES{% endblock %}
+
+{% block content %}
+<h1 class="mb-4">Historia Alarmów</h1>
+
+<table class="table table-striped table-hover">
+    <thead class="table-dark">
+        <tr>
+            <th>ID</th>
+            <th>Typ</th>
+            <th>Sprzęt</th>
+            <th>Wartość</th>
+            <th>Limit</th>
+            <th>Czas Wystąpienia</th>
+            <th>Czas Zakończenia</th>
+            <th>Status</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for alarm in alarms %}
+        <tr class="{% if alarm.status_alarmu == 'AKTYWNY' %}table-danger{% elif alarm.status_alarmu == 'ZAKOŃCZONY' %}table-success{% endif %}">
+            <td>{{ alarm.id }}</td>
+            <td>{{ alarm.typ_alarmu }}</td>
+            <td>{{ alarm.nazwa_sprzetu }}</td>
+            <td>{{ alarm.wartosc }}</td>
+            <td>{{ alarm.limit_przekroczenia }}</td>
+            <td>{{ alarm.czas_wystapienia.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+            <td>{{ alarm.czas_zakonczenia.strftime('%Y-%m-%d %H:%M:%S') if alarm.czas_zakonczenia else '---' }}</td>
+            <td>{{ alarm.status_alarmu }}</td>
+        </tr>
+        {% else %}
+        <tr>
+            <td colspan="8" class="text-center">Brak alarmów w historii.</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

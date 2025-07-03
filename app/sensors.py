@@ -1,6 +1,8 @@
 import random
+import time
 from datetime import datetime
 from flask import current_app
+from mysql.connector.errors import OperationalError
 from .db import get_db_connection
 
 class SensorService:
@@ -22,41 +24,59 @@ class SensorService:
     
 
     def set_temperature(self, sprzet_id, temperatura):
-        """Ustawia nową temperaturę bazową dla sprzętu"""
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
+        """
+        Ustawia nową temperaturę bazową dla sprzętu w tabeli operator_temperatures,
+        implementując mechanizm ponawiania transakcji.
+        """
+        max_retries = 3
+        for attempt in range(max_retries):
+            conn = None
+            try:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                current_time = datetime.now()
+
+                # Zapisz nową temperaturę bazową, od której symulacja będzie liczyć
+                cursor.execute("""
+                    INSERT INTO operator_temperatures 
+                    (id_sprzetu, temperatura, czas_ustawienia)
+                    VALUES (%s, %s, %s)
+                """, (sprzet_id, temperatura, current_time))
+
+                # Natychmiast zaktualizuj też stan w tabeli sprzet, aby zmiana była widoczna
+                cursor.execute("""
+                    UPDATE sprzet 
+                    SET temperatura_aktualna = %s,
+                        temperatura_docelowa = %s,
+                        ostatnia_aktualizacja = %s
+                    WHERE id = %s
+                """, (temperatura, temperatura, current_time, sprzet_id))
+
+                conn.commit()
+                print(f"[{current_time}] Ustawiono nową temperaturę {temperatura}°C dla sprzętu ID={sprzet_id}")
+                
+                # Jeśli operacja się udała, zakończ działanie metody
+                return
+
+            except OperationalError as e:
+                if conn:
+                    conn.rollback()
+                # Sprawdź, czy błąd to deadlock (1213) lub timeout (1205)
+                if e.errno in (1213, 1205) and attempt < max_retries - 1:
+                    print(f"Deadlock lub timeout przy ustawianiu temp. Ponawiam próbę {attempt + 1}/{max_retries}...")
+                    time.sleep(0.5)
+                    continue # Przejdź do następnej próby
+                else:
+                    # Jeśli to inny błąd lub ostatnia próba, rzuć wyjątkiem dalej
+                    raise e
+            finally:
+                if conn and conn.is_connected():
+                    if 'cursor' in locals() and cursor:
+                        cursor.close()
+                    conn.close()
         
-        try:
-            current_time = datetime.now()
-            
-            # Zapisz nową temperaturę bazową
-            cursor.execute("""
-                INSERT INTO operator_temperatures 
-                (id_sprzetu, temperatura, czas_ustawienia)
-                VALUES (%s, %s, %s)
-            """, (sprzet_id, temperatura, current_time))
-            
-            # Zapisz pomiar w historii
-            cursor.execute("""
-                INSERT INTO historia_pomiarow 
-                (id_sprzetu, temperatura, czas_pomiaru)
-                VALUES (%s, %s, %s)
-            """, (sprzet_id, temperatura, current_time))
-            
-            # Aktualizuj stan sprzętu
-            cursor.execute("""
-                UPDATE sprzet 
-                SET temperatura_aktualna = %s,
-                    ostatnia_aktualizacja = %s
-                WHERE id = %s
-            """, (temperatura, current_time, sprzet_id))
-            
-            conn.commit()
-            print(f"[{current_time}] Ustawiono nową temperaturę {temperatura}°C dla sprzętu ID={sprzet_id}")
-            
-        finally:
-            cursor.close()
-            conn.close()
+        # Jeśli pętla się zakończyła bez sukcesu
+        raise Exception("Nie udało się ustawić temperatury po kilku próbach z powodu blokady bazy danych.")
 
     def _simulate_temperature(self, sprzet_id, typ_sprzetu):
         """Symuluje wzrost temperatury od ostatniej znanej wartości"""
