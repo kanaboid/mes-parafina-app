@@ -1,7 +1,8 @@
 # app/routes.py
 
 from flask import Blueprint, jsonify, request, current_app, render_template
-from datetime import datetime
+from datetime import datetime, timedelta
+from .sensors import SensorService  # Importujemy serwis czujników
 import mysql.connector
 
 from .db import get_db_connection  # Importujemy funkcję do połączenia z bazą danych
@@ -15,7 +16,7 @@ def get_pathfinder():
 # Pierwszy argument to nazwa blueprintu, drugi to nazwa modułu (standardowo __name__)
 # 'url_prefix' sprawi, że wszystkie endpointy w tym pliku będą zaczynać się od /api
 bp = Blueprint('api', __name__, url_prefix='/')
-
+sensor_service = SensorService()
 
 @bp.route('/')
 def index():
@@ -577,7 +578,7 @@ def sugeruj_trase():
     sciezka_segmentow = []
     sciezka_zaworow = set() # Używamy seta, aby uniknąć duplikatów zaworów
 
-    try:
+    try :
         if sprzet_posredni:
             posredni_in = f"{sprzet_posredni}_IN"
             posredni_out = f"{sprzet_posredni}_OUT"
@@ -677,3 +678,145 @@ def dobielanie():
             cursor.close()
             conn.close()
             # ... zamknięcie kursorów i połączenia ...
+
+@bp.route('/api/alarmy/aktywne', methods=['GET'])
+def get_aktywne_alarmy():
+    """Zwraca listę aktywnych alarmów"""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        cursor.execute("""
+            SELECT id, typ_alarmu, nazwa_sprzetu, wartosc, limit_przekroczenia, 
+                   czas_wystapienia, status_alarmu 
+            FROM alarmy 
+            WHERE status_alarmu = 'AKTYWNY'
+            ORDER BY czas_wystapienia DESC
+        """)
+        alarmy = cursor.fetchall()
+        
+        # Konwertuj datetime na string
+        for alarm in alarmy:
+            alarm['czas_wystapienia'] = alarm['czas_wystapienia'].strftime('%Y-%m-%d %H:%M:%S')
+        
+        return jsonify(alarmy)
+    finally:
+        cursor.close()
+        conn.close()
+
+@bp.route('/api/test/sensors', methods=['POST'])
+def test_sensors():
+    """Endpoint testowy do wymuszenia odczytu czujników"""
+    try:
+        sensor_service.read_sensors()
+        return jsonify({'message': 'Odczyt czujników wykonany pomyślnie'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@bp.route('/api/pomiary/historia', methods=['GET'])
+def get_historia_pomiarow():
+    """Pobiera historię pomiarów z ostatnich 24 godzin"""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # Pobierz dane z ostatnich 24h
+        cursor.execute("""
+            SELECT h.*, s.nazwa_unikalna, s.typ_sprzetu
+            FROM historia_pomiarow h
+            JOIN sprzet s ON h.id_sprzetu = s.id
+            WHERE h.czas_pomiaru > %s
+            ORDER BY h.czas_pomiaru DESC
+        """, (datetime.now() - timedelta(hours=24),))
+        
+        pomiary = cursor.fetchall()
+        
+        # Formatuj daty do JSON
+        for pomiar in pomiary:
+            pomiar['czas_pomiaru'] = pomiar['czas_pomiaru'].strftime('%Y-%m-%d %H:%M:%S')
+            
+        return jsonify(pomiary)
+        
+    finally:
+        cursor.close()
+        conn.close()
+
+@bp.route('/api/alarmy/potwierdz', methods=['POST'])
+def potwierdz_alarm():
+    """Endpoint do potwierdzania alarmów"""
+    dane = request.get_json()
+    id_alarmu = dane.get('id_alarmu')
+    
+    if not id_alarmu:
+        return jsonify({'message': 'Brak ID alarmu'}), 400
+        
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("""
+            UPDATE alarmy 
+            SET status_alarmu = 'POTWIERDZONY',
+                czas_potwierdzenia = %s
+            WHERE id = %s AND status_alarmu = 'AKTYWNY'
+        """, (datetime.now(), id_alarmu))
+        
+        conn.commit()
+        
+        if cursor.rowcount == 0:
+            return jsonify({'message': 'Alarm nie znaleziony lub już potwierdzony'}), 404
+            
+        return jsonify({'message': 'Alarm potwierdzony pomyślnie'})
+        
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'message': f'Błąd bazy danych: {str(e)}'}), 500
+        
+    finally:
+        cursor.close()
+        conn.close()
+
+@bp.route('/api/test/alarm', methods=['POST'])
+def test_alarm():
+    """Endpoint do testowania alarmów"""
+    try:
+        dane = request.get_json()
+        if not dane:
+            return jsonify({'message': 'Brak danych w żądaniu'}), 400
+            
+        sprzet_id = dane.get('sprzet_id')
+        typ_alarmu = dane.get('typ_alarmu', 'temperatura')
+        
+        if not sprzet_id:
+            return jsonify({'message': 'Brak ID sprzętu'}), 400
+            
+        if typ_alarmu not in ['temperatura', 'cisnienie']:
+            return jsonify({'message': 'Nieprawidłowy typ alarmu'}), 400
+            
+        sensor_service.force_alarm(sprzet_id, typ_alarmu)
+        return jsonify({'message': f'Wymuszono alarm {typ_alarmu} dla sprzętu ID={sprzet_id}'})
+        
+    except ValueError as ve:
+        return jsonify({'message': str(ve)}), 400
+    except Exception as e:
+        return jsonify({'message': f'Błąd serwera: {str(e)}'}), 500
+
+@bp.route('/api/sprzet/<int:sprzet_id>/temperatura', methods=['POST'])
+def set_temperature(sprzet_id):
+    """Endpoint do ustawiania temperatury przez operatora"""
+    try:
+        dane = request.get_json()
+        if not dane or 'temperatura' not in dane:
+            return jsonify({'message': 'Brak wymaganego parametru temperatura'}), 400
+            
+        temperatura = float(dane['temperatura'])
+        if temperatura < 0 or temperatura > 200:
+            return jsonify({'message': 'Temperatura poza dozwolonym zakresem (0-200°C)'}), 400
+            
+        sensor_service.set_temperature(sprzet_id, temperatura)
+        return jsonify({'message': f'Ustawiono temperaturę {temperatura}°C'})
+        
+    except ValueError as ve:
+        return jsonify({'message': str(ve)}), 400
+    except Exception as e:
+        return jsonify({'message': f'Błąd serwera: {str(e)}'}), 500

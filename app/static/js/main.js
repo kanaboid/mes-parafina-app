@@ -1,8 +1,50 @@
+function toggleView(viewType) {
+    const chartsView = document.getElementById('charts-view');
+    const tableView = document.getElementById('table-view');
+    const chartsBtn = document.getElementById('charts-btn');
+    const tableBtn = document.getElementById('table-btn');
+    
+    if (viewType === 'charts') {
+        chartsView.style.display = 'grid';
+        tableView.style.display = 'none';
+        chartsBtn.classList.add('active');
+        tableBtn.classList.remove('active');
+    } else {
+        chartsView.style.display = 'none';
+        tableView.style.display = 'block';
+        chartsBtn.classList.remove('active');
+        tableBtn.classList.add('active');
+        updateMeasurementsTable();
+    }
+}
+
+async function updateMeasurementsTable() {
+    try {
+        const response = await fetch('/api/pomiary/historia');
+        const data = await response.json();
+        
+        const tbody = document.getElementById('measurements-tbody');
+        tbody.innerHTML = data.map(pomiar => `
+            <tr>
+                <td>${pomiar.nazwa_unikalna}</td>
+                <td>${pomiar.temperatura}°C</td>
+                <td>${pomiar.cisnienie} bar</td>
+                <td>${pomiar.czas_pomiaru}</td>
+            </tr>
+        `).join('');
+    } catch (error) {
+        console.error('Błąd podczas aktualizacji tabeli pomiarów:', error);
+        showToast('Błąd podczas ładowania danych pomiarowych', 'error');
+    }
+}
+
 // Ten plik zawiera logikę JavaScript dla aplikacji MES Parafina
 
 document.addEventListener('DOMContentLoaded', () => {
 
     // --- SEKCJA 1: STAŁE I ZMIENNE GLOBALNE ---
+
+    const ALARM_CHECK_INTERVAL = 30000; // 30 sekund
 
     // Elementy DOM
     const sprzetContainer = document.getElementById('sprzet-container');
@@ -12,7 +54,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const flowchartContainer = document.getElementById('flowchart-container');
     const visualizationSection = document.getElementById('visualization-section');
     const flowchartSection = document.getElementById('flowchart-section');
-    
+    const temperatureForm = document.getElementById('temperature-form');
+    const equipmentSelect = document.getElementById('equipment-select');
     // Formularz tras
     const routeForm = document.getElementById('route-form');
     const startPointSelect = document.getElementById('start-point');
@@ -425,7 +468,198 @@ document.addEventListener('DOMContentLoaded', () => {
         showToast(`Błąd sieciowy: ${error.message}`, 'error');
     }
 }
+async function confirmAlarm(alarmId) {
+    try {
+        const response = await fetch('/api/alarmy/potwierdz', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id_alarmu: alarmId })
+        });
 
+        const result = await response.json();
+        
+        if (response.ok) {
+            showToast('Alarm potwierdzony', 'success');
+            // Odśwież widok alarmów
+            checkAlarms();
+        } else {
+            showToast(`Błąd potwierdzania alarmu: ${result.message}`, 'error');
+        }
+    } catch (error) {
+        console.error('Błąd podczas potwierdzania alarmu:', error);
+        showToast('Błąd podczas potwierdzania alarmu', 'error');
+    }
+}
+    async function checkAlarms() {
+    try {
+        const alarmContainer = document.getElementById('alarm-container');
+        if (!alarmContainer) {
+            console.error('Element alarm-container not found!');
+            return;
+        }
+
+        const response = await fetch('/api/alarmy/aktywne');
+        const alarmy = await response.json();
+        
+        if (alarmy.length > 0) {
+            alarmContainer.innerHTML = alarmy.map(alarm => `
+                <div class="alarm-item ${alarm.status_alarmu.toLowerCase()}">
+                    <span class="alarm-type">${alarm.typ_alarmu}</span>
+                    <span class="alarm-equipment">${alarm.nazwa_sprzetu}</span>
+                    <span class="alarm-value">${alarm.wartosc} / ${alarm.limit_przekroczenia}</span>
+                    <span class="alarm-time">${alarm.czas_wystapienia}</span>
+                    ${alarm.status_alarmu === 'AKTYWNY' ? 
+                        `<button class="confirm-alarm-btn" data-alarm-id="${alarm.id}">Potwierdź</button>` : ''}
+                </div>
+            `).join('');
+
+            // Add event listeners for confirm buttons
+            const confirmButtons = alarmContainer.querySelectorAll('.confirm-alarm-btn');
+            confirmButtons.forEach(btn => {
+                btn.addEventListener('click', () => confirmAlarm(btn.dataset.alarmId));
+            });
+        } else {
+            alarmContainer.innerHTML = '<p class="no-alarms">Brak aktywnych alarmów</p>';
+        }
+    } catch (error) {
+        console.error('Błąd podczas sprawdzania alarmów:', error);
+        showToast('Błąd podczas sprawdzania alarmów', 'error');
+    }
+}
+    
+    function getPointBackgroundColor(value, limit) {
+    return value > limit ? 'rgba(255, 99, 132, 0.5)' : 'rgba(54, 162, 235, 0.2)';
+    }
+
+    async function loadSensorHistory() {
+    try {
+        console.log('Rozpoczynam ładowanie historii pomiarów...');
+        
+        const response = await fetch('/api/pomiary/historia');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        console.log('Otrzymane dane:', data);
+
+        if (!data || data.length === 0) {
+            console.log('Brak danych pomiarowych');
+            return;
+        }
+
+        const tempContainer = document.getElementById('temperature-charts');
+        const pressContainer = document.getElementById('pressure-charts');
+        tempContainer.innerHTML = '';
+        pressContainer.innerHTML = '';
+
+        // Grupuj dane według sprzętu
+        const groupedData = data.reduce((acc, pomiar) => {
+            if (!acc[pomiar.nazwa_unikalna]) {
+                acc[pomiar.nazwa_unikalna] = {
+                    temperatury: [],
+                    cisnienia: [],
+                    czasy: [],
+                    temperatura_max: pomiar.temperatura_max || 90, // Default max temp
+                    cisnienie_max: pomiar.cisnienie_max || 6     // Default max pressure
+                };
+                
+                tempContainer.innerHTML += `
+                    <div class="chart-wrapper">
+                        <h3>Temperatura - ${pomiar.nazwa_unikalna}</h3>
+                        <canvas id="chart-temp-${pomiar.nazwa_unikalna}"></canvas>
+                    </div>`;
+                
+                pressContainer.innerHTML += `
+                    <div class="chart-wrapper">
+                        <h3>Ciśnienie - ${pomiar.nazwa_unikalna}</h3>
+                        <canvas id="chart-press-${pomiar.nazwa_unikalna}"></canvas>
+                    </div>`;
+            }
+            
+            acc[pomiar.nazwa_unikalna].temperatury.push(pomiar.temperatura);
+            acc[pomiar.nazwa_unikalna].cisnienia.push(pomiar.cisnienie);
+            acc[pomiar.nazwa_unikalna].czasy.push(pomiar.czas_pomiaru);
+            return acc;
+        }, {});
+
+        // Twórz wykresy
+        Object.entries(groupedData).forEach(([nazwa, dane]) => {
+            try {
+                new Chart(
+                    document.getElementById(`chart-temp-${nazwa}`),
+                    {
+                        type: 'line',
+                        data: {
+                            labels: dane.czasy,
+                            datasets: [{
+                                label: 'Temperatura [°C]',
+                                data: dane.temperatury,
+                                borderColor: 'rgb(255, 99, 132)',
+                                backgroundColor: dane.temperatury.map(t => 
+                                    getPointBackgroundColor(t, dane.temperatura_max)
+                                ),
+                                tension: 0.1,
+                                pointRadius: 5
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            plugins: {
+                                legend: { position: 'top' },
+                                tooltip: {
+                                    callbacks: {
+                                        label: function(context) {
+                                            return `Temperatura: ${context.raw}°C`;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                );
+
+                new Chart(
+                    document.getElementById(`chart-press-${nazwa}`),
+                    {
+                        type: 'line',
+                        data: {
+                            labels: dane.czasy,
+                            datasets: [{
+                                label: 'Ciśnienie [bar]',
+                                data: dane.cisnienia,
+                                borderColor: 'rgb(54, 162, 235)',
+                                backgroundColor: dane.cisnienia.map(p => 
+                                    getPointBackgroundColor(p, dane.cisnienie_max)
+                                ),
+                                tension: 0.1,
+                                pointRadius: 5
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            plugins: {
+                                legend: { position: 'top' },
+                                tooltip: {
+                                    callbacks: {
+                                        label: function(context) {
+                                            return `Ciśnienie: ${context.raw} bar`;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                );
+            } catch (chartError) {
+                console.error(`Błąd podczas tworzenia wykresu dla ${nazwa}:`, chartError);
+            }
+        });
+        
+    } catch (error) {
+        console.error('Szczegóły błędu:', error);
+        showToast('Błąd podczas ładowania historii pomiarów: ' + error.message, 'error');
+    }
+}
     // --- SEKCJA 6: INICJALIZACJA ---
 
     // Jedna funkcja do odświeżania wszystkiego, co nie jest wizualizacją
@@ -466,10 +700,63 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         } catch(e) { /* ... */ }
     }
+
+ async function loadEquipment() {
+        try {
+            const response = await fetch('/api/sprzet');
+            const equipment = await response.json();
+            
+            equipmentSelect.innerHTML = equipment
+                .filter(item => item.stan_sprzetu !== 'Wyłączony')
+                .map(item => `
+                    <option value="${item.id}">${item.nazwa_unikalna}</option>
+                `).join('');
+        } catch (error) {
+            console.error('Błąd podczas ładowania listy sprzętu:', error);
+            showToast('Nie udało się załadować listy sprzętu', 'error');
+        }
+    }
+
+    // Handle temperature form submission
+    temperatureForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        
+        const sprzet_id = equipmentSelect.value;
+        const temperatura = document.getElementById('temperature-input').value;
+        
+        try {
+            const response = await fetch(`/api/sprzet/${sprzet_id}/temperatura`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ temperatura: parseFloat(temperatura) })
+            });
+            
+            const result = await response.json();
+            
+            if (response.ok) {
+                showToast(`Ustawiono temperaturę ${temperatura}°C`, 'success');
+            } else {
+                showToast(result.message, 'error');
+            }
+        } catch (error) {
+            console.error('Błąd podczas ustawiania temperatury:', error);
+            showToast('Nie udało się ustawić temperatury', 'error');
+        }
+    });
+
     populateReactorsForBleaching();
     
     // Pierwsze załadowanie i cykliczne odświeżanie
     updateAllViews();
     setInterval(updateAllViews, 15000); // Ustawmy jeden, rozsądny interwał na wszystko
+    setInterval(checkAlarms, ALARM_CHECK_INTERVAL);
+    checkAlarms(); // Pierwsze sprawdzenie
+    loadSensorHistory();
+    setInterval(loadSensorHistory, 300000);
+    loadEquipment();
+
+    // --- SEKCJA 7: OBSŁUGA WIDOKÓW POMIARÓW ---
 
 });

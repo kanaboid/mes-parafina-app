@@ -8,6 +8,7 @@
     <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
     <header>
@@ -16,6 +17,12 @@
 
     <main>
         <!-- Sekcja statusu sprzętu (bez zmian) -->
+        <section><!-- Add this new section -->
+        <div class="alarm-section">
+        <h2>Alarmy</h2>
+        <div id="alarm-container" class="alarm-container"></div>
+        </div></section>
+        
         <section id="status-section">
             <h2>Aktualny Stan Sprzętu</h2>
             <div id="sprzet-container" class="grid-container">
@@ -138,6 +145,48 @@
 
             
         </section>
+<section> 
+        <div class="monitoring-controls">
+    <button class="view-btn active" id="charts-btn" data-view="charts">Wykresy</button>
+    <button class="view-btn" id="table-btn" data-view="table">Tabela</button>
+</div>
+<div id="charts-view" class="charts-container">
+    <div id="temperature-charts"></div>
+    <div id="pressure-charts"></div>
+</div>
+<div id="table-view" class="table-container" style="display:none">
+    <table id="measurements-table">
+        <thead>
+            <tr>
+                <th>Urządzenie</th>
+                <th>Temperatura [°C]</th>
+                <th>Ciśnienie [bar]</th>
+                <th>Czas pomiaru</th>
+            </tr>
+        </thead>
+        <tbody id="measurements-tbody"></tbody>
+    </table>
+</div>
+</section>
+<section>
+<div class="temperature-control">
+    <h3>Kontrola temperatury</h3>
+    <form id="temperature-form" class="operation-form">
+        <div class="form-group">
+            <label for="equipment-select">Wybierz sprzęt:</label>
+            <select id="equipment-select" required>
+                <!-- Options will be loaded dynamically -->
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="temperature-input">Temperatura (°C):</label>
+            <input type="number" id="temperature-input" required min="0" max="200" step="0.1">
+        </div>
+        <button type="submit">Ustaw temperaturę</button>
+    </form>
+</div>
+</section>
+
     </main>
 
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>

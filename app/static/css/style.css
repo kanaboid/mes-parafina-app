@@ -109,3 +109,121 @@ h2 { color: #2980b9; border-bottom: 2px solid #ecf0f1; padding-bottom: 0.5rem; }
     font-style: italic;
     color: #2980b9;
 }
+
+/* Style dla alarmów */
+.alarm-section {
+    margin: 20px;
+    padding: 15px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.alarm-container {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.alarm-item {
+    padding: 10px;
+    border-radius: 4px;
+    display: grid;
+    grid-template-columns: auto 1fr auto auto auto;
+    gap: 10px;
+    align-items: center;
+}
+
+.alarm-item.aktywny {
+    background-color: #ffe0e0;
+    border-left: 4px solid #dc3545;
+}
+
+.alarm-item.potwierdzony {
+    background-color: #fff3cd;
+    border-left: 4px solid #ffc107;
+}
+
+.alarm-item.zakonczony {
+    background-color: #d4edda;
+}
+
+.alarm-item button {
+    padding: 5px 10px;
+    border: none;
+    border-radius: 4px;
+    background: #dc3545;
+    color: white;
+    cursor: pointer;
+}
+
+.alarm-type {
+    font-weight: bold;
+    color: #dc3545;
+}
+
+/* Style dla wykresów */
+.charts-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 20px;
+    padding: 20px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    margin: 20px;
+}
+
+.chart-wrapper {
+    background: white;
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.chart-wrapper h3 {
+    color: #333;
+    margin-bottom: 15px;
+    font-size: 1.1em;
+    border-bottom: 2px solid #eee;
+    padding-bottom: 5px;
+}
+
+/* Style dla kontroli temperatury */
+.temperature-control {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    margin: 20px;
+}
+
+.temperature-control h3 {
+    margin-bottom: 15px;
+    color: #333;
+}
+
+#temperature-form {
+    display: grid;
+    gap: 15px;
+    max-width: 400px;
+}
+
+#temperature-form input[type="number"] {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+#temperature-form button {
+    background: #28a745;
+    color: white;
+    border: none;
+    padding: 10px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+#temperature-form button:hover {
+    background: #218838;
+}
