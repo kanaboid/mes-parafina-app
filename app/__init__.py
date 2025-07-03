@@ -48,7 +48,7 @@ def create_app():
 
     @scheduler.task('interval', 
                    id='check_alarms', 
-                   seconds=300,
+                   seconds=1,
                    max_instances=1)
     def check_alarms():
         """Sprawdzanie alarmów co 5 minut"""
