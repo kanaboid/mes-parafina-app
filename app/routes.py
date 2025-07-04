@@ -842,3 +842,98 @@ def set_temperatura(sprzet_id):
         return jsonify({"status": "success", "message": "Temperatura ustawiona."})
     except Exception as e:
         return jsonify({"status": "error", "message": f"Błąd serwera: {e}"}), 500
+    
+
+@bp.route('/filtry')
+def show_filtry_panel():
+    """Renderuje stronę z panelem monitoringu filtrów."""
+    return render_template('filtry.html')
+
+@bp.route('/api/filtry/status')
+def get_filtry_status():
+    """
+    Zwraca szczegółowy, aktualny status dla każdego filtra (FZ i FN),
+    wzbogacony o informacje o aktywnej operacji i partii.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        # Krok 1: Pobierz wszystkie filtry i ich podstawowy status
+        cursor.execute("SELECT id, nazwa_unikalna, stan_sprzetu FROM sprzet WHERE typ_sprzetu = 'filtr'")
+        filtry = {f['nazwa_unikalna']: f for f in cursor.fetchall()}
+        
+        # Przygotuj domyślną odpowiedź
+        wynik = {
+            'FZ': {'id_filtra': filtry.get('FZ', {}).get('id'), 'nazwa_filtra': 'FZ', 'stan_sprzetu': filtry.get('FZ', {}).get('stan_sprzetu', 'Brak danych'), 'aktywna_operacja': None},
+            'FN': {'id_filtra': filtry.get('FN', {}).get('id'), 'nazwa_filtra': 'FN', 'stan_sprzetu': filtry.get('FN', {}).get('stan_sprzetu', 'Brak danych'), 'aktywna_operacja': None}
+        }
+
+        # Krok 2: Pobierz wszystkie aktywne operacje
+        query_aktywne_operacje = """
+            SELECT 
+                ol.id, ol.typ_operacji, ol.czas_rozpoczecia, ol.status_operacji,
+                ps.nazwa_partii,
+                ps.unikalny_kod,
+                zrodlo.nazwa_unikalna AS sprzet_zrodlowy,
+                cel.nazwa_unikalna AS sprzet_docelowy
+            FROM operacje_log ol
+            LEFT JOIN partie_surowca ps ON ol.id_partii_surowca = ps.id
+            LEFT JOIN sprzet zrodlo ON ol.id_sprzetu_zrodlowego = zrodlo.id
+            LEFT JOIN sprzet cel ON ol.id_sprzetu_docelowego = cel.id
+            WHERE ol.status_operacji = 'aktywna'
+        """
+        cursor.execute(query_aktywne_operacje)
+        aktywne_operacje = cursor.fetchall()
+
+        # Krok 3: Dla każdej aktywnej operacji sprawdź, czy używa któregoś z filtrów
+        for op in aktywne_operacje:
+            query_segmenty_operacji = """
+                SELECT s.nazwa_unikalna FROM sprzet s
+                JOIN porty_sprzetu ps ON s.id = ps.id_sprzetu
+                JOIN segmenty seg ON ps.id = seg.id_portu_startowego OR ps.id = seg.id_portu_koncowego
+                JOIN log_uzyte_segmenty lus ON seg.id = lus.id_segmentu
+                WHERE lus.id_operacji_log = %s AND s.typ_sprzetu = 'filtr'
+            """
+            cursor.execute(query_segmenty_operacji, (op['id'],))
+            uzyte_filtry = [row['nazwa_unikalna'] for row in cursor.fetchall()]
+
+            for nazwa_filtra in uzyte_filtry:
+                if nazwa_filtra in wynik:
+                    wynik[nazwa_filtra]['aktywna_operacja'] = op
+
+        # Krok 4: Sformatuj ostateczną odpowiedź
+        ostateczna_odpowiedz = []
+        for nazwa_filtra, dane in wynik.items():
+            final_obj = {
+                'id_filtra': dane['id_filtra'],
+                'nazwa_filtra': dane['nazwa_filtra'],
+                'stan_sprzetu': dane['stan_sprzetu'],
+                'id_operacji': None, 'typ_operacji': None, 'czas_rozpoczecia': None,
+                'status_operacji': None, 'nazwa_partii': None, 'sprzet_zrodlowy': None,
+                'sprzet_docelowy': None,
+                'unikalny_kod': None
+            }
+            if dane['aktywna_operacja']:
+                final_obj.update(dane['aktywna_operacja'])
+            ostateczna_odpowiedz.append(final_obj)
+
+    finally:
+        cursor.close()
+        conn.close()
+
+    # Definicje czasów trwania operacji w minutach
+    DURATIONS = {
+        'Budowanie placka': 30, 'Filtrowanie w koło': 15, 'Przedmuchiwanie': 10,
+        'Dmuchanie filtra': 45, 'Czyszczenie': 20, 'TRANSFER': 30, 'FILTRACJA': 30
+    }
+
+    # Dodajemy obliczony czas zakończenia do danych
+    for filtr in ostateczna_odpowiedz:
+        filtr['czas_zakonczenia_iso'] = None
+        if filtr.get('status_operacji') == 'aktywna' and filtr.get('typ_operacji') in DURATIONS and filtr.get('czas_rozpoczecia'):
+            duration_minutes = DURATIONS[filtr['typ_operacji']]
+            end_time = filtr['czas_rozpoczecia'] + timedelta(minutes=duration_minutes)
+            filtr['czas_zakonczenia_iso'] = end_time.isoformat()
+
+    return jsonify(ostateczna_odpowiedz)

@@ -88,6 +88,32 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // --- SEKCJA 2: FUNKCJE POMOCNICZE ---
 
+    async function updateFiltryStatus() {
+    try {
+        const response = await fetch('/api/filtry/status');
+        const data = await response.json();
+
+        // Logika do aktualizacji karty dla Filtra Zielonego
+        const fz_data = data.find(f => f.nazwa_filtra === 'FZ');
+        if (fz_data) {
+            document.getElementById('fz-status').textContent = fz_data.stan_sprzetu;
+            document.getElementById('fz-operacja').textContent = fz_data.typ_operacji || '---';
+            document.getElementById('fz-partia').textContent = fz_data.nazwa_partii || '---';
+            document.getElementById('fz-trasa').textContent = `${fz_data.sprzet_zrodlowy || '?'} -> ${fz_data.sprzet_docelowy || '?'}`;
+            // Tutaj logika do obliczania i wyświetlania timera
+        }
+
+        // Logika do aktualizacji karty dla Filtra Niebieskiego
+        const fn_data = data.find(f => f.nazwa_filtra === 'FN');
+        if (fn_data) {
+            // ... analogicznie jak dla FZ ...
+        }
+
+    } catch (error) {
+        console.error("Błąd podczas aktualizacji statusu filtrów:", error);
+    }
+}
+
     function showToast(message, type = 'info') {
         const options = {
             text: message,
@@ -756,6 +782,8 @@ async function confirmAlarm(alarmId) {
     loadSensorHistory();
     setInterval(loadSensorHistory, 300000);
     loadEquipment();
+    updateFiltryStatus();
+    setInterval(updateFiltryStatus, 10000);
 
     // --- SEKCJA 7: OBSŁUGA WIDOKÓW POMIARÓW ---
 
