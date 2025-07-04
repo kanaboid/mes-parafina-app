@@ -937,3 +937,530 @@ def get_filtry_status():
             filtr['czas_zakonczenia_iso'] = end_time.isoformat()
 
     return jsonify(ostateczna_odpowiedz)
+
+# === NOWE API DLA ZARZĄDZANIA CYKLAMI FILTRACYJNYMI ===
+
+@bp.route('/api/cykle-filtracyjne/<int:id_partii>')
+def get_cykle_partii(id_partii):
+    """Pobiera historię wszystkich cykli filtracyjnych dla danej partii."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        cursor.execute("""
+            SELECT cf.*, 
+                   ps.unikalny_kod, ps.typ_surowca, ps.nazwa_partii,
+                   TIMESTAMPDIFF(MINUTE, cf.czas_rozpoczecia, cf.czas_zakonczenia) as rzeczywisty_czas_minut
+            FROM cykle_filtracyjne cf
+            JOIN partie_surowca ps ON cf.id_partii = ps.id
+            WHERE cf.id_partii = %s
+            ORDER BY cf.numer_cyklu, cf.czas_rozpoczecia
+        """, (id_partii,))
+        
+        cykle = cursor.fetchall()
+        return jsonify(cykle)
+        
+    finally:
+        cursor.close()
+        conn.close()
+
+@bp.route('/api/partie/aktualny-stan')
+def get_partie_aktualny_stan():
+    """Pobiera aktualny stan wszystkich partii w systemie z szczegółami procesu."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        cursor.execute("""
+            SELECT ps.*,
+                   s.nazwa_unikalna as nazwa_reaktora,
+                   s.typ_sprzetu,
+                   CASE 
+                       WHEN ps.planowany_czas_zakonczenia IS NOT NULL 
+                       THEN TIMESTAMPDIFF(MINUTE, NOW(), ps.planowany_czas_zakonczenia)
+                       ELSE NULL
+                   END as pozostale_minuty,
+                   CASE 
+                       WHEN ps.planowany_czas_zakonczenia IS NOT NULL AND NOW() > ps.planowany_czas_zakonczenia
+                       THEN TRUE
+                       ELSE FALSE
+                   END as przekroczony_czas
+            FROM partie_surowca ps
+            LEFT JOIN sprzet s ON ps.id_aktualnego_sprzetu = s.id
+            WHERE ps.status_partii NOT IN ('W magazynie czystym', 'Gotowy do wysłania')
+            ORDER BY ps.czas_rozpoczecia_etapu DESC
+        """)
+        
+        partie = cursor.fetchall()
+        return jsonify(partie)
+        
+    finally:
+        cursor.close()
+        conn.close()
+
+@bp.route('/api/filtry/szczegolowy-status')
+def get_filtry_szczegolowy_status():
+    """Pobiera szczegółowy status filtrów z informacjami o partiach i cyklach."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # Podstawowe informacje o filtrach
+        cursor.execute("""
+            SELECT id, nazwa_unikalna as nazwa_filtra, stan_sprzetu, typ_sprzetu
+            FROM sprzet 
+            WHERE typ_sprzetu = 'filtr'
+            ORDER BY nazwa_unikalna
+        """)
+        filtry = cursor.fetchall()
+        
+        for filtr in filtry:
+            # Sprawdź czy filtr ma aktywną operację
+            cursor.execute("""
+                SELECT ol.*, 
+                       ps.unikalny_kod, ps.nazwa_partii, ps.typ_surowca,
+                       ps.aktualny_etap_procesu, ps.numer_cyklu_aktualnego,
+                       ps.czas_rozpoczecia_etapu, ps.planowany_czas_zakonczenia,
+                       s_start.nazwa_unikalna as reaktor_startowy,
+                       s_cel.nazwa_unikalna as reaktor_docelowy,
+                       CASE 
+                           WHEN ps.planowany_czas_zakonczenia IS NOT NULL 
+                           THEN TIMESTAMPDIFF(MINUTE, NOW(), ps.planowany_czas_zakonczenia)
+                           ELSE NULL
+                       END as pozostale_minuty
+                FROM operacje_log ol
+                JOIN partie_surowca ps ON ol.id_partii_surowca = ps.id
+                LEFT JOIN sprzet s_start ON ol.id_sprzetu_zrodlowego = s_start.id
+                LEFT JOIN sprzet s_cel ON ol.id_sprzetu_docelowego = s_cel.id
+                WHERE ol.status_operacji = 'aktywna' 
+                AND ps.id_aktualnego_filtra = %s
+                ORDER BY ol.czas_rozpoczecia DESC
+                LIMIT 1
+            """, (filtr['nazwa_filtra'],))
+            
+            aktywna_operacja = cursor.fetchone()
+            filtr['aktywna_operacja'] = aktywna_operacja
+            
+            # Jeśli nie ma aktywnej operacji, sprawdź czy ktoś czeka na ten filtr
+            if not aktywna_operacja:
+                cursor.execute("""
+                    SELECT ps.*, s.nazwa_unikalna as nazwa_reaktora
+                    FROM partie_surowca ps
+                    JOIN sprzet s ON ps.id_aktualnego_sprzetu = s.id
+                    WHERE ps.id_aktualnego_filtra = %s 
+                    AND ps.aktualny_etap_procesu IN ('surowy', 'gotowy')
+                    ORDER BY ps.czas_rozpoczecia_etapu ASC
+                    LIMIT 3
+                """, (filtr['nazwa_filtra'],))
+                
+                filtr['kolejka_oczekujacych'] = cursor.fetchall()
+            else:
+                filtr['kolejka_oczekujacych'] = []
+        
+        return jsonify(filtry)
+        
+    finally:
+        cursor.close()
+        conn.close()
+
+@bp.route('/api/cykle/rozpocznij', methods=['POST'])
+def rozpocznij_cykl_filtracyjny():
+    """Rozpoczyna nowy cykl filtracyjny dla partii."""
+    data = request.get_json()
+    
+    required_fields = ['id_partii', 'typ_cyklu', 'id_filtra', 'reaktor_startowy']
+    if not all(field in data for field in required_fields):
+        return jsonify({'error': 'Brak wymaganych pól'}), 400
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        # Pobierz aktualny numer cyklu partii
+        cursor.execute("SELECT numer_cyklu_aktualnego FROM partie_surowca WHERE id = %s", (data['id_partii'],))
+        result = cursor.fetchone()
+        if not result:
+            return jsonify({'error': 'Nie znaleziono partii'}), 404
+        
+        numer_cyklu = result[0] + 1
+        
+        # Oblicz planowany czas zakończenia
+        durations = {
+            'placek': 30,
+            'filtracja': 15,
+            'dmuchanie': 45
+        }
+        
+        planowany_czas = datetime.now() + timedelta(minutes=durations.get(data['typ_cyklu'], 30))
+        
+        # Wstaw nowy cykl
+        cursor.execute("""
+            INSERT INTO cykle_filtracyjne 
+            (id_partii, numer_cyklu, typ_cyklu, id_filtra, reaktor_startowy, 
+             reaktor_docelowy, czas_rozpoczecia, wynik_oceny)
+            VALUES (%s, %s, %s, %s, %s, %s, NOW(), 'oczekuje')
+        """, (data['id_partii'], numer_cyklu, data['typ_cyklu'], data['id_filtra'], 
+              data['reaktor_startowy'], data.get('reaktor_docelowy')))
+        
+        cykl_id = cursor.lastrowid
+        
+        # Aktualizuj partię
+        etap_mapping = {
+            'placek': 'placek',
+            'filtracja': 'w_kole', 
+            'dmuchanie': 'dmuchanie'
+        }
+        
+        cursor.execute("""
+            UPDATE partie_surowca 
+            SET numer_cyklu_aktualnego = %s,
+                aktualny_etap_procesu = %s,
+                czas_rozpoczecia_etapu = NOW(),
+                planowany_czas_zakonczenia = %s,
+                id_aktualnego_filtra = %s,
+                reaktor_docelowy = %s
+            WHERE id = %s
+        """, (numer_cyklu, etap_mapping[data['typ_cyklu']], planowany_czas,
+              data['id_filtra'], data.get('reaktor_docelowy'), data['id_partii']))
+        
+        conn.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Rozpoczęto cykl {data["typ_cyklu"]} dla partii',
+            'cykl_id': cykl_id,
+            'numer_cyklu': numer_cyklu
+        })
+        
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'error': f'Błąd rozpoczynania cyklu: {str(e)}'}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+@bp.route('/api/cykle/zakoncz', methods=['POST'])
+def zakoncz_cykl_filtracyjny():
+    """Kończy aktualny cykl filtracyjny i przechodzi do następnego etapu."""
+    data = request.get_json()
+    
+    if 'id_partii' not in data:
+        return jsonify({'error': 'Brak ID partii'}), 400
+    
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # Pobierz aktualny stan partii
+        cursor.execute("""
+            SELECT * FROM partie_surowca WHERE id = %s
+        """, (data['id_partii'],))
+        
+        partia = cursor.fetchone()
+        if not partia:
+            return jsonify({'error': 'Nie znaleziono partii'}), 404
+        
+        # Zakończ aktualny cykl
+        cursor.execute("""
+            UPDATE cykle_filtracyjne 
+            SET czas_zakonczenia = NOW(),
+                czas_trwania_minut = TIMESTAMPDIFF(MINUTE, czas_rozpoczecia, NOW()),
+                wynik_oceny = %s,
+                komentarz = %s
+            WHERE id_partii = %s 
+            AND numer_cyklu = %s 
+            AND czas_zakonczenia IS NULL
+        """, (data.get('wynik_oceny', 'oczekuje'), data.get('komentarz', ''),
+              data['id_partii'], partia['numer_cyklu_aktualnego']))
+        
+        # Określ następny etap na podstawie aktualnego
+        next_etap = 'gotowy'
+        next_filtr = None
+        
+        if partia['aktualny_etap_procesu'] == 'placek':
+            next_etap = 'przelew'
+        elif partia['aktualny_etap_procesu'] == 'przelew':
+            next_etap = 'w_kole'
+        elif partia['aktualny_etap_procesu'] == 'w_kole':
+            next_etap = 'ocena_probki'
+        elif partia['aktualny_etap_procesu'] == 'dmuchanie':
+            next_etap = 'gotowy'
+            next_filtr = None
+        
+        # Aktualizuj partię
+        cursor.execute("""
+            UPDATE partie_surowca 
+            SET aktualny_etap_procesu = %s,
+                czas_rozpoczecia_etapu = NOW(),
+                planowany_czas_zakonczenia = NULL,
+                id_aktualnego_filtra = %s
+            WHERE id = %s
+        """, (next_etap, next_filtr, data['id_partii']))
+        
+        conn.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Zakończono cykl. Partia przeszła do etapu: {next_etap}',
+            'next_etap': next_etap
+        })
+        
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'error': f'Błąd kończenia cyklu: {str(e)}'}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+@bp.route('/cykle-monitor')
+def cykle_monitor():
+    """Serwuje stronę monitoringu cykli filtracyjnych."""
+    return render_template('cykle_monitor.html')
+
+# === ENDPOINTY API DLA AKTYWNYCH PARTII ===
+
+@bp.route('/api/partie/aktywne', methods=['GET'])
+def get_aktywne_partie():
+    """
+    Pobiera listę wszystkich aktywnych partii w systemie z pełnymi szczegółami:
+    - Lokalizacja i status
+    - Aktualny etap procesu
+    - Czasy rozpoczęcia i planowanego zakończenia
+    - Informacje o operacjach
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # Główne zapytanie pobierające aktywne partie
+        cursor.execute("""
+            SELECT 
+                ps.id,
+                ps.unikalny_kod,
+                ps.nazwa_partii,
+                ps.typ_surowca,
+                ps.zrodlo_pochodzenia,
+                ps.waga_poczatkowa_kg,
+                ps.waga_aktualna_kg,
+                ps.data_utworzenia,
+                ps.status_partii,
+                ps.ilosc_cykli_filtracyjnych,
+                
+                -- Informacje o aktualnym sprzęcie
+                s.id as id_sprzetu,
+                s.nazwa_unikalna as nazwa_sprzetu,
+                s.typ_sprzetu,
+                s.stan_sprzetu,
+                
+                -- Informacje o aktywnej operacji (jeśli istnieje)
+                ol.id as id_operacji,
+                ol.typ_operacji,
+                ol.status_operacji,
+                ol.czas_rozpoczecia as czas_rozpoczecia_operacji,
+                ol.opis as opis_operacji,
+                ol.punkt_startowy,
+                ol.punkt_docelowy,
+                
+                -- Obliczenia czasowe
+                TIMESTAMPDIFF(MINUTE, ps.data_utworzenia, NOW()) as wiek_partii_minuty,
+                CASE 
+                    WHEN ol.czas_rozpoczecia IS NOT NULL 
+                    THEN TIMESTAMPDIFF(MINUTE, ol.czas_rozpoczecia, NOW())
+                    ELSE NULL
+                END as czas_trwania_operacji_minuty
+                
+            FROM partie_surowca ps
+            LEFT JOIN sprzet s ON ps.id_sprzetu = s.id
+            LEFT JOIN operacje_log ol ON ps.id = ol.id_partii_surowca AND ol.status_operacji = 'aktywna'
+            WHERE ps.status_partii NOT IN ('W magazynie czystym', 'Gotowy do wysłania')
+            ORDER BY ps.data_utworzenia DESC
+        """)
+        
+        partie = cursor.fetchall()
+        
+        # Wzbogacenie danych o dodatkowe informacje
+        for partia in partie:
+            # Dodaj informacje o statusach partii
+            cursor.execute("""
+                SELECT st.id, st.nazwa_statusu
+                FROM partie_statusy ps
+                JOIN statusy st ON ps.id_statusu = st.id
+                WHERE ps.id_partii = %s
+            """, (partia['id'],))
+            partia['statusy'] = cursor.fetchall()
+            
+            # Dodaj historię ostatnich operacji
+            cursor.execute("""
+                SELECT 
+                    ol.id,
+                    ol.typ_operacji,
+                    ol.status_operacji,
+                    ol.czas_rozpoczecia,
+                    ol.czas_zakonczenia,
+                    ol.opis,
+                    ol.punkt_startowy,
+                    ol.punkt_docelowy,
+                    TIMESTAMPDIFF(MINUTE, ol.czas_rozpoczecia, 
+                        COALESCE(ol.czas_zakonczenia, NOW())) as czas_trwania_min
+                FROM operacje_log ol
+                WHERE ol.id_partii_surowca = %s
+                ORDER BY ol.czas_rozpoczecia DESC
+                LIMIT 5
+            """, (partia['id'],))
+            partia['historia_operacji'] = cursor.fetchall()
+            
+            # Formatuj daty dla JSON
+            if partia['data_utworzenia']:
+                partia['data_utworzenia'] = partia['data_utworzenia'].strftime('%Y-%m-%d %H:%M:%S')
+            if partia['czas_rozpoczecia_operacji']:
+                partia['czas_rozpoczecia_operacji'] = partia['czas_rozpoczecia_operacji'].strftime('%Y-%m-%d %H:%M:%S')
+            
+            # Formatuj daty w historii operacji
+            for operacja in partia['historia_operacji']:
+                if operacja['czas_rozpoczecia']:
+                    operacja['czas_rozpoczecia'] = operacja['czas_rozpoczecia'].strftime('%Y-%m-%d %H:%M:%S')
+                if operacja['czas_zakonczenia']:
+                    operacja['czas_zakonczenia'] = operacja['czas_zakonczenia'].strftime('%Y-%m-%d %H:%M:%S')
+        
+        return jsonify(partie)
+        
+    except Exception as e:
+        return jsonify({'error': f'Błąd pobierania aktywnych partii: {str(e)}'}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+@bp.route('/api/partie/szczegoly/<int:partia_id>', methods=['GET'])
+def get_szczegoly_partii(partia_id):
+    """Pobiera szczegółowe informacje o konkretnej partii"""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # Podstawowe informacje o partii
+        cursor.execute("""
+            SELECT 
+                ps.*,
+                s.nazwa_unikalna as nazwa_sprzetu,
+                s.typ_sprzetu,
+                s.stan_sprzetu
+            FROM partie_surowca ps
+            LEFT JOIN sprzet s ON ps.id_sprzetu = s.id
+            WHERE ps.id = %s
+        """, (partia_id,))
+        
+        partia = cursor.fetchone()
+        if not partia:
+            return jsonify({'error': 'Partia nie znaleziona'}), 404
+        
+        # Pełna historia operacji
+        cursor.execute("""
+            SELECT 
+                ol.*,
+                s_start.nazwa_unikalna as nazwa_sprzetu_startowego,
+                s_end.nazwa_unikalna as nazwa_sprzetu_docelowego,
+                TIMESTAMPDIFF(MINUTE, ol.czas_rozpoczecia, 
+                    COALESCE(ol.czas_zakonczenia, NOW())) as czas_trwania_min
+            FROM operacje_log ol
+            LEFT JOIN sprzet s_start ON ol.id_sprzetu_zrodlowego = s_start.id
+            LEFT JOIN sprzet s_end ON ol.id_sprzetu_docelowego = s_end.id
+            WHERE ol.id_partii_surowca = %s
+            ORDER BY ol.czas_rozpoczecia DESC
+        """, (partia_id,))
+        
+        partia['historia_operacji'] = cursor.fetchall()
+        
+        # Statusy partii
+        cursor.execute("""
+            SELECT st.id, st.nazwa_statusu
+            FROM partie_statusy ps
+            JOIN statusy st ON ps.id_statusu = st.id
+            WHERE ps.id_partii = %s
+        """, (partia_id,))
+        partia['statusy'] = cursor.fetchall()
+        
+        # Cykle filtracyjne (jeśli istnieją)
+        cursor.execute("""
+            SELECT cf.*,
+                   TIMESTAMPDIFF(MINUTE, cf.czas_rozpoczecia, cf.czas_zakonczenia) as rzeczywisty_czas_minut
+            FROM cykle_filtracyjne cf
+            WHERE cf.id_partii = %s
+            ORDER BY cf.numer_cyklu DESC
+        """, (partia_id,))
+        partia['cykle_filtracyjne'] = cursor.fetchall()
+        
+        # Formatuj daty
+        if partia['data_utworzenia']:
+            partia['data_utworzenia'] = partia['data_utworzenia'].strftime('%Y-%m-%d %H:%M:%S')
+        
+        for operacja in partia['historia_operacji']:
+            if operacja['czas_rozpoczecia']:
+                operacja['czas_rozpoczecia'] = operacja['czas_rozpoczecia'].strftime('%Y-%m-%d %H:%M:%S')
+            if operacja['czas_zakonczenia']:
+                operacja['czas_zakonczenia'] = operacja['czas_zakonczenia'].strftime('%Y-%m-%d %H:%M:%S')
+        
+        for cykl in partia['cykle_filtracyjne']:
+            if cykl['czas_rozpoczecia']:
+                cykl['czas_rozpoczecia'] = cykl['czas_rozpoczecia'].strftime('%Y-%m-%d %H:%M:%S')
+            if cykl['czas_zakonczenia']:
+                cykl['czas_zakonczenia'] = cykl['czas_zakonczenia'].strftime('%Y-%m-%d %H:%M:%S')
+        
+        return jsonify(partia)
+        
+    except Exception as e:
+        return jsonify({'error': f'Błąd pobierania szczegółów partii: {str(e)}'}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+@bp.route('/api/partie/aktualizuj-status', methods=['POST'])
+def aktualizuj_status_partii():
+    """Aktualizuje status partii"""
+    data = request.get_json()
+    
+    if not data or 'id_partii' not in data or 'nowy_status' not in data:
+        return jsonify({'error': 'Brak wymaganych pól: id_partii, nowy_status'}), 400
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        # Sprawdź czy partia istnieje
+        cursor.execute("SELECT id FROM partie_surowca WHERE id = %s", (data['id_partii'],))
+        if not cursor.fetchone():
+            return jsonify({'error': 'Partia nie znaleziona'}), 404
+        
+        # Aktualizuj status
+        cursor.execute("""
+            UPDATE partie_surowca 
+            SET status_partii = %s
+            WHERE id = %s
+        """, (data['nowy_status'], data['id_partii']))
+        
+        # Dodaj wpis do historii operacji
+        cursor.execute("""
+            INSERT INTO operacje_log 
+            (typ_operacji, id_partii_surowca, status_operacji, czas_rozpoczecia, czas_zakonczenia, opis)
+            VALUES ('ZMIANA_STATUSU', %s, 'zakonczona', NOW(), NOW(), %s)
+        """, (data['id_partii'], f"Zmiana statusu na: {data['nowy_status']}"))
+        
+        conn.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Status partii został zaktualizowany na: {data["nowy_status"]}'
+        })
+        
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'error': f'Błąd aktualizacji statusu: {str(e)}'}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# === KONIEC ENDPOINTÓW AKTYWNYCH PARTII ===
+
+@bp.route('/aktywne-partie')
+def show_aktywne_partie():
+    """Serwuje stronę zarządzania aktywnymi partiami."""
+    return render_template('aktywne_partie.html')

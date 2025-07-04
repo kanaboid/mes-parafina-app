@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+
+{% block title %}Monitor Cykli Filtracyjnych{% endblock %}
+
+{% block content %}
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css">
+<link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+<style>
+        .etap-card {
+            border-left: 5px solid #ddd;
+            transition: all 0.3s ease;
+        }
+        .etap-card.aktywny {
+            border-left-color: #007bff;
+            background-color: #f8f9ff;
+        }
+        .etap-card.placek { border-left-color: #ffc107; }
+        .etap-card.przelew { border-left-color: #17a2b8; }
+        .etap-card.w_kole { border-left-color: #28a745; }
+        .etap-card.ocena_probki { border-left-color: #fd7e14; }
+        .etap-card.dmuchanie { border-left-color: #dc3545; }
+        .etap-card.gotowy { border-left-color: #6f42c1; }
+        
+        .timer {
+            font-size: 1.2em;
+            font-weight: bold;
+        }
+        .timer.przekroczony {
+            color: #dc3545;
+            animation: blink 1s infinite;
+        }
+        .timer.wkrotce {
+            color: #ffc107;
+        }
+        .timer.normalny {
+            color: #28a745;
+        }
+        
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0.3; }
+        }
+        
+        .filtr-status {
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .filtr-wolny {
+            background: linear-gradient(135deg, #e8f5e8, #d4edda);
+            border: 2px solid #28a745;
+        }
+        .filtr-zajety {
+            background: linear-gradient(135deg, #fff3cd, #ffeaa7);
+            border: 2px solid #ffc107;
+        }
+        .filtr-problem {
+            background: linear-gradient(135deg, #f8d7da, #ffccd5);
+            border: 2px solid #dc3545;
+        }
+        
+        .progress-ring {
+            transform: rotate(-90deg);
+        }
+        .progress-ring-circle {
+            transition: stroke-dashoffset 0.35s;
+            transform-origin: 50% 50%;
+        }
+        
+        .kolejka-item {
+            background: #f8f9fa;
+            border-radius: 5px;
+            padding: 8px;
+            margin: 5px 0;
+            border-left: 3px solid #6c757d;
+        }
+        
+        .status-badge {
+            font-size: 0.8em;
+            padding: 4px 8px;
+            border-radius: 15px;
+        }
+    </style>
+
+    <div class="container-fluid py-4">
+        <div class="row">
+            <div class="col-12">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h1><i class="bi bi-funnel"></i> Monitor Cykli Filtracyjnych</h1>
+                    <div>
+                        <button class="btn btn-primary me-2" onclick="odswiezWszystko()">
+                            <i class="bi bi-arrow-clockwise"></i> Odśwież
+                        </button>
+                        <button class="btn btn-outline-secondary" onclick="pokazHistorie()">
+                            <i class="bi bi-clock-history"></i> Historia
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Status Filtrów -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <h3><i class="bi bi-speedometer2"></i> Status Filtrów</h3>
+            </div>
+        </div>
+        <div class="row" id="filtry-container">
+            <!-- Filtry będą wstawione tutaj przez JavaScript -->
+        </div>
+
+        <!-- Aktywne Partie -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <h3><i class="bi bi-clipboard-data"></i> Aktywne Partie w Systemie</h3>
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Kod Partii</th>
+                                <th>Nazwa</th>
+                                <th>Typ Surowca</th>
+                                <th>Aktualny Etap</th>
+                                <th>Cykl</th>
+                                <th>Lokalizacja</th>
+                                <th>Pozostały Czas</th>
+                                <th>Akcje</th>
+                            </tr>
+                        </thead>
+                        <tbody id="partie-tbody">
+                            <!-- Partie będą wstawione tutaj -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal do rozpoczynania cyklu -->
+    <div class="modal fade" id="nowyCoklModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Rozpocznij Nowy Cykl Filtracyjny</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="nowy-cykl-form">
+                        <input type="hidden" id="partia-id">
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Typ Cyklu</label>
+                            <select class="form-select" id="typ-cyklu" required>
+                                <option value="">-- Wybierz --</option>
+                                <option value="placek">Budowanie Placka (30 min)</option>
+                                <option value="filtracja">Filtracja w Koło (15 min)</option>
+                                <option value="dmuchanie">Dmuchanie Filtra (45 min)</option>
+                            </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Filtr</label>
+                            <select class="form-select" id="filtr-select" required>
+                                <option value="">-- Wybierz --</option>
+                                <option value="FZ">Filtr Zielony (FZ)</option>
+                                <option value="FN">Filtr Niebieski (FN)</option>
+                            </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Reaktor Startowy</label>
+                            <input type="text" class="form-control" id="reaktor-startowy" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Reaktor Docelowy (opcjonalnie)</label>
+                            <input type="text" class="form-control" id="reaktor-docelowy">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Anuluj</button>
+                    <button type="button" class="btn btn-success" onclick="rozpocznijCykl()">
+                        <i class="bi bi-play-fill"></i> Rozpocznij Cykl
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+<script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+<script src="{{ url_for('static', filename='js/cykle_monitor.js') }}"></script>
+{% endblock %}
