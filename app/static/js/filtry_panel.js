@@ -42,23 +42,32 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updateFilterCard(filterId, data) {
-        const statusEl = document.getElementById(`${filterId.toLowerCase()}-status`);
-        const operacjaEl = document.getElementById(`${filterId.toLowerCase()}-operacja`);
-        const partiaEl = document.getElementById(`${filterId.toLowerCase()}-partia`);
-        const kodPartiiEl = document.getElementById(`${filterId.toLowerCase()}-kod-partii`);
-        const trasaEl = document.getElementById(`${filterId.toLowerCase()}-trasa`);
+        // Funkcja pomocnicza do bezpiecznego ustawiania tekstu
+        const setText = (elementId, text) => {
+            const el = document.getElementById(elementId);
+            if (el) {
+                el.textContent = text;
+            } else {
+                console.warn(`Nie znaleziono elementu o ID: ${elementId}`);
+            }
+        };
+
+        const prefix = filterId.toLowerCase();
 
         if (data && data.status_operacji === 'aktywna') {
-            statusEl.textContent = data.stan_sprzetu || 'Zajęty';
-            operacjaEl.textContent = data.typ_operacji || '---';
-            partiaEl.textContent = data.nazwa_partii || '---';
-            trasaEl.textContent = `${data.sprzet_zrodlowy || '?'} → ${data.sprzet_docelowy || '?'}`;
+            setText(`${prefix}-status`, data.stan_sprzetu || 'Zajęty');
+            setText(`${prefix}-operacja`, data.typ_operacji || '---');
+            setText(`${prefix}-partia`, data.nazwa_partii || '---');
+            setText(`${prefix}-kod-partii`, data.unikalny_kod || '---');
+            setText(`${prefix}-trasa`, `${data.sprzet_zrodlowy || '?'} → ${data.sprzet_docelowy || '?'}`);
             updateTimer(filterId, data.czas_zakonczenia_iso);
         } else {
-            statusEl.textContent = data ? (data.stan_sprzetu || 'Wolny') : 'Wolny';
-            operacjaEl.textContent = '---';
-            partiaEl.textContent = '---';
-            trasaEl.textContent = '---';
+            const statusText = data ? (data.stan_sprzetu || 'Wolny') : 'Wolny';
+            setText(`${prefix}-status`, statusText);
+            setText(`${prefix}-operacja`, '---');
+            setText(`${prefix}-partia`, '---');
+            setText(`${prefix}-kod-partii`, '---');
+            setText(`${prefix}-trasa`, '---');
             updateTimer(filterId, null);
         }
     }
