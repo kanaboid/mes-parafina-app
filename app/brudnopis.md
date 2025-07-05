@@ -90,3 +90,41 @@ POST /api/operacje/transfer-reaktorow
 
 
 **Czy mogę zacząć implementację? Które z powyższych pytań są dla Ciebie najważniejsze do ustalenia?**
+
+
+
+Doskonale! Rozumiem zadanie. Zanim zacznę implementację, chciałbym doprecyzować kilka kluczowych kwestii:
+
+## Pytania dotyczące funkcjonalności topologii:
+
+### 1. **Struktura i relacje danych:**
+- segmenty zawsze maja zawory
+- Jak dokładnie segmenty łączą sprzęt - segmenty lacza sprzet przez porty i wezly
+- segmenty moga byc tez prostymi punktami polaczen
+
+### 2. **Interfejs zarządzania:**
+- formularze HTML i api rest
+- walidacja danych jest potrzebna
+- edycja w osobnym formularzu
+
+### 3. **Wizualizacja topologii:**
+- wizualizacja - prosty diagram tekstowy, graf z węzłami i interaktywna mapa(pozniej wybiore co zostawic)
+-  stan zaworów (otwarte/zamknięte) w czasie rzeczywistym
+- ma być możliwość klikania elementów na mapie do edycji
+
+### 4. **Tester połączeń PathFinder:**
+- ma testować dostępność tras i/lub optymalne ścieżki
+- ma symulować różne stany zaworów podczas testowania
+- potrzebuje historii testów lub raportów z testowania
+
+### 5. **Dodatkowe funkcjonalności:**
+- **Import/Export** - możliwość eksportu topologii do pliku i importu z pliku
+- **Wersjonowanie** - śledzenie zmian w topologii
+- **Szablony** - predefiniowane konfiguracje topologii
+- **Walidacja spójności** - automatyczne sprawdzanie czy mapa jest logicznie poprawna
+- **Backup/Restore** - kopie zapasowe topologii przed większymi zmianami
+
+### 6. **Integra z istniejącym systemem:**
+- nowe funkcje mają być dostępne z głównego menu nawigacji
+- na razie nie potrzebuje uprawnień/ról użytkowników dla zarządzania topologią
+- ma być integracja z systemem alarmów przy problemach z topologią

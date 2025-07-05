@@ -1,0 +1,497 @@
+<!-- app/templates/topology/zawory.html -->
+{% extends "base.html" %}
+
+{% block title %}Zarządzanie Zaworami{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1><i class="fas fa-valve"></i> Zarządzanie Zaworami</h1>
+                <div>
+                    <a href="{{ url_for('topology.topology_index') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left"></i> Powrót
+                    </a>
+                    <button type="button" class="btn btn-success" onclick="showAddValveModal()">
+                        <i class="fas fa-plus"></i> Dodaj Zawór
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtry i wyszukiwanie -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="input-group">
+                <div class="input-group-prepend">
+                    <span class="input-group-text"><i class="fas fa-search"></i></span>
+                </div>
+                <input type="text" class="form-control" id="searchInput" placeholder="Wyszukaj zawór...">
+            </div>
+        </div>
+        <div class="col-md-3">
+            <select class="form-control" id="statusFilter">
+                <option value="">Wszystkie stany</option>
+                <option value="OTWARTY">Otwarte</option>
+                <option value="ZAMKNIETY">Zamknięte</option>
+            </select>
+        </div>
+        <div class="col-md-3">
+            <button type="button" class="btn btn-outline-info" onclick="toggleBulkActions()">
+                <i class="fas fa-tasks"></i> Akcje Grupowe
+            </button>
+        </div>
+    </div>
+
+    <!-- Akcje grupowe -->
+    <div class="row mb-3" id="bulkActionsRow" style="display: none;">
+        <div class="col-12">
+            <div class="card bg-light">
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <div class="btn-group" role="group">
+                                <button type="button" class="btn btn-warning" onclick="bulkOpenValves()">
+                                    <i class="fas fa-lock-open"></i> Otwórz Zaznaczone
+                                </button>
+                                <button type="button" class="btn btn-secondary" onclick="bulkCloseValves()">
+                                    <i class="fas fa-lock"></i> Zamknij Zaznaczone
+                                </button>
+                                <button type="button" class="btn btn-danger" onclick="bulkDeleteValves()">
+                                    <i class="fas fa-trash"></i> Usuń Zaznaczone
+                                </button>
+                            </div>
+                        </div>
+                        <div class="col-md-4 text-right">
+                            <span id="selectedCount">0</span> zaznaczonych
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabela zaworów -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-list"></i> Lista Zaworów
+                        <span class="float-right badge badge-light" id="totalCount">{{ zawory|length }}</span>
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover" id="valvesTable">
+                            <thead>
+                                <tr>
+                                    <th width="30">
+                                        <input type="checkbox" id="selectAll">
+                                    </th>
+                                    <th>Nazwa Zaworu</th>
+                                    <th>Stan</th>
+                                    <th>Użyte w Segmentach</th>
+                                    <th>Akcje</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for zawor in zawory %}
+                                <tr data-id="{{ zawor.id }}" data-name="{{ zawor.nazwa_zaworu }}" data-state="{{ zawor.stan }}">
+                                    <td>
+                                        <input type="checkbox" class="valve-checkbox" value="{{ zawor.id }}">
+                                    </td>
+                                    <td>
+                                        <strong>{{ zawor.nazwa_zaworu }}</strong>
+                                    </td>
+                                    <td>
+                                        <span class="badge badge-{{ 'success' if zawor.stan == 'OTWARTY' else 'secondary' }}">
+                                            {% if zawor.stan == 'OTWARTY' %}
+                                                <i class="fas fa-lock-open"></i> Otwarty
+                                            {% else %}
+                                                <i class="fas fa-lock"></i> Zamknięty
+                                            {% endif %}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        {% if zawor.segments %}
+                                            <span class="badge badge-info">{{ zawor.segments|length }}</span>
+                                            <small class="text-muted">
+                                                {% for segment in zawor.segments[:3] %}
+                                                    {{ segment.nazwa_segmentu }}{% if not loop.last %}, {% endif %}
+                                                {% endfor %}
+                                                {% if zawor.segments|length > 3 %}
+                                                    <span class="text-muted">i {{ zawor.segments|length - 3 }} więcej</span>
+                                                {% endif %}
+                                            </small>
+                                        {% else %}
+                                            <span class="badge badge-warning">Nieużywany</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <div class="btn-group" role="group">
+                                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="viewValveDetails({{ zawor.id }})">
+                                                <i class="fas fa-eye"></i>
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-outline-warning" onclick="editValve({{ zawor.id }})">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-outline-{{ 'secondary' if zawor.stan == 'OTWARTY' else 'success' }}" 
+                                                    onclick="toggleValveState({{ zawor.id }}, '{{ zawor.stan }}')">
+                                                <i class="fas fa-{{ 'lock' if zawor.stan == 'OTWARTY' else 'lock-open' }}"></i>
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteValve({{ zawor.id }})" 
+                                                    {% if zawor.segments %}disabled title="Zawór jest używany w segmentach"{% endif %}>
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal dodawania/edycji zaworu -->
+<div class="modal fade" id="valveModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="valveModalTitle">Dodaj Zawór</h5>
+                <button type="button" class="close" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="valveForm">
+                    <input type="hidden" id="valveId" name="id">
+                    <div class="form-group">
+                        <label for="valveName">Nazwa Zaworu *</label>
+                        <input type="text" class="form-control" id="valveName" name="nazwa_zaworu" required>
+                        <small class="form-text text-muted">Unikalna nazwa zaworu (np. Z01, ZAWOR_GŁÓWNY)</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="valveState">Stan Zaworu</label>
+                        <select class="form-control" id="valveState" name="stan">
+                            <option value="ZAMKNIETY">Zamknięty</option>
+                            <option value="OTWARTY">Otwarty</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Anuluj</button>
+                <button type="button" class="btn btn-primary" onclick="saveValve()">Zapisz</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal szczegółów zaworu -->
+<div class="modal fade" id="valveDetailsModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Szczegóły Zaworu</h5>
+                <button type="button" class="close" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <div class="modal-body" id="valveDetailsContent">
+                <!-- Treść zostanie załadowana dynamicznie -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Zamknij</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+$(document).ready(function() {
+    // Inicjalizacja filtrów
+    $('#searchInput').on('keyup', filterTable);
+    $('#statusFilter').on('change', filterTable);
+    
+    // Obsługa zaznaczania wszystkich
+    $('#selectAll').on('change', function() {
+        $('.valve-checkbox').prop('checked', this.checked);
+        updateSelectedCount();
+    });
+    
+    // Obsługa zaznaczania pojedynczych
+    $('.valve-checkbox').on('change', function() {
+        updateSelectedCount();
+        updateSelectAllState();
+    });
+    
+    updateSelectedCount();
+});
+
+function filterTable() {
+    const searchTerm = $('#searchInput').val().toLowerCase();
+    const statusFilter = $('#statusFilter').val();
+    
+    $('#valvesTable tbody tr').each(function() {
+        const name = $(this).data('name').toLowerCase();
+        const state = $(this).data('state');
+        
+        const matchesSearch = name.includes(searchTerm);
+        const matchesStatus = !statusFilter || state === statusFilter;
+        
+        $(this).toggle(matchesSearch && matchesStatus);
+    });
+    
+    updateVisibleCount();
+}
+
+function updateVisibleCount() {
+    const visibleCount = $('#valvesTable tbody tr:visible').length;
+    $('#totalCount').text(visibleCount);
+}
+
+function updateSelectedCount() {
+    const selectedCount = $('.valve-checkbox:checked').length;
+    $('#selectedCount').text(selectedCount);
+}
+
+function updateSelectAllState() {
+    const total = $('.valve-checkbox').length;
+    const checked = $('.valve-checkbox:checked').length;
+    
+    $('#selectAll').prop('indeterminate', checked > 0 && checked < total);
+    $('#selectAll').prop('checked', checked === total);
+}
+
+function toggleBulkActions() {
+    $('#bulkActionsRow').toggle();
+}
+
+function showAddValveModal() {
+    $('#valveModalTitle').text('Dodaj Zawór');
+    $('#valveForm')[0].reset();
+    $('#valveId').val('');
+    $('#valveModal').modal('show');
+}
+
+function editValve(id) {
+    $.get(`/topology/api/zawory/${id}`, function(data) {
+        if (data.success) {
+            const valve = data.data;
+            $('#valveModalTitle').text('Edytuj Zawór');
+            $('#valveId').val(valve.id);
+            $('#valveName').val(valve.nazwa_zaworu);
+            $('#valveState').val(valve.stan);
+            $('#valveModal').modal('show');
+        } else {
+            alert('Błąd podczas pobierania danych zaworu');
+        }
+    });
+}
+
+function saveValve() {
+    const id = $('#valveId').val();
+    const isEdit = id !== '';
+    
+    const data = {
+        nazwa_zaworu: $('#valveName').val(),
+        stan: $('#valveState').val()
+    };
+    
+    const url = isEdit ? `/topology/api/zawory/${id}` : '/topology/api/zawory';
+    const method = isEdit ? 'PUT' : 'POST';
+    
+    $.ajax({
+        url: url,
+        method: method,
+        contentType: 'application/json',
+        data: JSON.stringify(data),
+        success: function(response) {
+            if (response.success) {
+                $('#valveModal').modal('hide');
+                location.reload();
+            } else {
+                alert('Błąd: ' + response.message);
+            }
+        },
+        error: function() {
+            alert('Błąd podczas zapisywania zaworu');
+        }
+    });
+}
+
+function viewValveDetails(id) {
+    $.get(`/topology/api/zawory/${id}`, function(data) {
+        if (data.success) {
+            const valve = data.data;
+            let content = `
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Informacje podstawowe:</h6>
+                        <table class="table table-sm">
+                            <tr><td><strong>ID:</strong></td><td>${valve.id}</td></tr>
+                            <tr><td><strong>Nazwa:</strong></td><td>${valve.nazwa_zaworu}</td></tr>
+                            <tr><td><strong>Stan:</strong></td><td>
+                                <span class="badge badge-${valve.stan === 'OTWARTY' ? 'success' : 'secondary'}">
+                                    ${valve.stan}
+                                </span>
+                            </td></tr>
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Segmenty wykorzystujące ten zawór:</h6>
+            `;
+            
+            if (valve.segments && valve.segments.length > 0) {
+                content += '<ul class="list-group list-group-flush">';
+                valve.segments.forEach(segment => {
+                    content += `<li class="list-group-item py-1">
+                        <strong>${segment.nazwa_segmentu}</strong><br>
+                        <small class="text-muted">
+                            ${segment.port_startowy || segment.wezel_startowy} → 
+                            ${segment.port_koncowy || segment.wezel_koncowy}
+                        </small>
+                    </li>`;
+                });
+                content += '</ul>';
+            } else {
+                content += '<div class="alert alert-info">Zawór nie jest używany w żadnych segmentach</div>';
+            }
+            
+            content += `
+                    </div>
+                </div>
+            `;
+            
+            $('#valveDetailsContent').html(content);
+            $('#valveDetailsModal').modal('show');
+        } else {
+            alert('Błąd podczas pobierania szczegółów zaworu');
+        }
+    });
+}
+
+function toggleValveState(id, currentState) {
+    const newState = currentState === 'OTWARTY' ? 'ZAMKNIETY' : 'OTWARTY';
+    
+    $.ajax({
+        url: `/topology/api/zawory/${id}`,
+        method: 'PUT',
+        contentType: 'application/json',
+        data: JSON.stringify({ stan: newState }),
+        success: function(response) {
+            if (response.success) {
+                location.reload();
+            } else {
+                alert('Błąd: ' + response.message);
+            }
+        },
+        error: function() {
+            alert('Błąd podczas zmiany stanu zaworu');
+        }
+    });
+}
+
+function deleteValve(id) {
+    if (confirm('Czy na pewno chcesz usunąć ten zawór? Tej operacji nie można cofnąć.')) {
+        $.ajax({
+            url: `/topology/api/zawory/${id}`,
+            method: 'DELETE',
+            success: function(response) {
+                if (response.success) {
+                    location.reload();
+                } else {
+                    alert('Błąd: ' + response.message);
+                }
+            },
+            error: function() {
+                alert('Błąd podczas usuwania zaworu');
+            }
+        });
+    }
+}
+
+function bulkOpenValves() {
+    const selected = $('.valve-checkbox:checked').map(function() {
+        return $(this).val();
+    }).get();
+    
+    if (selected.length === 0) {
+        alert('Nie zaznaczono żadnych zaworów');
+        return;
+    }
+    
+    if (confirm(`Czy na pewno chcesz otworzyć ${selected.length} zaworów?`)) {
+        Promise.all(selected.map(id => 
+            $.ajax({
+                url: `/topology/api/zawory/${id}`,
+                method: 'PUT',
+                contentType: 'application/json',
+                data: JSON.stringify({ stan: 'OTWARTY' })
+            })
+        )).then(() => {
+            location.reload();
+        }).catch(() => {
+            alert('Błąd podczas otwierania zaworów');
+        });
+    }
+}
+
+function bulkCloseValves() {
+    const selected = $('.valve-checkbox:checked').map(function() {
+        return $(this).val();
+    }).get();
+    
+    if (selected.length === 0) {
+        alert('Nie zaznaczono żadnych zaworów');
+        return;
+    }
+    
+    if (confirm(`Czy na pewno chcesz zamknąć ${selected.length} zaworów?`)) {
+        Promise.all(selected.map(id => 
+            $.ajax({
+                url: `/topology/api/zawory/${id}`,
+                method: 'PUT',
+                contentType: 'application/json',
+                data: JSON.stringify({ stan: 'ZAMKNIETY' })
+            })
+        )).then(() => {
+            location.reload();
+        }).catch(() => {
+            alert('Błąd podczas zamykania zaworów');
+        });
+    }
+}
+
+function bulkDeleteValves() {
+    const selected = $('.valve-checkbox:checked').map(function() {
+        return $(this).val();
+    }).get();
+    
+    if (selected.length === 0) {
+        alert('Nie zaznaczono żadnych zaworów');
+        return;
+    }
+    
+    if (confirm(`Czy na pewno chcesz usunąć ${selected.length} zaworów? Tej operacji nie można cofnąć.`)) {
+        Promise.all(selected.map(id => 
+            $.ajax({
+                url: `/topology/api/zawory/${id}`,
+                method: 'DELETE'
+            })
+        )).then(() => {
+            location.reload();
+        }).catch(() => {
+            alert('Błąd podczas usuwania zaworów (niektóre mogą być używane w segmentach)');
+        });
+    }
+}
+</script>
+{% endblock %}

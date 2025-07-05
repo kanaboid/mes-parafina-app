@@ -1,0 +1,345 @@
+<!-- app/templates/topology/wezly.html -->
+{% extends "base.html" %}
+
+{% block title %}Zarządzanie Węzłami{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1><i class="fas fa-circle-nodes"></i> Zarządzanie Węzłami Rurociągu</h1>
+                <div>
+                    <a href="{{ url_for('topology.topology_index') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left"></i> Powrót
+                    </a>
+                    <button type="button" class="btn btn-success" onclick="showAddNodeModal()">
+                        <i class="fas fa-plus"></i> Dodaj Węzeł
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtry -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="input-group">
+                <div class="input-group-prepend">
+                    <span class="input-group-text"><i class="fas fa-search"></i></span>
+                </div>
+                <input type="text" class="form-control" id="searchInput" placeholder="Wyszukaj węzeł...">
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="row">
+                <div class="col-6">
+                    <div class="text-center">
+                        <h4 class="text-primary" id="totalNodes">{{ wezly|length }}</h4>
+                        <small>Węzłów</small>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="text-center">
+                        <h4 class="text-success" id="connectedNodes">-</h4>
+                        <small>Połączonych</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabela węzłów -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-list"></i> Lista Węzłów
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover" id="nodesTable">
+                            <thead>
+                                <tr>
+                                    <th>Nazwa Węzła</th>
+                                    <th>Połączone Segmenty</th>
+                                    <th>Typy Połączeń</th>
+                                    <th>Akcje</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for wezel in wezly %}
+                                <tr data-id="{{ wezel.id }}" data-name="{{ wezel.nazwa_wezla }}">
+                                    <td>
+                                        <strong>{{ wezel.nazwa_wezla }}</strong>
+                                        <br><small class="text-muted">ID: {{ wezel.id }}</small>
+                                    </td>
+                                    <td>
+                                        {% if wezel.segments %}
+                                            <span class="badge badge-info">{{ wezel.segments|length }}</span>
+                                            <br>
+                                            <small class="text-muted">
+                                                {% for segment in wezel.segments[:3] %}
+                                                    {{ segment.nazwa_segmentu }}{% if not loop.last %}, {% endif %}
+                                                {% endfor %}
+                                                {% if wezel.segments|length > 3 %}
+                                                    <span class="text-muted">... i {{ wezel.segments|length - 3 }} więcej</span>
+                                                {% endif %}
+                                            </small>
+                                        {% else %}
+                                            <span class="badge badge-warning">Brak połączeń</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if wezel.segments %}
+                                            {% set start_segments = wezel.segments | selectattr("pozycja", "equalto", "START") | list %}
+                                            {% set end_segments = wezel.segments | selectattr("pozycja", "equalto", "END") | list %}
+                                            
+                                            {% if start_segments %}
+                                                <span class="badge badge-success">Start: {{ start_segments|length }}</span>
+                                            {% endif %}
+                                            {% if end_segments %}
+                                                <span class="badge badge-info">Koniec: {{ end_segments|length }}</span>
+                                            {% endif %}
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <div class="btn-group" role="group">
+                                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="viewNodeDetails({{ wezel.id }})">
+                                                <i class="fas fa-eye"></i>
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-outline-warning" onclick="editNode({{ wezel.id }})">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteNode({{ wezel.id }})" 
+                                                    {% if wezel.segments %}disabled title="Węzeł jest używany w segmentach"{% endif %}>
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal dodawania/edycji węzła -->
+<div class="modal fade" id="nodeModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="nodeModalTitle">Dodaj Węzeł</h5>
+                <button type="button" class="close" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="nodeForm">
+                    <input type="hidden" id="nodeId" name="id">
+                    <div class="form-group">
+                        <label for="nodeName">Nazwa Węzła *</label>
+                        <input type="text" class="form-control" id="nodeName" name="nazwa_wezla" required>
+                        <small class="form-text text-muted">Unikalna nazwa węzła (np. WĘZEŁ_01, KOLEKTOR_GŁÓWNY)</small>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Anuluj</button>
+                <button type="button" class="btn btn-primary" onclick="saveNode()">Zapisz</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal szczegółów węzła -->
+<div class="modal fade" id="nodeDetailsModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Szczegóły Węzła</h5>
+                <button type="button" class="close" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <div class="modal-body" id="nodeDetailsContent">
+                <!-- Treść zostanie załadowana dynamicznie -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Zamknij</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+$(document).ready(function() {
+    // Inicjalizacja filtrów
+    $('#searchInput').on('keyup', filterTable);
+    
+    // Policz połączone węzły
+    updateConnectedNodesCount();
+});
+
+function filterTable() {
+    const searchTerm = $('#searchInput').val().toLowerCase();
+    
+    $('#nodesTable tbody tr').each(function() {
+        const name = $(this).data('name').toLowerCase();
+        const matchesSearch = name.includes(searchTerm);
+        $(this).toggle(matchesSearch);
+    });
+    
+    updateVisibleCount();
+}
+
+function updateVisibleCount() {
+    const visibleCount = $('#nodesTable tbody tr:visible').length;
+    $('#totalNodes').text(visibleCount);
+}
+
+function updateConnectedNodesCount() {
+    let connectedCount = 0;
+    $('#nodesTable tbody tr').each(function() {
+        const segments = $(this).find('.badge-info').first().text();
+        if (segments && parseInt(segments) > 0) {
+            connectedCount++;
+        }
+    });
+    $('#connectedNodes').text(connectedCount);
+}
+
+function showAddNodeModal() {
+    $('#nodeModalTitle').text('Dodaj Węzeł');
+    $('#nodeForm')[0].reset();
+    $('#nodeId').val('');
+    $('#nodeModal').modal('show');
+}
+
+function editNode(id) {
+    $.get(`/topology/api/wezly/${id}`, function(data) {
+        if (data.success) {
+            const node = data.data;
+            $('#nodeModalTitle').text('Edytuj Węzeł');
+            $('#nodeId').val(node.id);
+            $('#nodeName').val(node.nazwa_wezla);
+            $('#nodeModal').modal('show');
+        } else {
+            alert('Błąd podczas pobierania danych węzła');
+        }
+    });
+}
+
+function saveNode() {
+    const id = $('#nodeId').val();
+    const isEdit = id !== '';
+    
+    const data = {
+        nazwa_wezla: $('#nodeName').val()
+    };
+    
+    const url = isEdit ? `/topology/api/wezly/${id}` : '/topology/api/wezly';
+    const method = isEdit ? 'PUT' : 'POST';
+    
+    $.ajax({
+        url: url,
+        method: method,
+        contentType: 'application/json',
+        data: JSON.stringify(data),
+        success: function(response) {
+            if (response.success) {
+                $('#nodeModal').modal('hide');
+                location.reload();
+            } else {
+                alert('Błąd: ' + response.message);
+            }
+        },
+        error: function() {
+            alert('Błąd podczas zapisywania węzła');
+        }
+    });
+}
+
+function viewNodeDetails(id) {
+    $.get(`/topology/api/wezly/${id}`, function(data) {
+        if (data.success) {
+            const node = data.data;
+            let content = `
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Informacje podstawowe:</h6>
+                        <table class="table table-sm">
+                            <tr><td><strong>ID:</strong></td><td>${node.id}</td></tr>
+                            <tr><td><strong>Nazwa:</strong></td><td>${node.nazwa_wezla}</td></tr>
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Połączone segmenty:</h6>
+            `;
+            
+            if (node.segments && node.segments.length > 0) {
+                content += '<div class="table-responsive">';
+                content += '<table class="table table-sm">';
+                content += '<thead><tr><th>Segment</th><th>Pozycja</th><th>Drugi Koniec</th><th>Zawór</th></tr></thead>';
+                content += '<tbody>';
+                
+                node.segments.forEach(segment => {
+                    const stateClass = segment.stan_zaworu === 'OTWARTY' ? 'success' : 'secondary';
+                    content += `<tr>
+                        <td>${segment.nazwa_segmentu}</td>
+                        <td><span class="badge badge-info">${segment.pozycja}</span></td>
+                        <td>${segment.drugi_koniec || '-'}</td>
+                        <td>
+                            <span class="badge badge-${stateClass}">
+                                ${segment.nazwa_zaworu} (${segment.stan_zaworu})
+                            </span>
+                        </td>
+                    </tr>`;
+                });
+                
+                content += '</tbody></table></div>';
+            } else {
+                content += '<div class="alert alert-info">Węzeł nie jest połączony z żadnymi segmentami</div>';
+            }
+            
+            content += `
+                    </div>
+                </div>
+            `;
+            
+            $('#nodeDetailsContent').html(content);
+            $('#nodeDetailsModal').modal('show');
+        } else {
+            alert('Błąd podczas pobierania szczegółów węzła');
+        }
+    });
+}
+
+function deleteNode(id) {
+    if (confirm('Czy na pewno chcesz usunąć ten węzeł? Tej operacji nie można cofnąć.')) {
+        $.ajax({
+            url: `/topology/api/wezly/${id}`,
+            method: 'DELETE',
+            success: function(response) {
+                if (response.success) {
+                    location.reload();
+                } else {
+                    alert('Błąd: ' + response.message);
+                }
+            },
+            error: function() {
+                alert('Błąd podczas usuwania węzła');
+            }
+        });
+    }
+}
+</script>
+{% endblock %}

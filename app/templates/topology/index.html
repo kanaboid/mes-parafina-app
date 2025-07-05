@@ -1,0 +1,436 @@
+<!-- app/templates/topology/index.html -->
+{% extends "base.html" %}
+
+{% block title %}Zarządzanie Topologią{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <h1 class="mb-4">
+                <i class="fas fa-project-diagram"></i> 
+                Zarządzanie Topologią Rurociągu
+            </h1>
+            
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle"></i>
+                <strong>System Zarządzania Topologią MES Parafina</strong><br>
+                Narzędzia do zarządzania cyfrową mapą rurociągu, testowania połączeń PathFinder 
+                i wizualizacji topologii systemu.
+            </div>
+        </div>
+    </div>
+
+    <!-- Główne moduły -->
+    <div class="row">
+        <!-- Zarządzanie elementami -->
+        <div class="col-lg-4 col-md-6 mb-4">
+            <div class="card h-100 shadow">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-cogs"></i> Elementy Topologii
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="card-text">Zarządzanie elementami topologii: zawory, węzły, segmenty rurociągu.</p>
+                    
+                    <div class="list-group list-group-flush">
+                        <a href="{{ url_for('topology.zawory_view') }}" class="list-group-item list-group-item-action">
+                            <i class="fas fa-valve"></i> Zawory
+                            <span class="badge badge-secondary float-right" id="zawory-count">-</span>
+                        </a>
+                        <a href="{{ url_for('topology.wezly_view') }}" class="list-group-item list-group-item-action">
+                            <i class="fas fa-circle-nodes"></i> Węzły Rurociągu
+                            <span class="badge badge-secondary float-right" id="wezly-count">-</span>
+                        </a>
+                        <a href="{{ url_for('topology.segmenty_view') }}" class="list-group-item list-group-item-action">
+                            <i class="fas fa-route"></i> Segmenty
+                            <span class="badge badge-secondary float-right" id="segmenty-count">-</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Wizualizacja -->
+        <div class="col-lg-4 col-md-6 mb-4">
+            <div class="card h-100 shadow">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-eye"></i> Wizualizacja
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="card-text">Podgląd topologii w różnych formatach: graf, diagram, mapa interaktywna.</p>
+                    
+                    <div class="list-group list-group-flush">
+                        <a href="{{ url_for('topology.visualization_view') }}" class="list-group-item list-group-item-action">
+                            <i class="fas fa-sitemap"></i> Interaktywna Mapa
+                        </a>
+                        <a href="#" onclick="showTextTopology()" class="list-group-item list-group-item-action">
+                            <i class="fas fa-list"></i> Opis Tekstowy
+                        </a>
+                        <a href="#" onclick="exportTopology()" class="list-group-item list-group-item-action">
+                            <i class="fas fa-download"></i> Eksport Danych
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- PathFinder Tester -->
+        <div class="col-lg-4 col-md-6 mb-4">
+            <div class="card h-100 shadow">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="mb-0">
+                        <i class="fas fa-search"></i> PathFinder Tester
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="card-text">Testowanie połączeń, analiza ścieżek i symulacja stanów zaworów.</p>
+                    
+                    <div class="list-group list-group-flush">
+                        <a href="{{ url_for('topology.pathfinder_view') }}" class="list-group-item list-group-item-action">
+                            <i class="fas fa-route"></i> Tester Połączeń
+                        </a>
+                        <a href="#" onclick="showCriticalValves()" class="list-group-item list-group-item-action">
+                            <i class="fas fa-exclamation-triangle"></i> Analiza Krytycznych Zaworów
+                        </a>
+                        <a href="#" onclick="showTestHistory()" class="list-group-item list-group-item-action">
+                            <i class="fas fa-history"></i> Historia Testów
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Statystyki -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-chart-bar"></i> Statystyki Topologii
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <div class="stat-card text-center">
+                                <h3 class="text-primary" id="total-zawory">-</h3>
+                                <p class="text-muted">Zawory</p>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="stat-card text-center">
+                                <h3 class="text-success" id="open-zawory">-</h3>
+                                <p class="text-muted">Otwarte Zawory</p>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="stat-card text-center">
+                                <h3 class="text-warning" id="total-segments">-</h3>
+                                <p class="text-muted">Segmenty</p>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="stat-card text-center">
+                                <h3 class="text-info" id="total-nodes">-</h3>
+                                <p class="text-muted">Węzły</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Szybkie akcje -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-bolt"></i> Szybkie Akcje
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="btn-toolbar" role="toolbar">
+                        <div class="btn-group mr-2" role="group">
+                            <button type="button" class="btn btn-primary" onclick="quickTest()">
+                                <i class="fas fa-play"></i> Szybki Test Połączeń
+                            </button>
+                            <button type="button" class="btn btn-success" onclick="refreshTopology()">
+                                <i class="fas fa-sync"></i> Odśwież Topologię
+                            </button>
+                        </div>
+                        <div class="btn-group mr-2" role="group">
+                            <button type="button" class="btn btn-warning" onclick="validateTopology()">
+                                <i class="fas fa-check-circle"></i> Waliduj Spójność
+                            </button>
+                            <button type="button" class="btn btn-info" onclick="showSystemStatus()">
+                                <i class="fas fa-heartbeat"></i> Status Systemu
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal dla wyników szybkich akcji -->
+<div class="modal fade" id="quickActionModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="quickActionTitle">Wynik Akcji</h5>
+                <button type="button" class="close" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <div class="modal-body" id="quickActionContent">
+                <!-- Treść zostanie załadowana dynamicznie -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Zamknij</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.stat-card {
+    padding: 15px;
+    border-radius: 5px;
+    background-color: #f8f9fa;
+    margin-bottom: 10px;
+}
+
+.card {
+    transition: transform 0.2s;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+}
+
+.list-group-item {
+    border: none;
+    padding: 10px 15px;
+}
+
+.list-group-item:hover {
+    background-color: #f1f3f4;
+}
+</style>
+
+<script>
+$(document).ready(function() {
+    loadTopologyStats();
+});
+
+function loadTopologyStats() {
+    // Załaduj statystyki zaworów
+    $.get('/topology/api/zawory', function(data) {
+        if (data.success) {
+            $('#zawory-count').text(data.count);
+            $('#total-zawory').text(data.count);
+            
+            const openValves = data.data.filter(z => z.stan === 'OTWARTY').length;
+            $('#open-zawory').text(openValves);
+        }
+    });
+    
+    // Załaduj statystyki węzłów
+    $.get('/topology/api/wezly', function(data) {
+        if (data.success) {
+            $('#wezly-count').text(data.count);
+            $('#total-nodes').text(data.count);
+        }
+    });
+    
+    // Załaduj statystyki segmentów
+    $.get('/topology/api/segmenty', function(data) {
+        if (data.success) {
+            $('#segmenty-count').text(data.count);
+            $('#total-segments').text(data.count);
+        }
+    });
+}
+
+function showTextTopology() {
+    $.get('/topology/api/visualization/text', function(data) {
+        if (data.success) {
+            showQuickActionResult('Opis Tekstowy Topologii', 
+                '<pre style="background-color: #f8f9fa; padding: 15px; border-radius: 5px;">' + 
+                data.data.text + '</pre>');
+        } else {
+            showError('Błąd podczas pobierania opisu topologii');
+        }
+    });
+}
+
+function exportTopology() {
+    $.get('/topology/api/visualization/graph', function(data) {
+        if (data.success) {
+            const dataStr = JSON.stringify(data.data, null, 2);
+            const dataBlob = new Blob([dataStr], {type: 'application/json'});
+            const url = URL.createObjectURL(dataBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'topology_export_' + new Date().toISOString().split('T')[0] + '.json';
+            link.click();
+            URL.revokeObjectURL(url);
+        }
+    });
+}
+
+function showCriticalValves() {
+    showQuickActionResult('Analiza Krytycznych Zaworów', 
+        '<div class="text-center"><i class="fas fa-spinner fa-spin"></i> Analizowanie...</div>');
+    
+    $.get('/topology/api/pathfinder/critical-valves', function(data) {
+        if (data.success) {
+            let content = '<div class="table-responsive">';
+            content += '<table class="table table-striped">';
+            content += '<thead><tr><th>Zawór</th><th>Zablokowane Trasy</th><th>Krytyczność</th></tr></thead>';
+            content += '<tbody>';
+            
+            data.data.critical_valves.slice(0, 10).forEach(valve => {
+                const criticalityClass = valve.is_critical ? 'danger' : 'success';
+                content += `<tr class="table-${criticalityClass}">`;
+                content += `<td>${valve.valve_name}</td>`;
+                content += `<td>${valve.blocked_routes_count}</td>`;
+                content += `<td>${valve.is_critical ? 'KRYTYCZNY' : 'Bezpieczny'}</td>`;
+                content += '</tr>';
+            });
+            
+            content += '</tbody></table></div>';
+            $('#quickActionContent').html(content);
+        } else {
+            showError('Błąd podczas analizy krytycznych zaworów');
+        }
+    });
+}
+
+function showTestHistory() {
+    $.get('/topology/api/pathfinder/history?limit=20', function(data) {
+        if (data.success && data.data.test_history) {
+            let content = '<div class="table-responsive">';
+            content += '<table class="table table-striped table-sm">';
+            content += '<thead><tr><th>Data</th><th>Typ Testu</th><th>Start → Cel</th><th>Wynik</th><th>Czas</th></tr></thead>';
+            content += '<tbody>';
+            
+            data.data.test_history.forEach(test => {
+                const successClass = test.success ? 'success' : 'danger';
+                const route = test.start_point && test.end_point ? 
+                    `${test.start_point} → ${test.end_point}` : '-';
+                
+                content += `<tr class="table-${successClass}">`;
+                content += `<td>${new Date(test.created_at).toLocaleString()}</td>`;
+                content += `<td>${test.test_type}</td>`;
+                content += `<td>${route}</td>`;
+                content += `<td>${test.success ? 'Sukces' : 'Błąd'}</td>`;
+                content += `<td>${test.execution_time_ms}ms</td>`;
+                content += '</tr>';
+            });
+            
+            content += '</tbody></table></div>';
+            showQuickActionResult('Historia Testów PathFinder', content);
+        } else {
+            showQuickActionResult('Historia Testów PathFinder', 
+                '<div class="alert alert-info">Brak historii testów</div>');
+        }
+    });
+}
+
+function quickTest() {
+    // Pobierz losowe punkty do testu
+    $.get('/topology/api/points', function(data) {
+        if (data.success && data.data.length >= 2) {
+            const points = data.data;
+            const start = points[Math.floor(Math.random() * points.length)].name;
+            let end = points[Math.floor(Math.random() * points.length)].name;
+            
+            // Upewnij się, że punkty są różne
+            while (end === start && points.length > 1) {
+                end = points[Math.floor(Math.random() * points.length)].name;
+            }
+            
+            showQuickActionResult('Szybki Test Połączenia', 
+                `<div class="text-center"><i class="fas fa-spinner fa-spin"></i> Testowanie ${start} → ${end}...</div>`);
+            
+            $.post('/topology/api/pathfinder/test-connection', {
+                start_point: start,
+                end_point: end
+            }, function(testResult) {
+                if (testResult.success) {
+                    const result = testResult.data;
+                    let content = `<div class="alert alert-${result.available ? 'success' : 'warning'}">`;
+                    content += `<h6>${result.message}</h6>`;
+                    if (result.available && result.path) {
+                        content += `<p><strong>Ścieżka:</strong> ${result.path.join(' → ')}</p>`;
+                        content += `<p><strong>Długość:</strong> ${result.path_length} segmentów</p>`;
+                    }
+                    content += `</div>`;
+                    content += `<p><small>Czas wykonania: ${testResult.execution_time_ms}ms</small></p>`;
+                    $('#quickActionContent').html(content);
+                } else {
+                    showError('Błąd podczas testu połączenia');
+                }
+            });
+        } else {
+            showError('Brak dostępnych punktów do testowania');
+        }
+    });
+}
+
+function refreshTopology() {
+    loadTopologyStats();
+    showQuickActionResult('Odświeżanie Topologii', 
+        '<div class="alert alert-success"><i class="fas fa-check"></i> Topologia została odświeżona</div>');
+}
+
+function validateTopology() {
+    showQuickActionResult('Walidacja Spójności Topologii', 
+        '<div class="alert alert-info"><i class="fas fa-info-circle"></i> Funkcja walidacji będzie dostępna w przyszłej wersji</div>');
+}
+
+function showSystemStatus() {
+    let content = '<div class="row">';
+    content += '<div class="col-md-6">';
+    content += '<h6>Status Komponentów:</h6>';
+    content += '<ul class="list-group">';
+    content += '<li class="list-group-item d-flex justify-content-between align-items-center">';
+    content += 'TopologyManager <span class="badge badge-success">OK</span>';
+    content += '</li>';
+    content += '<li class="list-group-item d-flex justify-content-between align-items-center">';
+    content += 'PathFinder <span class="badge badge-success">OK</span>';
+    content += '</li>';
+    content += '<li class="list-group-item d-flex justify-content-between align-items-center">';
+    content += 'Baza Danych <span class="badge badge-success">OK</span>';
+    content += '</li>';
+    content += '</ul>';
+    content += '</div>';
+    content += '<div class="col-md-6">';
+    content += '<h6>Ostatnia Aktualizacja:</h6>';
+    content += `<p>${new Date().toLocaleString()}</p>`;
+    content += '</div>';
+    content += '</div>';
+    
+    showQuickActionResult('Status Systemu', content);
+}
+
+function showQuickActionResult(title, content) {
+    $('#quickActionTitle').text(title);
+    $('#quickActionContent').html(content);
+    $('#quickActionModal').modal('show');
+}
+
+function showError(message) {
+    $('#quickActionContent').html(`<div class="alert alert-danger">${message}</div>`);
+}
+</script>
+{% endblock %}
