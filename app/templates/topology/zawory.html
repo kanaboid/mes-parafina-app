@@ -165,21 +165,19 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="valveModalTitle">Dodaj Zawór</h5>
-                <button type="button" class="close" data-dismiss="modal">
-                    <span>&times;</span>
-                </button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
                 <form id="valveForm">
                     <input type="hidden" id="valveId" name="id">
-                    <div class="form-group">
-                        <label for="valveName">Nazwa Zaworu *</label>
+                    <div class="mb-3">
+                        <label for="valveName" class="form-label">Nazwa Zaworu *</label>
                         <input type="text" class="form-control" id="valveName" name="nazwa_zaworu" required>
-                        <small class="form-text text-muted">Unikalna nazwa zaworu (np. Z01, ZAWOR_GŁÓWNY)</small>
+                        <div class="form-text">Unikalna nazwa zaworu (np. Z01, ZAWOR_GŁÓWNY)</div>
                     </div>
-                    <div class="form-group">
-                        <label for="valveState">Stan Zaworu</label>
-                        <select class="form-control" id="valveState" name="stan">
+                    <div class="mb-3">
+                        <label for="valveState" class="form-label">Stan Zaworu</label>
+                        <select class="form-select" id="valveState" name="stan">
                             <option value="ZAMKNIETY">Zamknięty</option>
                             <option value="OTWARTY">Otwarty</option>
                         </select>
@@ -187,7 +185,7 @@
                 </form>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Anuluj</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Anuluj</button>
                 <button type="button" class="btn btn-primary" onclick="saveValve()">Zapisz</button>
             </div>
         </div>
@@ -200,15 +198,13 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">Szczegóły Zaworu</h5>
-                <button type="button" class="close" data-dismiss="modal">
-                    <span>&times;</span>
-                </button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body" id="valveDetailsContent">
                 <!-- Treść zostanie załadowana dynamicznie -->
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Zamknij</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Zamknij</button>
             </div>
         </div>
     </div>
@@ -278,7 +274,8 @@ function showAddValveModal() {
     $('#valveModalTitle').text('Dodaj Zawór');
     $('#valveForm')[0].reset();
     $('#valveId').val('');
-    $('#valveModal').modal('show');
+    const modal = new bootstrap.Modal(document.getElementById('valveModal'));
+    modal.show();
 }
 
 function editValve(id) {
@@ -289,7 +286,8 @@ function editValve(id) {
             $('#valveId').val(valve.id);
             $('#valveName').val(valve.nazwa_zaworu);
             $('#valveState').val(valve.stan);
-            $('#valveModal').modal('show');
+            const modal = new bootstrap.Modal(document.getElementById('valveModal'));
+            modal.show();
         } else {
             alert('Błąd podczas pobierania danych zaworu');
         }
@@ -315,7 +313,8 @@ function saveValve() {
         data: JSON.stringify(data),
         success: function(response) {
             if (response.success) {
-                $('#valveModal').modal('hide');
+                const modal = bootstrap.Modal.getInstance(document.getElementById('valveModal'));
+                modal.hide();
                 location.reload();
             } else {
                 alert('Błąd: ' + response.message);
@@ -371,7 +370,8 @@ function viewValveDetails(id) {
             `;
             
             $('#valveDetailsContent').html(content);
-            $('#valveDetailsModal').modal('show');
+            const modal = new bootstrap.Modal(document.getElementById('valveDetailsModal'));
+            modal.show();
         } else {
             alert('Błąd podczas pobierania szczegółów zaworu');
         }

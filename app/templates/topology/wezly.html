@@ -65,7 +65,7 @@
                                 <tr>
                                     <th>Nazwa Węzła</th>
                                     <th>Połączone Segmenty</th>
-                                    <th>Typy Połączeń</th>
+                                    <th>Zawory w Segmentach</th>
                                     <th>Akcje</th>
                                 </tr>
                             </thead>
@@ -78,7 +78,7 @@
                                     </td>
                                     <td>
                                         {% if wezel.segments %}
-                                            <span class="badge badge-info">{{ wezel.segments|length }}</span>
+                                            <span class="badge bg-info">{{ wezel.segments|length }}</span>
                                             <br>
                                             <small class="text-muted">
                                                 {% for segment in wezel.segments[:3] %}
@@ -89,22 +89,35 @@
                                                 {% endif %}
                                             </small>
                                         {% else %}
-                                            <span class="badge badge-warning">Brak połączeń</span>
+                                            <span class="badge bg-warning">Brak połączeń</span>
                                         {% endif %}
                                     </td>
                                     <td>
                                         {% if wezel.segments %}
-                                            {% set start_segments = wezel.segments | selectattr("pozycja", "equalto", "START") | list %}
-                                            {% set end_segments = wezel.segments | selectattr("pozycja", "equalto", "END") | list %}
+                                            {% set zawory_otwarte = wezel.segments | selectattr("stan_zaworu", "equalto", "OTWARTY") | list %}
+                                            {% set zawory_zamkniete = wezel.segments | selectattr("stan_zaworu", "equalto", "ZAMKNIETY") | list %}
                                             
-                                            {% if start_segments %}
-                                                <span class="badge badge-success">Start: {{ start_segments|length }}</span>
+                                            {% if zawory_otwarte %}
+                                                <span class="badge bg-success">
+                                                    <i class="fas fa-lock-open"></i> {{ zawory_otwarte|length }} otwarte
+                                                </span>
                                             {% endif %}
-                                            {% if end_segments %}
-                                                <span class="badge badge-info">Koniec: {{ end_segments|length }}</span>
+                                            {% if zawory_zamkniete %}
+                                                <span class="badge bg-secondary">
+                                                    <i class="fas fa-lock"></i> {{ zawory_zamkniete|length }} zamknięte
+                                                </span>
                                             {% endif %}
+                                            <br>
+                                            <small class="text-muted">
+                                                {% for segment in wezel.segments[:2] %}
+                                                    {{ segment.nazwa_zaworu }}{% if not loop.last %}, {% endif %}
+                                                {% endfor %}
+                                                {% if wezel.segments|length > 2 %}
+                                                    <span class="text-muted">... +{{ wezel.segments|length - 2 }}</span>
+                                                {% endif %}
+                                            </small>
                                         {% else %}
-                                            <span class="text-muted">-</span>
+                                            <span class="text-muted">Brak zaworów</span>
                                         {% endif %}
                                     </td>
                                     <td>
@@ -138,22 +151,20 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="nodeModalTitle">Dodaj Węzeł</h5>
-                <button type="button" class="close" data-dismiss="modal">
-                    <span>&times;</span>
-                </button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
                 <form id="nodeForm">
                     <input type="hidden" id="nodeId" name="id">
-                    <div class="form-group">
-                        <label for="nodeName">Nazwa Węzła *</label>
+                    <div class="mb-3">
+                        <label for="nodeName" class="form-label">Nazwa Węzła *</label>
                         <input type="text" class="form-control" id="nodeName" name="nazwa_wezla" required>
-                        <small class="form-text text-muted">Unikalna nazwa węzła (np. WĘZEŁ_01, KOLEKTOR_GŁÓWNY)</small>
+                        <div class="form-text">Unikalna nazwa węzła (np. WĘZEŁ_01, KOLEKTOR_GŁÓWNY)</div>
                     </div>
                 </form>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Anuluj</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Anuluj</button>
                 <button type="button" class="btn btn-primary" onclick="saveNode()">Zapisz</button>
             </div>
         </div>
@@ -162,19 +173,52 @@
 
 <!-- Modal szczegółów węzła -->
 <div class="modal fade" id="nodeDetailsModal" tabindex="-1" role="dialog">
-    <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-dialog modal-xl" role="document">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">Szczegóły Węzła</h5>
-                <button type="button" class="close" data-dismiss="modal">
-                    <span>&times;</span>
-                </button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body" id="nodeDetailsContent">
                 <!-- Treść zostanie załadowana dynamicznie -->
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Zamknij</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Zamknij</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal edycji zaworu (z poziomu węzła) -->
+<div class="modal fade" id="valveModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="valveModalTitle">Edytuj Zawór</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="valveForm">
+                    <input type="hidden" id="valveId">
+                    <div class="mb-3">
+                        <label for="valveSelect" class="form-label">Zawór *</label>
+                        <select class="form-select" id="valveSelect" required>
+                            <option value="">Ładowanie...</option>
+                        </select>
+                        <div class="form-text">Wybierz zawór z listy dostępnych zaworów</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="valveState" class="form-label">Stan Zaworu</label>
+                        <select class="form-select" id="valveState">
+                            <option value="ZAMKNIETY">Zamknięty</option>
+                            <option value="OTWARTY">Otwarty</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Anuluj</button>
+                <button type="button" class="btn btn-primary" onclick="saveValveFromNode()">Zapisz</button>
             </div>
         </div>
     </div>
@@ -221,7 +265,8 @@ function showAddNodeModal() {
     $('#nodeModalTitle').text('Dodaj Węzeł');
     $('#nodeForm')[0].reset();
     $('#nodeId').val('');
-    $('#nodeModal').modal('show');
+    const modal = new bootstrap.Modal(document.getElementById('nodeModal'));
+    modal.show();
 }
 
 function editNode(id) {
@@ -231,7 +276,8 @@ function editNode(id) {
             $('#nodeModalTitle').text('Edytuj Węzeł');
             $('#nodeId').val(node.id);
             $('#nodeName').val(node.nazwa_wezla);
-            $('#nodeModal').modal('show');
+            const modal = new bootstrap.Modal(document.getElementById('nodeModal'));
+            modal.show();
         } else {
             alert('Błąd podczas pobierania danych węzła');
         }
@@ -256,7 +302,8 @@ function saveNode() {
         data: JSON.stringify(data),
         success: function(response) {
             if (response.success) {
-                $('#nodeModal').modal('hide');
+                const modal = bootstrap.Modal.getInstance(document.getElementById('nodeModal'));
+                modal.hide();
                 location.reload();
             } else {
                 alert('Błąd: ' + response.message);
@@ -270,37 +317,64 @@ function saveNode() {
 
 function viewNodeDetails(id) {
     $.get(`/topology/api/wezly/${id}`, function(data) {
+        console.log('Otrzymane dane węzła:', data); // Debug
         if (data.success) {
             const node = data.data;
+            console.log('Segmenty węzła:', node.segments); // Debug
             let content = `
-                <div class="row">
-                    <div class="col-md-6">
+                <div class="row mb-4">
+                    <div class="col-12">
                         <h6>Informacje podstawowe:</h6>
                         <table class="table table-sm">
                             <tr><td><strong>ID:</strong></td><td>${node.id}</td></tr>
                             <tr><td><strong>Nazwa:</strong></td><td>${node.nazwa_wezla}</td></tr>
+                            <tr><td><strong>Liczba połączonych segmentów:</strong></td><td>${node.segments ? node.segments.length : 0}</td></tr>
                         </table>
                     </div>
-                    <div class="col-md-6">
-                        <h6>Połączone segmenty:</h6>
+                </div>
+                <div class="row">
+                    <div class="col-12">
+                        <h6>Połączone segmenty i ich zawory:</h6>
             `;
             
             if (node.segments && node.segments.length > 0) {
                 content += '<div class="table-responsive">';
-                content += '<table class="table table-sm">';
-                content += '<thead><tr><th>Segment</th><th>Pozycja</th><th>Drugi Koniec</th><th>Zawór</th></tr></thead>';
+                content += '<table class="table table-sm table-striped">';
+                content += '<thead class="table-dark"><tr><th>Segment</th><th>Pozycja w segmencie</th><th>Połączony z</th><th>Zawór kontrolujący</th></tr></thead>';
                 content += '<tbody>';
                 
                 node.segments.forEach(segment => {
                     const stateClass = segment.stan_zaworu === 'OTWARTY' ? 'success' : 'secondary';
+                    const stateIcon = segment.stan_zaworu === 'OTWARTY' ? 'lock-open' : 'lock';
                     content += `<tr>
-                        <td>${segment.nazwa_segmentu}</td>
-                        <td><span class="badge badge-info">${segment.pozycja}</span></td>
+                        <td>
+                            <strong>${segment.nazwa_segmentu}</strong>
+                            <br><small class="text-muted">ID: ${segment.id}</small>
+                        </td>
+                        <td><span class="badge bg-info">${segment.pozycja}</span></td>
                         <td>${segment.drugi_koniec || '-'}</td>
                         <td>
-                            <span class="badge badge-${stateClass}">
-                                ${segment.nazwa_zaworu} (${segment.stan_zaworu})
-                            </span>
+                            <div class="d-flex align-items-center justify-content-between">
+                                <div>
+                                    <span class="badge bg-${stateClass}">
+                                        <i class="fas fa-${stateIcon}"></i> ${segment.nazwa_zaworu}
+                                    </span>
+                                    <br>
+                                    <small class="text-muted">${segment.stan_zaworu}</small>
+                                </div>
+                                <div class="btn-group btn-group-sm" role="group">
+                                    <button type="button" class="btn btn-outline-${segment.stan_zaworu === 'OTWARTY' ? 'secondary' : 'success'} btn-sm"
+                                            onclick="toggleValveFromNode('${segment.id_zaworu}', '${segment.stan_zaworu}', '${segment.nazwa_zaworu}')"
+                                            title="${segment.stan_zaworu === 'OTWARTY' ? 'Zamknij' : 'Otwórz'} zawór">
+                                        <i class="fas fa-${segment.stan_zaworu === 'OTWARTY' ? 'lock' : 'lock-open'}"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-outline-warning btn-sm"
+                                            onclick="editValveFromNode('${segment.id_zaworu}', '${segment.nazwa_zaworu}', '${segment.stan_zaworu}')"
+                                            title="Edytuj zawór">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                </div>
+                            </div>
                         </td>
                     </tr>`;
                 });
@@ -316,7 +390,9 @@ function viewNodeDetails(id) {
             `;
             
             $('#nodeDetailsContent').html(content);
-            $('#nodeDetailsModal').modal('show');
+            const modal = new bootstrap.Modal(document.getElementById('nodeDetailsModal'));
+            $('#nodeDetailsModal').data('nodeId', id); // Zapamiętaj ID węzła
+            modal.show();
         } else {
             alert('Błąd podczas pobierania szczegółów węzła');
         }
@@ -340,6 +416,112 @@ function deleteNode(id) {
             }
         });
     }
+}
+
+// Funkcje do edycji zaworów z poziomu węzła
+function toggleValveFromNode(valveId, currentState, valveName) {
+    const newState = currentState === 'OTWARTY' ? 'ZAMKNIETY' : 'OTWARTY';
+    const action = newState === 'OTWARTY' ? 'otworzyć' : 'zamknąć';
+    
+    if (confirm(`Czy na pewno chcesz ${action} zawór "${valveName}"?`)) {
+        $.ajax({
+            url: `/topology/api/zawory/${valveId}`,
+            method: 'PUT',
+            contentType: 'application/json',
+            data: JSON.stringify({ stan: newState }),
+            success: function(response) {
+                if (response.success) {
+                    // Odśwież szczegóły węzła
+                    const currentNodeId = $('#nodeDetailsModal').data('nodeId');
+                    if (currentNodeId) {
+                        viewNodeDetails(currentNodeId);
+                    }
+                } else {
+                    alert('Błąd: ' + response.message);
+                }
+            },
+            error: function() {
+                alert('Błąd podczas zmiany stanu zaworu');
+            }
+        });
+    }
+}
+
+function editValveFromNode(valveId, valveName, valveState) {
+    // Pobierz listę wszystkich zaworów
+    $.get('/topology/api/zawory', function(data) {
+        if (data.success) {
+            const valves = data.data;
+            
+            // Wypełnij select opcjami zaworów
+            let valveOptions = '';
+            valves.forEach(valve => {
+                const selected = valve.id == valveId ? 'selected' : '';
+                valveOptions += `<option value="${valve.id}" ${selected}>${valve.nazwa_zaworu}</option>`;
+            });
+            $('#valveSelect').html(valveOptions);
+            
+            // Ustaw pozostałe pola
+            $('#valveModalTitle').text('Edytuj Zawór');
+            $('#valveId').val(valveId);
+            $('#valveState').val(valveState);
+            
+            const modal = new bootstrap.Modal(document.getElementById('valveModal'));
+            modal.show();
+        } else {
+            alert('Błąd podczas pobierania listy zaworów');
+        }
+    }).fail(function() {
+        alert('Błąd podczas pobierania listy zaworów');
+    });
+}
+
+function saveValveFromNode() {
+    const selectedValveId = $('#valveSelect').val();
+    const currentValveId = $('#valveId').val();
+    
+    if (!selectedValveId) {
+        alert('Wybierz zawór z listy');
+        return;
+    }
+    
+    const data = {
+        stan: $('#valveState').val()
+    };
+    
+    // Jeśli zmieniono zawór, trzeba zaktualizować segment
+    if (selectedValveId != currentValveId) {
+        // Dla bezpieczeństwa - nie pozwalamy na zmianę zaworu przez ten interface
+        // Można to rozszerzyć w przyszłości o aktualizację segmentu
+        alert('Zmiana zaworu w segmencie wymaga edycji segmentu. Można zmienić tylko stan zaworu.');
+        return;
+    }
+    
+    $.ajax({
+        url: `/topology/api/zawory/${currentValveId}`,
+        method: 'PUT',
+        contentType: 'application/json',
+        data: JSON.stringify(data),
+        success: function(response) {
+            if (response.success) {
+                const modal = bootstrap.Modal.getInstance(document.getElementById('valveModal'));
+                modal.hide();
+                
+                // Odśwież szczegóły węzła
+                const currentNodeId = $('#nodeDetailsModal').data('nodeId');
+                if (currentNodeId) {
+                    viewNodeDetails(currentNodeId);
+                } else {
+                    location.reload();
+                }
+            } else {
+                alert('Błąd: ' + response.message);
+            }
+        },
+        error: function() {
+            alert('Błąd podczas zapisywania zaworu');
+        }
+    });
 }
 </script>
 {% endblock %}

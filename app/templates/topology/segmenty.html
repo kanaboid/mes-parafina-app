@@ -2,7 +2,21 @@
 
 {% block title %}Zarządzanie Segmentami - Topologia{% endblock %}
 
-{% block content %}
+                                    <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="addNazwa" class="form-label">Nazwa Segmentu *</label>
+                                <input type="text" class="form-control" id="addNazwa" name="nazwa" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="addTypRurociagu" class="form-label">Typ Rurociągu</label>
+                                <input type="text" class="form-control" id="addTypRurociagu" name="typ_rurociagu">
+                            </div>
+                        </div>modal-header">
+                <h5 class="modal-title">Dodaj Nowy Segment</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>ck content %}
 <div class="container-fluid">
     <div class="row">
         <div class="col-12">
@@ -27,7 +41,7 @@
             </div>
         </div>
         <div class="col-md-6 text-right">
-            <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#addSegmentModal">
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addSegmentModal">
                 <i class="fas fa-plus"></i> Dodaj Segment
             </button>
             <button type="button" class="btn btn-info" onclick="refreshSegments()">
@@ -106,13 +120,13 @@
                 <div class="modal-body">
                     <div class="row">
                         <div class="col-md-6">
-                            <div class="form-group">
+                            <div class="mb-3">
                                 <label for="addNazwa">Nazwa Segmentu *</label>
                                 <input type="text" class="form-control" id="addNazwa" name="nazwa" required>
                             </div>
                         </div>
                         <div class="col-md-6">
-                            <div class="form-group">
+                            <div class="mb-3">
                                 <label for="addTypRurociagu">Typ Rurociągu</label>
                                 <input type="text" class="form-control" id="addTypRurociagu" name="typ_rurociagu">
                             </div>
@@ -121,19 +135,19 @@
                     
                     <div class="row">
                         <div class="col-md-4">
-                            <div class="form-group">
+                            <div class="mb-3">
                                 <label for="addDlugosc">Długość (m)</label>
                                 <input type="number" step="0.01" class="form-control" id="addDlugosc" name="dlugosc">
                             </div>
                         </div>
                         <div class="col-md-4">
-                            <div class="form-group">
+                            <div class="mb-3">
                                 <label for="addSrednica">Średnica (mm)</label>
                                 <input type="number" step="0.1" class="form-control" id="addSrednica" name="srednica">
                             </div>
                         </div>
                         <div class="col-md-4">
-                            <div class="form-group">
+                            <div class="mb-3">
                                 <label for="addMaterial">Materiał</label>
                                 <input type="text" class="form-control" id="addMaterial" name="material">
                             </div>
@@ -142,7 +156,7 @@
 
                     <div class="row">
                         <div class="col-md-6">
-                            <div class="form-group">
+                            <div class="mb-3">
                                 <label for="addSprzetZrodlowy">Sprzęt Źródłowy *</label>
                                 <select class="form-control" id="addSprzetZrodlowy" name="sprzet_zrodlowy_id" required>
                                     <option value="">Wybierz sprzęt źródłowy</option>
@@ -150,7 +164,7 @@
                             </div>
                         </div>
                         <div class="col-md-6">
-                            <div class="form-group">
+                            <div class="mb-3">
                                 <label for="addSprzetDocelowy">Sprzęt Docelowy *</label>
                                 <select class="form-control" id="addSprzetDocelowy" name="sprzet_docelowy_id" required>
                                     <option value="">Wybierz sprzęt docelowy</option>
@@ -161,7 +175,7 @@
 
                     <div class="row">
                         <div class="col-md-6">
-                            <div class="form-group">
+                            <div class="mb-3">
                                 <label for="addPortZrodlowy">Port Źródłowy *</label>
                                 <select class="form-control" id="addPortZrodlowy" name="port_zrodlowy_id" required>
                                     <option value="">Wybierz port źródłowy</option>
@@ -169,7 +183,7 @@
                             </div>
                         </div>
                         <div class="col-md-6">
-                            <div class="form-group">
+                            <div class="mb-3">
                                 <label for="addPortDocelowy">Port Docelowy *</label>
                                 <select class="form-control" id="addPortDocelowy" name="port_docelowy_id" required>
                                     <option value="">Wybierz port docelowy</option>
@@ -180,7 +194,7 @@
 
                     <div class="row">
                         <div class="col-md-6">
-                            <div class="form-group">
+                            <div class="mb-3">
                                 <label for="addZawor">Zawór *</label>
                                 <select class="form-control" id="addZawor" name="zawor_id" required>
                                     <option value="">Wybierz zawór</option>
@@ -188,7 +202,7 @@
                             </div>
                         </div>
                         <div class="col-md-6">
-                            <div class="form-group">
+                            <div class="mb-3">
                                 <label for="addStatus">Status</label>
                                 <select class="form-control" id="addStatus" name="status">
                                     <option value="aktywny">Aktywny</option>
@@ -199,7 +213,7 @@
                         </div>
                     </div>
 
-                    <div class="form-group">
+                    <div class="mb-3">
                         <label for="addOpis">Opis</label>
                         <textarea class="form-control" id="addOpis" name="opis" rows="3"></textarea>
                     </div>
@@ -228,13 +242,13 @@
                 <div class="modal-body">
                     <div class="row">
                         <div class="col-md-6">
-                            <div class="form-group">
+                            <div class="mb-3">
                                 <label for="editNazwa">Nazwa Segmentu *</label>
                                 <input type="text" class="form-control" id="editNazwa" name="nazwa" required>
                             </div>
                         </div>
                         <div class="col-md-6">
-                            <div class="form-group">
+                            <div class="mb-3">
                                 <label for="editTypRurociagu">Typ Rurociągu</label>
                                 <input type="text" class="form-control" id="editTypRurociagu" name="typ_rurociagu">
                             </div>
@@ -243,19 +257,19 @@
                     
                     <div class="row">
                         <div class="col-md-4">
-                            <div class="form-group">
+                            <div class="mb-3">
                                 <label for="editDlugosc">Długość (m)</label>
                                 <input type="number" step="0.01" class="form-control" id="editDlugosc" name="dlugosc">
                             </div>
                         </div>
                         <div class="col-md-4">
-                            <div class="form-group">
+                            <div class="mb-3">
                                 <label for="editSrednica">Średnica (mm)</label>
                                 <input type="number" step="0.1" class="form-control" id="editSrednica" name="srednica">
                             </div>
                         </div>
                         <div class="col-md-4">
-                            <div class="form-group">
+                            <div class="mb-3">
                                 <label for="editMaterial">Materiał</label>
                                 <input type="text" class="form-control" id="editMaterial" name="material">
                             </div>
@@ -264,7 +278,7 @@
 
                     <div class="row">
                         <div class="col-md-6">
-                            <div class="form-group">
+                            <div class="mb-3">
                                 <label for="editSprzetZrodlowy">Sprzęt Źródłowy *</label>
                                 <select class="form-control" id="editSprzetZrodlowy" name="sprzet_zrodlowy_id" required>
                                     <option value="">Wybierz sprzęt źródłowy</option>
@@ -272,7 +286,7 @@
                             </div>
                         </div>
                         <div class="col-md-6">
-                            <div class="form-group">
+                            <div class="mb-3">
                                 <label for="editSprzetDocelowy">Sprzęt Docelowy *</label>
                                 <select class="form-control" id="editSprzetDocelowy" name="sprzet_docelowy_id" required>
                                     <option value="">Wybierz sprzęt docelowy</option>
@@ -283,7 +297,7 @@
 
                     <div class="row">
                         <div class="col-md-6">
-                            <div class="form-group">
+                            <div class="mb-3">
                                 <label for="editPortZrodlowy">Port Źródłowy *</label>
                                 <select class="form-control" id="editPortZrodlowy" name="port_zrodlowy_id" required>
                                     <option value="">Wybierz port źródłowy</option>
@@ -291,7 +305,7 @@
                             </div>
                         </div>
                         <div class="col-md-6">
-                            <div class="form-group">
+                            <div class="mb-3">
                                 <label for="editPortDocelowy">Port Docelowy *</label>
                                 <select class="form-control" id="editPortDocelowy" name="port_docelowy_id" required>
                                     <option value="">Wybierz port docelowy</option>
@@ -302,7 +316,7 @@
 
                     <div class="row">
                         <div class="col-md-6">
-                            <div class="form-group">
+                            <div class="mb-3">
                                 <label for="editZawor">Zawór *</label>
                                 <select class="form-control" id="editZawor" name="zawor_id" required>
                                     <option value="">Wybierz zawór</option>
@@ -310,7 +324,7 @@
                             </div>
                         </div>
                         <div class="col-md-6">
-                            <div class="form-group">
+                            <div class="mb-3">
                                 <label for="editStatus">Status</label>
                                 <select class="form-control" id="editStatus" name="status">
                                     <option value="aktywny">Aktywny</option>
@@ -321,7 +335,7 @@
                         </div>
                     </div>
 
-                    <div class="form-group">
+                    <div class="mb-3">
                         <label for="editOpis">Opis</label>
                         <textarea class="form-control" id="editOpis" name="opis" rows="3"></textarea>
                     </div>
@@ -483,7 +497,8 @@ function addSegment() {
     
     $.post('/topology/api/segmenty', formData, function(data) {
         if (data.success) {
-            $('#addSegmentModal').modal('hide');
+            const modal = bootstrap.Modal.getInstance(document.getElementById('addSegmentModal'));
+            modal.hide();
             $('#addSegmentForm')[0].reset();
             loadSegments();
             showAlert('Segment został dodany pomyślnie', 'success');
@@ -521,7 +536,8 @@ function editSegment(id) {
                 loadPortsForEquipment(segment.sprzet_docelowy_id, '#editPortDocelowy');
             }
             
-            $('#editSegmentModal').modal('show');
+            const modal = new bootstrap.Modal(document.getElementById('editSegmentModal'));
+            modal.show();
         }
     }).fail(function() {
         showAlert('Błąd podczas ładowania danych segmentu', 'danger');
@@ -538,7 +554,8 @@ function updateSegment() {
         data: formData,
         success: function(data) {
             if (data.success) {
-                $('#editSegmentModal').modal('hide');
+                const modal = bootstrap.Modal.getInstance(document.getElementById('editSegmentModal'));
+                modal.hide();
                 loadSegments();
                 showAlert('Segment został zaktualizowany pomyślnie', 'success');
             } else {
@@ -608,7 +625,8 @@ function showSegmentDetails(id) {
                 </div>
             `;
             $('#detailsContent').html(content);
-            $('#detailsSegmentModal').modal('show');
+            const modal = new bootstrap.Modal(document.getElementById('detailsSegmentModal'));
+            modal.show();
         }
     }).fail(function() {
         showAlert('Błąd podczas ładowania szczegółów segmentu', 'danger');

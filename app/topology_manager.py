@@ -123,11 +123,12 @@ class TopologyManager:
     def delete_zawor(self, zawor_id):
         """Usuwa zawór (tylko jeśli nie jest używany w segmentach)"""
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(dictionary=True)
         try:
             # Sprawdź czy zawór jest używany
             cursor.execute("SELECT COUNT(*) as count FROM segmenty WHERE id_zaworu = %s", (zawor_id,))
-            if cursor.fetchone()['count'] > 0:
+            result = cursor.fetchone()
+            if result and result['count'] > 0:
                 return False, "Zawór jest używany w segmentach i nie może być usunięty"
             
             cursor.execute("DELETE FROM zawory WHERE id = %s", (zawor_id,))
@@ -150,12 +151,13 @@ class TopologyManager:
             if include_segments:
                 for wezel in wezly:
                     cursor.execute("""
-                        SELECT s.id, s.nazwa_segmentu,
+                        SELECT s.id, s.nazwa_segmentu, z.nazwa_zaworu, z.stan as stan_zaworu,
                                CASE 
                                    WHEN s.id_wezla_startowego = %s THEN 'START'
                                    WHEN s.id_wezla_koncowego = %s THEN 'END'
                                END as pozycja
                         FROM segmenty s 
+                        JOIN zawory z ON s.id_zaworu = z.id
                         WHERE s.id_wezla_startowego = %s OR s.id_wezla_koncowego = %s
                     """, (wezel['id'], wezel['id'], wezel['id'], wezel['id']))
                     wezel['segments'] = cursor.fetchall()
@@ -176,7 +178,7 @@ class TopologyManager:
             if wezel:
                 # Pobierz segmenty połączone z tym węzłem
                 cursor.execute("""
-                    SELECT s.id, s.nazwa_segmentu, z.nazwa_zaworu, z.stan as stan_zaworu,
+                    SELECT s.id, s.nazwa_segmentu, z.id as id_zaworu, z.nazwa_zaworu, z.stan as stan_zaworu,
                            CASE 
                                WHEN s.id_wezla_startowego = %s THEN 'START'
                                WHEN s.id_wezla_koncowego = %s THEN 'END'
