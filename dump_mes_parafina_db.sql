@@ -34,7 +34,34 @@ CREATE TABLE `alarmy` (
   `czas_zakonczenia` datetime DEFAULT NULL,
   `komentarz` text COLLATE utf8mb4_unicode_ci,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=281 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=287 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `cykle_filtracyjne`
+--
+
+DROP TABLE IF EXISTS `cykle_filtracyjne`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `cykle_filtracyjne` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `id_partii` int DEFAULT NULL,
+  `numer_cyklu` int DEFAULT NULL,
+  `typ_cyklu` enum('placek','filtracja','dmuchanie') COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `id_filtra` varchar(10) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `reaktor_startowy` varchar(10) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `reaktor_docelowy` varchar(10) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `czas_rozpoczecia` datetime DEFAULT NULL,
+  `czas_zakonczenia` datetime DEFAULT NULL,
+  `czas_trwania_minut` int DEFAULT NULL,
+  `wynik_oceny` enum('pozytywna','negatywna','oczekuje') COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `komentarz` text COLLATE utf8mb4_unicode_ci,
+  PRIMARY KEY (`id`),
+  KEY `idx_partia_cykl` (`id_partii`,`numer_cyklu`),
+  KEY `idx_filtr_czas` (`id_filtra`,`czas_rozpoczecia`),
+  CONSTRAINT `cykle_filtracyjne_ibfk_1` FOREIGN KEY (`id_partii`) REFERENCES `partie_surowca` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Historia wszystkich cykli filtracyjnych dla każdej partii';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -53,7 +80,7 @@ CREATE TABLE `historia_pomiarow` (
   PRIMARY KEY (`id`),
   KEY `idx_historia_sprzet_czas` (`id_sprzetu`,`czas_pomiaru`),
   CONSTRAINT `historia_pomiarow_ibfk_1` FOREIGN KEY (`id_sprzetu`) REFERENCES `sprzet` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=15345 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=23081 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -100,7 +127,7 @@ CREATE TABLE `operacje_log` (
   CONSTRAINT `operacje_log_ibfk_1` FOREIGN KEY (`id_partii_surowca`) REFERENCES `partie_surowca` (`id`) ON DELETE SET NULL,
   CONSTRAINT `operacje_log_ibfk_2` FOREIGN KEY (`id_sprzetu_zrodlowego`) REFERENCES `sprzet` (`id`) ON DELETE SET NULL,
   CONSTRAINT `operacje_log_ibfk_3` FOREIGN KEY (`id_sprzetu_docelowego`) REFERENCES `sprzet` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=35 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Log wszystkich zdarzeń i operacji w procesie';
+) ENGINE=InnoDB AUTO_INCREMENT=41 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Log wszystkich zdarzeń i operacji w procesie';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -118,7 +145,7 @@ CREATE TABLE `operator_temperatures` (
   PRIMARY KEY (`id`),
   KEY `id_sprzetu` (`id_sprzetu`),
   CONSTRAINT `operator_temperatures_ibfk_1` FOREIGN KEY (`id_sprzetu`) REFERENCES `sprzet` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=134 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=139 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -159,6 +186,12 @@ CREATE TABLE `partie_surowca` (
   `rodzaj_surowca` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `id_aktualnego_sprzetu` int DEFAULT NULL,
   `status_partii` enum('W magazynie brudnym','Surowy w reaktorze','Budowanie placka','Przelewanie','Filtrowanie','Oczekiwanie na ocenę','Do ponownej filtracji','Dobielanie','Gotowy do wysłania','W magazynie czystym') COLLATE utf8mb4_unicode_ci NOT NULL,
+  `aktualny_etap_procesu` enum('surowy','placek','przelew','w_kole','ocena_probki','dmuchanie','gotowy','wydmuch') COLLATE utf8mb4_unicode_ci DEFAULT 'surowy',
+  `numer_cyklu_aktualnego` int DEFAULT '0',
+  `czas_rozpoczecia_etapu` datetime DEFAULT NULL,
+  `planowany_czas_zakonczenia` datetime DEFAULT NULL,
+  `id_aktualnego_filtra` varchar(10) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `reaktor_docelowy` varchar(10) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `ilosc_cykli_filtracyjnych` int DEFAULT '0',
   `historia_operacji` json DEFAULT NULL,
   PRIMARY KEY (`id`),
@@ -186,6 +219,32 @@ CREATE TABLE `porty_sprzetu` (
   KEY `id_sprzetu` (`id_sprzetu`),
   CONSTRAINT `porty_sprzetu_ibfk_1` FOREIGN KEY (`id_sprzetu`) REFERENCES `sprzet` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=27 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Punkty wejściowe/wyjściowe na sprzęcie (reaktorach, filtrach)';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `probki_ocena`
+--
+
+DROP TABLE IF EXISTS `probki_ocena`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `probki_ocena` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `id_partii` int NOT NULL,
+  `id_cyklu_filtracyjnego` int NOT NULL,
+  `czas_pobrania` datetime NOT NULL,
+  `czas_oceny` datetime DEFAULT NULL,
+  `wynik_oceny` enum('pozytywna','negatywna','oczekuje') COLLATE utf8mb4_unicode_ci DEFAULT 'oczekuje',
+  `ocena_koloru` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `decyzja` enum('kontynuuj_filtracje','wyslij_do_magazynu','dodaj_ziemie') COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `operator_oceniajacy` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `uwagi` text COLLATE utf8mb4_unicode_ci,
+  PRIMARY KEY (`id`),
+  KEY `id_cyklu_filtracyjnego` (`id_cyklu_filtracyjnego`),
+  KEY `idx_partia_czas` (`id_partii`,`czas_pobrania`),
+  CONSTRAINT `probki_ocena_ibfk_1` FOREIGN KEY (`id_partii`) REFERENCES `partie_surowca` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `probki_ocena_ibfk_2` FOREIGN KEY (`id_cyklu_filtracyjnego`) REFERENCES `cykle_filtracyjne` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Rejestr próbek i ich ocen podczas procesu filtracji';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -309,4 +368,4 @@ CREATE TABLE `zawory` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2025-07-04 12:16:58
+-- Dump completed on 2025-07-05  2:07:20

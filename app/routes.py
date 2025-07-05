@@ -49,6 +49,13 @@ def show_alarms():
         conn.close()
 # --- KONIEC NOWEJ FUNKCJI ---
 
+# --- DODAJ TĘ NOWĄ FUNKCJĘ ---
+@bp.route('/operacje')
+def show_operacje():
+    """Wyświetla stronę z operacjami tankowania."""
+    return render_template('operacje.html')
+# --- KONIEC NOWEJ FUNKCJI ---
+
 # 2. Stworzenie pierwszego, prawdziwego endpointu API
 @bp.route('/api/sprzet', methods=['GET'])
 def get_sprzet():
@@ -1464,3 +1471,172 @@ def aktualizuj_status_partii():
 def show_aktywne_partie():
     """Serwuje stronę zarządzania aktywnymi partiami."""
     return render_template('aktywne_partie.html')
+
+@bp.route('/api/typy-surowca', methods=['GET'])
+def get_typy_surowca():
+    """Zwraca listę dostępnych typów surowca"""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        cursor.execute("SELECT id, nazwa, opis FROM typy_surowca ORDER BY nazwa")
+        typy = cursor.fetchall()
+        return jsonify(typy)
+    except Exception as e:
+        return jsonify({'error': f'Błąd pobierania typów surowca: {str(e)}'}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+@bp.route('/api/sprzet/beczki-brudne', methods=['GET'])
+def get_beczki_brudne():
+    """Zwraca listę beczek brudnych dostępnych do tankowania"""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        cursor.execute("""
+            SELECT id, nazwa_unikalna, stan_sprzetu
+            FROM sprzet 
+            WHERE typ_sprzetu = 'beczka_brudna'
+            ORDER BY nazwa_unikalna
+        """)
+        beczki = cursor.fetchall()
+        return jsonify(beczki)
+    except Exception as e:
+        return jsonify({'error': f'Błąd pobierania beczek: {str(e)}'}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+@bp.route('/api/sprzet/reaktory-puste', methods=['GET'])
+def get_reaktory_puste():
+    """Zwraca listę reaktorów w stanie 'Pusty' dostępnych do tankowania"""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        cursor.execute("""
+            SELECT id, nazwa_unikalna, stan_sprzetu
+            FROM sprzet 
+            WHERE typ_sprzetu = 'reaktor' AND stan_sprzetu = 'Pusty'
+            ORDER BY nazwa_unikalna
+        """)
+        reaktory = cursor.fetchall()
+        return jsonify(reaktory)
+    except Exception as e:
+        return jsonify({'error': f'Błąd pobierania reaktorów: {str(e)}'}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+@bp.route('/api/operacje/tankowanie-brudnego', methods=['POST'])
+def tankowanie_brudnego():
+    """Tankowanie brudnego surowca z beczki do reaktora"""
+    dane = request.get_json()
+    
+    # Walidacja wymaganych pól
+    wymagane_pola = ['id_beczki', 'id_reaktora', 'typ_surowca', 'waga_kg', 'temperatura_surowca']
+    if not dane or not all(k in dane for k in wymagane_pola):
+        return jsonify({'message': 'Brak wymaganych danych'}), 400
+
+    # Walidacja wagi
+    waga = float(dane['waga_kg'])
+    if waga <= 0 or waga > 9000:
+        return jsonify({'message': 'Waga musi być w zakresie 1-9000 kg'}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        # Sprawdź czy reaktor jest pusty
+        cursor.execute("SELECT id, nazwa_unikalna, stan_sprzetu FROM sprzet WHERE id = %s", (dane['id_reaktora'],))
+        reaktor = cursor.fetchone()
+        
+        if not reaktor:
+            return jsonify({'message': 'Reaktor nie znaleziony'}), 404
+            
+        if reaktor['stan_sprzetu'] != 'Pusty':
+            return jsonify({
+                'message': f"Reaktor {reaktor['nazwa_unikalna']} nie jest pusty (stan: {reaktor['stan_sprzetu']})"
+            }), 400
+
+        # Sprawdź czy beczka istnieje
+        cursor.execute("SELECT id, nazwa_unikalna FROM sprzet WHERE id = %s", (dane['id_beczki'],))
+        beczka = cursor.fetchone()
+        
+        if not beczka:
+            return jsonify({'message': 'Beczka nie znaleziona'}), 404
+
+        # Stworzenie unikalnego kodu partii
+        teraz = datetime.now()
+        unikalny_kod = f"{dane['typ_surowca']}-{teraz.strftime('%Y%m%d-%H%M%S')}-{beczka['nazwa_unikalna']}"
+
+        # Użycie kursora bez dictionary=True do operacji zapisu
+        write_cursor = conn.cursor()
+
+        # Stworzenie nowej partii surowca
+        sql_partia = """
+            INSERT INTO partie_surowca 
+            (unikalny_kod, typ_surowca, zrodlo_pochodzenia, waga_poczatkowa_kg, waga_aktualna_kg, 
+             id_sprzetu, nazwa_partii, status_partii) 
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        """
+        nazwa_partii = f"PARTIA_{unikalny_kod}"
+        partia_dane = (
+            unikalny_kod, dane['typ_surowca'], 'cysterna', waga, waga, 
+            dane['id_reaktora'], nazwa_partii, 'Surowy w reaktorze'
+        )
+        write_cursor.execute(sql_partia, partia_dane)
+        nowa_partia_id = write_cursor.lastrowid
+
+        # Nadanie statusu "Surowy" w tabeli partie_statusy
+        write_cursor.execute("INSERT IGNORE INTO partie_statusy (id_partii, id_statusu) VALUES (%s, 1)", (nowa_partia_id,))
+
+        # Aktualizacja stanu reaktora
+        write_cursor.execute("UPDATE sprzet SET stan_sprzetu = 'Zatankowany (surowy)' WHERE id = %s", (dane['id_reaktora'],))
+
+        # Zapisanie temperatury początkowej do operator_temperatures
+        write_cursor.execute("""
+            INSERT INTO operator_temperatures (id_sprzetu, temperatura, czas_ustawienia)
+            VALUES (%s, %s, NOW())
+        """, (dane['id_reaktora'], dane['temperatura_surowca']))
+
+        # Zapisanie operacji w logu
+        sql_log = """
+            INSERT INTO operacje_log 
+            (typ_operacji, id_partii_surowca, id_sprzetu_zrodlowego, id_sprzetu_docelowego, 
+             czas_rozpoczecia, czas_zakonczenia, ilosc_kg, opis, status_operacji) 
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'zakonczona')
+        """
+        opis = f"Tankowanie brudnego surowca {dane['typ_surowca']} z {beczka['nazwa_unikalna']} do {reaktor['nazwa_unikalna']}"
+        log_dane = (
+            'TANKOWANIE_BRUDNEGO', nowa_partia_id, dane['id_beczki'], dane['id_reaktora'], 
+            teraz, teraz, waga, opis
+        )
+        write_cursor.execute(sql_log, log_dane)
+        
+        conn.commit()
+        
+        return jsonify({
+            'message': 'Tankowanie zakończone pomyślnie',
+            'partia_kod': unikalny_kod,
+            'komunikat_operatorski': 'Włącz palnik i sprawdź temperaturę surowca na reaktorze',
+            'reaktor': reaktor['nazwa_unikalna'],
+            'temperatura_poczatkowa': dane['temperatura_surowca']
+        }), 201
+
+    except mysql.connector.Error as err:
+        if conn: 
+            conn.rollback()
+        return jsonify({'message': f'Błąd bazy danych: {str(err)}'}), 500
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        return jsonify({'message': f'Błąd: {str(e)}'}), 500
+    finally:
+        if conn and conn.is_connected():
+            if 'cursor' in locals() and cursor: cursor.close()
+            if 'write_cursor' in locals() and write_cursor: write_cursor.close()
+            conn.close()
