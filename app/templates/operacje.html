@@ -116,6 +116,117 @@
             </div>
         </div>
     </div>
+    
+    <!-- Transfer Między Reaktorami -->
+    <div class="row mt-4">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header">
+                    <h3><i class="bi bi-arrow-left-right"></i> Transfer Między Reaktorami</h3>
+                </div>
+                <div class="card-body">
+                    <form id="transferReaktorowForm">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="reaktorZrodlowySelect" class="form-label">Reaktor źródłowy:</label>
+                                    <select class="form-select" id="reaktorZrodlowySelect" name="id_reaktora_zrodlowego" required>
+                                        <option value="">Wybierz reaktor źródłowy...</option>
+                                    </select>
+                                    <div class="form-text">Reaktory z surowcem (stan inny niż "Pusty")</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="reaktorDocelowySelect" class="form-label">Reaktor docelowy:</label>
+                                    <select class="form-select" id="reaktorDocelowySelect" name="id_reaktora_docelowego" required>
+                                        <option value="">Wybierz reaktor docelowy...</option>
+                                    </select>
+                                    <div class="form-text">Tylko reaktory w stanie "Pusty"</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="przezFiltrCheck" name="przez_filtr">
+                                        <label class="form-check-label" for="przezFiltrCheck">
+                                            Transfer przez filtr
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="filtrSelect" class="form-label">Filtr:</label>
+                                    <select class="form-select" id="filtrSelect" name="id_filtra" disabled>
+                                        <option value="">Wybierz filtr...</option>
+                                    </select>
+                                    <div class="form-text">Dostępne filtry (FZ, FN)</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="mb-3">
+                                    <button type="button" class="btn btn-outline-secondary me-2" id="podgladTrasyBtn">
+                                        <i class="bi bi-eye"></i> Podgląd Trasy
+                                    </button>
+                                    <div class="form-text">Sprawdź trasę i wymagane zawory przed rozpoczęciem transferu</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div id="podgladTrasy" class="alert alert-info mt-3" style="display: none;">
+                            <h6><i class="bi bi-route"></i> Podgląd Trasy:</h6>
+                            <div id="podgladTrasyTresc"></div>
+                        </div>
+                        
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <button type="submit" class="btn btn-success btn-lg">
+                                <i class="bi bi-arrow-right"></i> Rozpocznij Transfer
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Panel informacyjny transferu -->
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="bi bi-info-circle"></i> Transfer - Informacje</h5>
+                </div>
+                <div class="card-body">
+                    <h6>Proces transferu:</h6>
+                    <ol class="small">
+                        <li>Wybierz reaktor z surowcem</li>
+                        <li>Wybierz pusty reaktor docelowy</li>
+                        <li>Opcjonalnie: wybierz filtr</li>
+                        <li>Sprawdź podgląd trasy</li>
+                        <li>Rozpocznij transfer</li>
+                    </ol>
+                    
+                    <div class="alert alert-info small mt-3">
+                        <strong>Transfer bezpośredni:</strong> Szybki transfer surowca między reaktorami.
+                    </div>
+                    
+                    <div class="alert alert-warning small mt-3">
+                        <strong>Transfer przez filtr:</strong> Filtracja surowca podczas transferu. Proces trwa dłużej, ale oczyszcza surowiec.
+                    </div>
+                    
+                    <div id="lastTransfer" class="alert alert-success small mt-3" style="display: none;">
+                        <strong>Ostatni transfer:</strong>
+                        <div id="lastTransferDetails"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <!-- Modal komunikatu operatorskiego -->

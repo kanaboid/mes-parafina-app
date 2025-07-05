@@ -527,8 +527,8 @@ def get_filtry():
     """Zwraca listę filtrów."""
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT nazwa_unikalna FROM sprzet WHERE typ_sprzetu = 'filtr'")
-    filtry = [row['nazwa_unikalna'] for row in cursor.fetchall()]
+    cursor.execute("SELECT id, nazwa_unikalna FROM sprzet WHERE typ_sprzetu = 'filtr'")
+    filtry = cursor.fetchall()
     cursor.close()
     conn.close()
     return jsonify(filtry)
@@ -1530,6 +1530,27 @@ def get_reaktory_puste():
         cursor.close()
         conn.close()
 
+@bp.route('/api/sprzet/reaktory-z-surowcem', methods=['GET'])
+def get_reaktory_z_surowcem():
+    """Zwraca listę reaktorów ze stanem innym niż 'Pusty' (zawierających surowiec)"""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        cursor.execute("""
+            SELECT id, nazwa_unikalna, stan_sprzetu
+            FROM sprzet 
+            WHERE typ_sprzetu = 'reaktor' AND stan_sprzetu != 'Pusty'
+            ORDER BY nazwa_unikalna
+        """)
+        reaktory = cursor.fetchall()
+        return jsonify(reaktory)
+    except Exception as e:
+        return jsonify({'error': f'Błąd pobierania reaktorów z surowcem: {str(e)}'}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
 @bp.route('/api/operacje/tankowanie-brudnego', methods=['POST'])
 def tankowanie_brudnego():
     """Tankowanie brudnego surowca z beczki do reaktora"""
@@ -1625,6 +1646,234 @@ def tankowanie_brudnego():
             'komunikat_operatorski': 'Włącz palnik i sprawdź temperaturę surowca na reaktorze',
             'reaktor': reaktor['nazwa_unikalna'],
             'temperatura_poczatkowa': dane['temperatura_surowca']
+        }), 201
+
+    except mysql.connector.Error as err:
+        if conn: 
+            conn.rollback()
+        return jsonify({'message': f'Błąd bazy danych: {str(err)}'}), 500
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        return jsonify({'message': f'Błąd: {str(e)}'}), 500
+    finally:
+        if conn and conn.is_connected():
+            if 'cursor' in locals() and cursor: cursor.close()
+            if 'write_cursor' in locals() and write_cursor: write_cursor.close()
+            conn.close()
+
+@bp.route('/api/operacje/transfer-reaktorow', methods=['POST'])
+def transfer_reaktorow():
+    """Transfer surowca z jednego reaktora do drugiego, opcjonalnie przez filtr"""
+    dane = request.get_json()
+    
+    # Walidacja wymaganych pól
+    wymagane_pola = ['id_reaktora_zrodlowego', 'id_reaktora_docelowego']
+    if not dane or not all(k in dane for k in wymagane_pola):
+        return jsonify({'message': 'Brak wymaganych danych: id_reaktora_zrodlowego, id_reaktora_docelowego'}), 400
+
+    # Opcjonalne pola
+    id_filtra = dane.get('id_filtra')  # None = transfer bezpośredni
+    tylko_podglad = dane.get('podglad', False)  # True = tylko podgląd trasy, bez wykonania
+    
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        # Sprawdź reaktor źródłowy - czy ma surowiec
+        cursor.execute("SELECT id, nazwa_unikalna, stan_sprzetu FROM sprzet WHERE id = %s", (dane['id_reaktora_zrodlowego'],))
+        reaktor_zrodlowy = cursor.fetchone()
+        
+        if not reaktor_zrodlowy:
+            return jsonify({'message': 'Reaktor źródłowy nie znaleziony'}), 404
+            
+        if reaktor_zrodlowy['stan_sprzetu'] == 'Pusty':
+            return jsonify({
+                'message': f"Reaktor źródłowy {reaktor_zrodlowy['nazwa_unikalna']} jest pusty - brak surowca do transferu"
+            }), 400
+
+        # Sprawdź reaktor docelowy - czy jest pusty
+        cursor.execute("SELECT id, nazwa_unikalna, stan_sprzetu FROM sprzet WHERE id = %s", (dane['id_reaktora_docelowego'],))
+        reaktor_docelowy = cursor.fetchone()
+        
+        if not reaktor_docelowy:
+            return jsonify({'message': 'Reaktor docelowy nie znaleziony'}), 404
+            
+        if reaktor_docelowy['stan_sprzetu'] != 'Pusty':
+            return jsonify({
+                'message': f"Reaktor docelowy {reaktor_docelowy['nazwa_unikalna']} nie jest pusty (stan: {reaktor_docelowy['stan_sprzetu']})"
+            }), 400
+
+        # Sprawdź filtr jeśli podany
+        filtr_info = None
+        if id_filtra:
+            cursor.execute("SELECT id, nazwa_unikalna, stan_sprzetu FROM sprzet WHERE id = %s", (id_filtra,))
+            filtr_info = cursor.fetchone()
+            
+            if not filtr_info:
+                return jsonify({'message': 'Filtr nie znaleziony'}), 404
+
+        # Znajdź partię w reaktorze źródłowym (nie jest wymagana dla podglądu)
+        partia = None
+        if not tylko_podglad:
+            cursor.execute("""
+                SELECT ps.id, ps.unikalny_kod, ps.typ_surowca, ps.waga_aktualna_kg, ps.nazwa_partii, ps.status_partii
+                FROM partie_surowca ps 
+                WHERE ps.id_sprzetu = %s
+            """, (dane['id_reaktora_zrodlowego'],))
+            partia = cursor.fetchone()
+            
+            if not partia:
+                return jsonify({'message': f'Brak partii w reaktorze źródłowym {reaktor_zrodlowy["nazwa_unikalna"]}'}), 404
+
+        # Przygotuj punkty dla PathFinder
+        punkt_startowy = f"{reaktor_zrodlowy['nazwa_unikalna']}_OUT"
+        punkt_docelowy = f"{reaktor_docelowy['nazwa_unikalna']}_IN"
+        
+        # Użyj PathFinder do znalezienia trasy
+        pathfinder = get_pathfinder()
+        wszystkie_zawory = [data['valve_name'] for u, v, data in pathfinder.graph.edges(data=True)]
+        
+        # Domyślne wartości
+        opis_operacji = ""
+        
+        if id_filtra:
+            # Transfer przez filtr
+            punkt_filtr_in = f"{filtr_info['nazwa_unikalna']}_IN"
+            punkt_filtr_out = f"{filtr_info['nazwa_unikalna']}_OUT"
+            
+            sciezka_1 = pathfinder.find_path(punkt_startowy, punkt_filtr_in, wszystkie_zawory)
+            sciezka_filtr = pathfinder.find_path(punkt_filtr_in, punkt_filtr_out, wszystkie_zawory)
+            sciezka_2 = pathfinder.find_path(punkt_filtr_out, punkt_docelowy, wszystkie_zawory)
+            
+            if not all([sciezka_1, sciezka_filtr, sciezka_2]):
+                return jsonify({
+                    'message': f'Nie można znaleźć trasy z {reaktor_zrodlowy["nazwa_unikalna"]} przez {filtr_info["nazwa_unikalna"]} do {reaktor_docelowy["nazwa_unikalna"]}'
+                }), 404
+                
+            trasa_segmentow = sciezka_1 + sciezka_filtr + sciezka_2
+            typ_operacji = 'TRANSFER_PRZEZ_FILTR'
+            if not tylko_podglad and partia:
+                opis_operacji = f"Transfer {partia['typ_surowca']} z {reaktor_zrodlowy['nazwa_unikalna']} przez {filtr_info['nazwa_unikalna']} do {reaktor_docelowy['nazwa_unikalna']}"
+        else:
+            # Transfer bezpośredni
+            trasa_segmentow = pathfinder.find_path(punkt_startowy, punkt_docelowy, wszystkie_zawory)
+            
+            if not trasa_segmentow:
+                return jsonify({
+                    'message': f'Nie można znaleźć trasy bezpośredniej z {reaktor_zrodlowy["nazwa_unikalna"]} do {reaktor_docelowy["nazwa_unikalna"]}'
+                }), 404
+                
+            typ_operacji = 'TRANSFER_BEZPOSREDNI'
+            if not tylko_podglad and partia:
+                opis_operacji = f"Transfer bezpośredni {partia['typ_surowca']} z {reaktor_zrodlowy['nazwa_unikalna']} do {reaktor_docelowy['nazwa_unikalna']}"
+
+        # Sprawdź konflikty segmentów
+        if trasa_segmentow:
+            placeholders_konflikt = ', '.join(['%s'] * len(trasa_segmentow))
+            sql_konflikt = f"""
+                SELECT s.nazwa_segmentu FROM log_uzyte_segmenty lus
+                JOIN operacje_log ol ON lus.id_operacji_log = ol.id
+                JOIN segmenty s ON lus.id_segmentu = s.id
+                WHERE ol.status_operacji = 'aktywna' AND s.nazwa_segmentu IN ({placeholders_konflikt})
+            """
+            cursor.execute(sql_konflikt, trasa_segmentow)
+            konflikty = cursor.fetchall()
+
+            if konflikty and not tylko_podglad:  # Konflikty blokują tylko rzeczywisty transfer
+                nazwy_zajetych = [k['nazwa_segmentu'] for k in konflikty]
+                return jsonify({
+                    'message': 'Konflikt zasobów - niektóre segmenty są używane przez inne operacje',
+                    'zajete_segmenty': nazwy_zajetych
+                }), 409
+
+        # Znajdź zawory do otwarcia
+        zawory_do_otwarcia = set()
+        for segment_name in trasa_segmentow:
+            for u, v, data in pathfinder.graph.edges(data=True):
+                if data['segment_name'] == segment_name:
+                    zawory_do_otwarcia.add(data['valve_name'])
+                    break
+
+        # Jeśli to tylko podgląd, zwróć informacje o trasie
+        if tylko_podglad:
+            return jsonify({
+                'message': 'Podgląd trasy transferu',
+                'trasa': trasa_segmentow,
+                'zawory': list(zawory_do_otwarcia),
+                'segmenty_do_zablokowania': trasa_segmentow,
+                'reaktor_zrodlowy': reaktor_zrodlowy['nazwa_unikalna'],
+                'reaktor_docelowy': reaktor_docelowy['nazwa_unikalna'],
+                'filtr': filtr_info['nazwa_unikalna'] if filtr_info else None,
+                'przez_filtr': bool(id_filtra),
+                'typ_operacji': typ_operacji
+            }), 200
+
+        # Rozpocznij operację w transakcji
+        write_cursor = conn.cursor()
+        
+        # Znajdź zawory do otwarcia
+        zawory_do_otwarcia = set()
+        for segment_name in trasa_segmentow:
+            for u, v, data in pathfinder.graph.edges(data=True):
+                if data['segment_name'] == segment_name:
+                    zawory_do_otwarcia.add(data['valve_name'])
+                    break
+        
+        # Otwórz zawory
+        if zawory_do_otwarcia:
+            placeholders_zawory = ', '.join(['%s'] * len(zawory_do_otwarcia))
+            sql_zawory = f"UPDATE zawory SET stan = 'OTWARTY' WHERE nazwa_zaworu IN ({placeholders_zawory})"
+            write_cursor.execute(sql_zawory, list(zawory_do_otwarcia))
+
+        # Stwórz operację w logu
+        sql_log = """
+            INSERT INTO operacje_log 
+            (typ_operacji, id_partii_surowca, status_operacji, czas_rozpoczecia, opis, 
+             punkt_startowy, punkt_docelowy, ilosc_kg) 
+            VALUES (%s, %s, 'aktywna', NOW(), %s, %s, %s, %s)
+        """
+        write_cursor.execute(sql_log, (
+            typ_operacji, partia['id'], opis_operacji, 
+            punkt_startowy, punkt_docelowy, partia['waga_aktualna_kg']
+        ))
+        operacja_id = write_cursor.lastrowid
+
+        # Zablokuj segmenty
+        if trasa_segmentow:
+            placeholders_segmenty = ', '.join(['%s'] * len(trasa_segmentow))
+            sql_id_segmentow = f"SELECT id FROM segmenty WHERE nazwa_segmentu IN ({placeholders_segmenty})"
+            cursor.execute(sql_id_segmentow, trasa_segmentow)
+            id_segmentow = [row['id'] for row in cursor.fetchall()]
+
+            sql_blokada = "INSERT INTO log_uzyte_segmenty (id_operacji_log, id_segmentu) VALUES (%s, %s)"
+            dane_do_blokady = [(operacja_id, id_seg) for id_seg in id_segmentow]
+            write_cursor.executemany(sql_blokada, dane_do_blokady)
+
+        # Aktualizuj stan sprzętu
+        write_cursor.execute("UPDATE sprzet SET stan_sprzetu = 'W transferze' WHERE id = %s", (dane['id_reaktora_zrodlowego'],))
+        write_cursor.execute("UPDATE sprzet SET stan_sprzetu = 'W transferze' WHERE id = %s", (dane['id_reaktora_docelowego'],))
+        
+        if id_filtra:
+            write_cursor.execute("UPDATE sprzet SET stan_sprzetu = 'W transferze' WHERE id = %s", (id_filtra,))
+
+        conn.commit()
+
+        return jsonify({
+            'message': 'Transfer rozpoczęty pomyślnie',
+            'operacja_id': operacja_id,
+            'typ_operacji': typ_operacji,
+            'partia_kod': partia['unikalny_kod'] if partia else None,
+            'reaktor_zrodlowy': reaktor_zrodlowy['nazwa_unikalna'],
+            'reaktor_docelowy': reaktor_docelowy['nazwa_unikalna'],
+            'filtr': filtr_info['nazwa_unikalna'] if filtr_info else None,
+            'przez_filtr': bool(id_filtra),
+            'trasa': trasa_segmentow,
+            'zawory': list(zawory_do_otwarcia),
+            'trasa_segmentow': trasa_segmentow,  # Dla kompatybilności wstecznej
+            'zawory_otwarte': list(zawory_do_otwarcia),  # Dla kompatybilności wstecznej
+            'komunikat_operatorski': f'Transfer {typ_operacji.lower().replace("_", " ")} rozpoczęty. Monitoruj przebieg operacji.'
         }), 201
 
     except mysql.connector.Error as err:
