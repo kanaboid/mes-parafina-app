@@ -2,101 +2,146 @@
 
 {% block title %}Zarządzanie Segmentami - Topologia{% endblock %}
 
-                                    <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="addNazwa" class="form-label">Nazwa Segmentu *</label>
-                                <input type="text" class="form-control" id="addNazwa" name="nazwa" required>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="addTypRurociagu" class="form-label">Typ Rurociągu</label>
-                                <input type="text" class="form-control" id="addTypRurociagu" name="typ_rurociagu">
-                            </div>
-                        </div>modal-header">
-                <h5 class="modal-title">Dodaj Nowy Segment</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>ck content %}
+{% block content %}
 <div class="container-fluid">
     <div class="row">
         <div class="col-12">
-            <h2><i class="fas fa-route"></i> Zarządzanie Segmentami</h2>
-            <p class="text-muted">Segmenty rurociągu łączą sprzęt poprzez porty i węzły</p>
-        </div>
-    </div>
-
-    <!-- Alert messages -->
-    <div id="alertContainer"></div>
-
-    <!-- Search and Add Section -->
-    <div class="row mb-4">
-        <div class="col-md-6">
-            <div class="input-group">
-                <input type="text" id="searchSegments" class="form-control" placeholder="Szukaj segmentów...">
-                <div class="input-group-append">
-                    <button class="btn btn-outline-secondary" type="button">
-                        <i class="fas fa-search"></i>
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1><i class="fas fa-route"></i> Zarządzanie Segmentami Rurociągu</h1>
+                <div>
+                    <a href="{{ url_for('topology.topology_index') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left"></i> Powrót
+                    </a>
+                    <button type="button" class="btn btn-success" onclick="showAddSegmentModal()">
+                        <i class="fas fa-plus"></i> Dodaj Segment
                     </button>
                 </div>
             </div>
         </div>
-        <div class="col-md-6 text-right">
-            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addSegmentModal">
-                <i class="fas fa-plus"></i> Dodaj Segment
-            </button>
-            <button type="button" class="btn btn-info" onclick="refreshSegments()">
-                <i class="fas fa-sync-alt"></i> Odśwież
-            </button>
+    </div>
+
+    <!-- Filtry -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="input-group">
+                <div class="input-group-prepend">
+                    <span class="input-group-text"><i class="fas fa-search"></i></span>
+                </div>
+                <input type="text" class="form-control" id="searchInput" placeholder="Wyszukaj segment...">
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="row">
+                <div class="col-6">
+                    <div class="text-center">
+                        <h4 class="text-primary" id="totalSegments">{{ segmenty|length }}</h4>
+                        <small>Segmentów</small>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="text-center">
+                        <h4 class="text-success" id="activeSegments">-</h4>
+                        <small>Aktywnych</small>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
-    <!-- Segments Table -->
+    <!-- Tabela segmentów -->
     <div class="row">
         <div class="col-12">
             <div class="card">
                 <div class="card-header">
-                    <h5 class="mb-0">Lista Segmentów</h5>
+                    <h5 class="card-title mb-0">Lista Segmentów</h5>
                 </div>
                 <div class="card-body">
                     <div class="table-responsive">
-                        <table id="segmentsTable" class="table table-striped table-hover">
-                            <thead class="thead-dark">
+                        <table class="table table-striped table-hover" id="segmentsTable">
+                            <thead class="table-dark">
                                 <tr>
                                     <th>ID</th>
-                                    <th>Nazwa</th>
-                                    <th>Długość (m)</th>
-                                    <th>Średnica (mm)</th>
-                                    <th>Materiał</th>
+                                    <th>Nazwa Segmentu</th>
                                     <th>Typ Rurociągu</th>
-                                    <th>Sprzęt Źródłowy</th>
-                                    <th>Sprzęt Docelowy</th>
+                                    <th>Węzeł Startowy</th>
+                                    <th>Węzeł Końcowy</th>
                                     <th>Zawór</th>
-                                    <th>Status</th>
+                                    <th>Stan</th>
                                     <th>Akcje</th>
                                 </tr>
-                                <tr id="filterRow">
-                                    <th><input type="text" class="form-control form-control-sm" placeholder="ID"></th>
-                                    <th><input type="text" class="form-control form-control-sm" placeholder="Nazwa"></th>
-                                    <th><input type="text" class="form-control form-control-sm" placeholder="Długość"></th>
-                                    <th><input type="text" class="form-control form-control-sm" placeholder="Średnica"></th>
-                                    <th><input type="text" class="form-control form-control-sm" placeholder="Materiał"></th>
-                                    <th><input type="text" class="form-control form-control-sm" placeholder="Typ"></th>
-                                    <th><input type="text" class="form-control form-control-sm" placeholder="Źródło"></th>
-                                    <th><input type="text" class="form-control form-control-sm" placeholder="Cel"></th>
-                                    <th><input type="text" class="form-control form-control-sm" placeholder="Zawór"></th>
-                                    <th>
-                                        <select class="form-control form-control-sm">
-                                            <option value="">Wszystkie</option>
-                                            <option value="aktywny">Aktywny</option>
-                                            <option value="nieaktywny">Nieaktywny</option>
-                                            <option value="konserwacja">Konserwacja</option>
-                                        </select>
-                                    </th>
-                                    <th></th>
-                                </tr>
                             </thead>
-                            <tbody id="segmentsTableBody">
-                                <!-- Dynamic content -->
+                            <tbody>
+                                {% for segment in segmenty %}
+                                <tr data-id="{{ segment.id }}" data-name="{{ segment.nazwa_segmentu|lower }}">
+                                    <td>{{ segment.id }}</td>
+                                    <td>
+                                        <strong>{{ segment.nazwa_segmentu }}</strong>
+                                        {% if segment.typ_rurociagu %}
+                                            <br><small class="text-muted">{{ segment.typ_rurociagu }}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ segment.typ_rurociagu or '-' }}</td>
+                                    <td>
+                                        {% if segment.port_startowy %}
+                                            <span class="badge bg-info">{{ segment.port_startowy }}</span>
+                                        {% elif segment.wezel_startowy %}
+                                            <span class="badge bg-primary">{{ segment.wezel_startowy }}</span>
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if segment.port_koncowy %}
+                                            <span class="badge bg-info">{{ segment.port_koncowy }}</span>
+                                        {% elif segment.wezel_koncowy %}
+                                            <span class="badge bg-primary">{{ segment.wezel_koncowy }}</span>
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if segment.nazwa_zaworu %}
+                                            <span class="badge bg-secondary">{{ segment.nazwa_zaworu }}</span>
+                                        {% else %}
+                                            <span class="text-muted">Brak</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if segment.stan_zaworu %}
+                                            {% if segment.stan_zaworu == 'OTWARTY' %}
+                                                <span class="badge bg-success">
+                                                    <i class="fas fa-lock-open"></i> Otwarty
+                                                </span>
+                                            {% else %}
+                                                <span class="badge bg-danger">
+                                                    <i class="fas fa-lock"></i> Zamknięty
+                                                </span>
+                                            {% endif %}
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <div class="btn-group" role="group">
+                                            <button type="button" class="btn btn-sm btn-outline-info" 
+                                                    onclick="viewSegmentDetails({{ segment.id }})" 
+                                                    title="Szczegóły">
+                                                <i class="fas fa-eye"></i>
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-outline-primary" 
+                                                    onclick="editSegment({{ segment.id }})" 
+                                                    title="Edytuj">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-outline-danger" 
+                                                    onclick="deleteSegment({{ segment.id }})" 
+                                                    title="Usuń">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
                             </tbody>
                         </table>
                     </div>
@@ -106,264 +151,102 @@
     </div>
 </div>
 
-<!-- Add Segment Modal -->
-<div class="modal fade" id="addSegmentModal" tabindex="-1" role="dialog">
+<!-- Modal dodawania/edycji segmentu -->
+<div class="modal fade" id="segmentModal" tabindex="-1" role="dialog">
     <div class="modal-dialog modal-lg" role="document">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Dodaj Nowy Segment</h5>
-                <button type="button" class="close" data-dismiss="modal">
-                    <span>&times;</span>
-                </button>
+                <h5 class="modal-title" id="segmentModalTitle">Dodaj Segment</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <form id="addSegmentForm">
-                <div class="modal-body">
+            <div class="modal-body">
+                <form id="segmentForm">
+                    <input type="hidden" id="segmentId">
                     <div class="row">
                         <div class="col-md-6">
                             <div class="mb-3">
-                                <label for="addNazwa">Nazwa Segmentu *</label>
-                                <input type="text" class="form-control" id="addNazwa" name="nazwa" required>
+                                <label for="segmentName" class="form-label">Nazwa Segmentu *</label>
+                                <input type="text" class="form-control" id="segmentName" required>
                             </div>
                         </div>
                         <div class="col-md-6">
                             <div class="mb-3">
-                                <label for="addTypRurociagu">Typ Rurociągu</label>
-                                <input type="text" class="form-control" id="addTypRurociagu" name="typ_rurociagu">
+                                <label for="segmentType" class="form-label">Typ Rurociągu</label>
+                                <input type="text" class="form-control" id="segmentType">
                             </div>
                         </div>
                     </div>
-                    
-                    <div class="row">
-                        <div class="col-md-4">
-                            <div class="mb-3">
-                                <label for="addDlugosc">Długość (m)</label>
-                                <input type="number" step="0.01" class="form-control" id="addDlugosc" name="dlugosc">
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="mb-3">
-                                <label for="addSrednica">Średnica (mm)</label>
-                                <input type="number" step="0.1" class="form-control" id="addSrednica" name="srednica">
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="mb-3">
-                                <label for="addMaterial">Materiał</label>
-                                <input type="text" class="form-control" id="addMaterial" name="material">
-                            </div>
-                        </div>
-                    </div>
-
                     <div class="row">
                         <div class="col-md-6">
                             <div class="mb-3">
-                                <label for="addSprzetZrodlowy">Sprzęt Źródłowy *</label>
-                                <select class="form-control" id="addSprzetZrodlowy" name="sprzet_zrodlowy_id" required>
-                                    <option value="">Wybierz sprzęt źródłowy</option>
+                                <label for="startNode" class="form-label">Węzeł Startowy</label>
+                                <select class="form-select" id="startNode">
+                                    <option value="">Wybierz węzeł...</option>
                                 </select>
                             </div>
                         </div>
                         <div class="col-md-6">
                             <div class="mb-3">
-                                <label for="addSprzetDocelowy">Sprzęt Docelowy *</label>
-                                <select class="form-control" id="addSprzetDocelowy" name="sprzet_docelowy_id" required>
-                                    <option value="">Wybierz sprzęt docelowy</option>
+                                <label for="endNode" class="form-label">Węzeł Końcowy</label>
+                                <select class="form-select" id="endNode">
+                                    <option value="">Wybierz węzeł...</option>
                                 </select>
                             </div>
                         </div>
                     </div>
-
                     <div class="row">
                         <div class="col-md-6">
                             <div class="mb-3">
-                                <label for="addPortZrodlowy">Port Źródłowy *</label>
-                                <select class="form-control" id="addPortZrodlowy" name="port_zrodlowy_id" required>
-                                    <option value="">Wybierz port źródłowy</option>
+                                <label for="startPort" class="form-label">Port Startowy (Wyjściowy)</label>
+                                <select class="form-select" id="startPort">
+                                    <option value="">Wybierz port wyjściowy...</option>
                                 </select>
+                                <div class="form-text">Port z którego wychodzi segment</div>
                             </div>
                         </div>
                         <div class="col-md-6">
                             <div class="mb-3">
-                                <label for="addPortDocelowy">Port Docelowy *</label>
-                                <select class="form-control" id="addPortDocelowy" name="port_docelowy_id" required>
-                                    <option value="">Wybierz port docelowy</option>
+                                <label for="endPort" class="form-label">Port Końcowy (Wejściowy)</label>
+                                <select class="form-select" id="endPort">
+                                    <option value="">Wybierz port wejściowy...</option>
                                 </select>
+                                <div class="form-text">Port do którego dochodzi segment</div>
                             </div>
                         </div>
                     </div>
-
                     <div class="row">
-                        <div class="col-md-6">
+                        <div class="col-md-12">
                             <div class="mb-3">
-                                <label for="addZawor">Zawór *</label>
-                                <select class="form-control" id="addZawor" name="zawor_id" required>
-                                    <option value="">Wybierz zawór</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="addStatus">Status</label>
-                                <select class="form-control" id="addStatus" name="status">
-                                    <option value="aktywny">Aktywny</option>
-                                    <option value="nieaktywny">Nieaktywny</option>
-                                    <option value="konserwacja">Konserwacja</option>
+                                <label for="valveSelect" class="form-label">Zawór</label>
+                                <select class="form-select" id="valveSelect">
+                                    <option value="">Brak zaworu</option>
                                 </select>
                             </div>
                         </div>
                     </div>
-
-                    <div class="mb-3">
-                        <label for="addOpis">Opis</label>
-                        <textarea class="form-control" id="addOpis" name="opis" rows="3"></textarea>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Anuluj</button>
-                    <button type="submit" class="btn btn-primary">Dodaj Segment</button>
-                </div>
-            </form>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Anuluj</button>
+                <button type="button" class="btn btn-primary" onclick="saveSegment()">Zapisz</button>
+            </div>
         </div>
     </div>
 </div>
 
-<!-- Edit Segment Modal -->
-<div class="modal fade" id="editSegmentModal" tabindex="-1" role="dialog">
-    <div class="modal-dialog modal-lg" role="document">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Edytuj Segment</h5>
-                <button type="button" class="close" data-dismiss="modal">
-                    <span>&times;</span>
-                </button>
-            </div>
-            <form id="editSegmentForm">
-                <input type="hidden" id="editId" name="id">
-                <div class="modal-body">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="editNazwa">Nazwa Segmentu *</label>
-                                <input type="text" class="form-control" id="editNazwa" name="nazwa" required>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="editTypRurociagu">Typ Rurociągu</label>
-                                <input type="text" class="form-control" id="editTypRurociagu" name="typ_rurociagu">
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="row">
-                        <div class="col-md-4">
-                            <div class="mb-3">
-                                <label for="editDlugosc">Długość (m)</label>
-                                <input type="number" step="0.01" class="form-control" id="editDlugosc" name="dlugosc">
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="mb-3">
-                                <label for="editSrednica">Średnica (mm)</label>
-                                <input type="number" step="0.1" class="form-control" id="editSrednica" name="srednica">
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="mb-3">
-                                <label for="editMaterial">Materiał</label>
-                                <input type="text" class="form-control" id="editMaterial" name="material">
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="editSprzetZrodlowy">Sprzęt Źródłowy *</label>
-                                <select class="form-control" id="editSprzetZrodlowy" name="sprzet_zrodlowy_id" required>
-                                    <option value="">Wybierz sprzęt źródłowy</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="editSprzetDocelowy">Sprzęt Docelowy *</label>
-                                <select class="form-control" id="editSprzetDocelowy" name="sprzet_docelowy_id" required>
-                                    <option value="">Wybierz sprzęt docelowy</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="editPortZrodlowy">Port Źródłowy *</label>
-                                <select class="form-control" id="editPortZrodlowy" name="port_zrodlowy_id" required>
-                                    <option value="">Wybierz port źródłowy</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="editPortDocelowy">Port Docelowy *</label>
-                                <select class="form-control" id="editPortDocelowy" name="port_docelowy_id" required>
-                                    <option value="">Wybierz port docelowy</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="editZawor">Zawór *</label>
-                                <select class="form-control" id="editZawor" name="zawor_id" required>
-                                    <option value="">Wybierz zawór</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="editStatus">Status</label>
-                                <select class="form-control" id="editStatus" name="status">
-                                    <option value="aktywny">Aktywny</option>
-                                    <option value="nieaktywny">Nieaktywny</option>
-                                    <option value="konserwacja">Konserwacja</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="mb-3">
-                        <label for="editOpis">Opis</label>
-                        <textarea class="form-control" id="editOpis" name="opis" rows="3"></textarea>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Anuluj</button>
-                    <button type="submit" class="btn btn-primary">Zapisz Zmiany</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<!-- Details Modal -->
-<div class="modal fade" id="detailsSegmentModal" tabindex="-1" role="dialog">
-    <div class="modal-dialog modal-lg" role="document">
+<!-- Modal szczegółów segmentu -->
+<div class="modal fade" id="segmentDetailsModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-xl" role="document">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">Szczegóły Segmentu</h5>
-                <button type="button" class="close" data-dismiss="modal">
-                    <span>&times;</span>
-                </button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <div class="modal-body" id="detailsContent">
-                <!-- Dynamic content -->
+            <div class="modal-body" id="segmentDetailsContent">
+                <!-- Treść zostanie załadowana dynamicznie -->
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Zamknij</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Zamknij</button>
             </div>
         </div>
     </div>
@@ -371,335 +254,302 @@
 
 <script>
 $(document).ready(function() {
-    loadSegments();
-    loadDropdownData();
+    // Inicjalizacja filtrów
+    $('#searchInput').on('keyup', filterTable);
     
-    // Search functionality
-    $('#searchSegments').on('keyup', function() {
-        filterTable();
-    });
+    // Policz aktywne segmenty
+    updateActiveSegmentsCount();
     
-    // Filter row inputs
-    $('#filterRow input, #filterRow select').on('keyup change', function() {
-        filterTable();
-    });
-    
-    // Form submissions
-    $('#addSegmentForm').on('submit', function(e) {
-        e.preventDefault();
-        addSegment();
-    });
-    
-    $('#editSegmentForm').on('submit', function(e) {
-        e.preventDefault();
-        updateSegment();
-    });
-    
-    // Equipment change handlers for ports
-    $('#addSprzetZrodlowy, #editSprzetZrodlowy').on('change', function() {
-        loadPortsForEquipment($(this).val(), $(this).attr('id').includes('add') ? '#addPortZrodlowy' : '#editPortZrodlowy');
-    });
-    
-    $('#addSprzetDocelowy, #editSprzetDocelowy').on('change', function() {
-        loadPortsForEquipment($(this).val(), $(this).attr('id').includes('add') ? '#addPortDocelowy' : '#editPortDocelowy');
-    });
+    // Ładuj dane do selectów
+    loadNodes();
+    loadValves();
 });
 
-function loadSegments() {
-    $.get('/topology/api/segmenty', function(data) {
-        let tbody = $('#segmentsTableBody');
-        tbody.empty();
-        
-        if (data.data && data.data.length > 0) {
-            data.data.forEach(function(segment) {
-                let row = `
-                    <tr>
-                        <td>${segment.id}</td>
-                        <td>${segment.nazwa || ''}</td>
-                        <td>${segment.dlugosc || ''}</td>
-                        <td>${segment.srednica || ''}</td>
-                        <td>${segment.material || ''}</td>
-                        <td>${segment.typ_rurociagu || ''}</td>
-                        <td>${segment.sprzet_zrodlowy_nazwa || ''}</td>
-                        <td>${segment.sprzet_docelowy_nazwa || ''}</td>
-                        <td>${segment.zawor_nazwa || ''}</td>
-                        <td>
-                            <span class="badge badge-${getStatusBadgeClass(segment.status)}">${segment.status || 'nieznany'}</span>
-                        </td>
-                        <td>
-                            <div class="btn-group" role="group">
-                                <button class="btn btn-sm btn-info" onclick="showSegmentDetails(${segment.id})" title="Szczegóły">
-                                    <i class="fas fa-eye"></i>
-                                </button>
-                                <button class="btn btn-sm btn-warning" onclick="editSegment(${segment.id})" title="Edytuj">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                                <button class="btn btn-sm btn-danger" onclick="deleteSegment(${segment.id})" title="Usuń">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </div>
-                        </td>
-                    </tr>
-                `;
-                tbody.append(row);
-            });
-        } else {
-            tbody.append('<tr><td colspan="11" class="text-center text-muted">Brak segmentów do wyświetlenia</td></tr>');
-        }
-    }).fail(function() {
-        showAlert('Błąd podczas ładowania segmentów', 'danger');
-    });
-}
-
-function loadDropdownData() {
-    // Load equipment
-    $.get('/topology/api/sprzet', function(data) {
-        let options = '<option value="">Wybierz sprzęt</option>';
-        if (data.data) {
-            data.data.forEach(function(eq) {
-                options += `<option value="${eq.id}">${eq.nazwa}</option>`;
-            });
-        }
-        $('#addSprzetZrodlowy, #addSprzetDocelowy, #editSprzetZrodlowy, #editSprzetDocelowy').html(options);
+function filterTable() {
+    const searchTerm = $('#searchInput').val().toLowerCase();
+    
+    $('#segmentsTable tbody tr').each(function() {
+        const name = $(this).data('name');
+        const matchesSearch = name.includes(searchTerm);
+        $(this).toggle(matchesSearch);
     });
     
-    // Load valves
-    $.get('/topology/api/zawory', function(data) {
-        let options = '<option value="">Wybierz zawór</option>';
-        if (data.data) {
-            data.data.forEach(function(valve) {
-                options += `<option value="${valve.id}">${valve.nazwa}</option>`;
-            });
-        }
-        $('#addZawor, #editZawor').html(options);
-    });
+    updateVisibleCount();
 }
 
-function loadPortsForEquipment(equipmentId, targetSelect) {
-    if (!equipmentId) {
-        $(targetSelect).html('<option value="">Wybierz port</option>');
-        return;
-    }
-    
-    $.get(`/topology/api/sprzet/${equipmentId}/porty`, function(data) {
-        let options = '<option value="">Wybierz port</option>';
-        if (data.data) {
-            data.data.forEach(function(port) {
-                options += `<option value="${port.id}">${port.nazwa}</option>`;
-            });
-        }
-        $(targetSelect).html(options);
-    });
+function updateVisibleCount() {
+    const visibleCount = $('#segmentsTable tbody tr:visible').length;
+    $('#totalSegments').text(visibleCount);
 }
 
-function addSegment() {
-    let formData = $('#addSegmentForm').serialize();
-    
-    $.post('/topology/api/segmenty', formData, function(data) {
+function updateActiveSegmentsCount() {
+    let activeCount = 0;
+    $('#segmentsTable tbody tr').each(function() {
+        const hasOpenValve = $(this).find('.badge.bg-success').length > 0;
+        if (hasOpenValve) {
+            activeCount++;
+        }
+    });
+    $('#activeSegments').text(activeCount);
+}
+
+function loadNodes() {
+    $.get('/topology/api/wezly', function(data) {
         if (data.success) {
-            const modal = bootstrap.Modal.getInstance(document.getElementById('addSegmentModal'));
-            modal.hide();
-            $('#addSegmentForm')[0].reset();
-            loadSegments();
-            showAlert('Segment został dodany pomyślnie', 'success');
-        } else {
-            showAlert(data.message || 'Błąd podczas dodawania segmentu', 'danger');
+            const nodes = data.data;
+            let options = '<option value="">Wybierz węzeł...</option>';
+            nodes.forEach(node => {
+                options += `<option value="${node.id}">${node.nazwa_wezla}</option>`;
+            });
+            $('#startNode, #endNode').html(options);
         }
-    }).fail(function() {
-        showAlert('Błąd podczas dodawania segmentu', 'danger');
     });
+}
+
+function loadValves() {
+    $.get('/topology/api/zawory', function(data) {
+        if (data.success) {
+            const valves = data.data;
+            let options = '<option value="">Brak zaworu</option>';
+            valves.forEach(valve => {
+                options += `<option value="${valve.id}">${valve.nazwa_zaworu}</option>`;
+            });
+            $('#valveSelect').html(options);
+        }
+    });
+}
+
+function loadPorts() {
+    loadStartPorts();
+    loadEndPorts();
+}
+
+function loadStartPorts() {
+    $.get('/topology/api/porty', function(data) {
+        if (data.success) {
+            const ports = data.data;
+            let options = '<option value="">Wybierz port wyjściowy...</option>';
+            // Filtruj porty wyjściowe (OUT)
+            ports.filter(port => port.typ_portu === 'OUT').forEach(port => {
+                options += `<option value="${port.id}">${port.nazwa_portu} (${port.nazwa_unikalna})</option>`;
+            });
+            $('#startPort').html(options);
+        }
+    });
+}
+
+function loadEndPorts() {
+    $.get('/topology/api/porty', function(data) {
+        if (data.success) {
+            const ports = data.data;
+            let options = '<option value="">Wybierz port wejściowy...</option>';
+            // Filtruj porty wejściowe (IN)
+            ports.filter(port => port.typ_portu === 'IN').forEach(port => {
+                options += `<option value="${port.id}">${port.nazwa_portu} (${port.nazwa_unikalna})</option>`;
+            });
+            $('#endPort').html(options);
+        }
+    });
+}
+
+function showAddSegmentModal() {
+    $('#segmentModalTitle').text('Dodaj Segment');
+    $('#segmentForm')[0].reset();
+    $('#segmentId').val('');
+    loadNodes();
+    loadValves();
+    loadPorts();
+    const modal = new bootstrap.Modal(document.getElementById('segmentModal'));
+    modal.show();
 }
 
 function editSegment(id) {
     $.get(`/topology/api/segmenty/${id}`, function(data) {
-        if (data.data) {
-            let segment = data.data;
-            $('#editId').val(segment.id);
-            $('#editNazwa').val(segment.nazwa);
-            $('#editTypRurociagu').val(segment.typ_rurociagu);
-            $('#editDlugosc').val(segment.dlugosc);
-            $('#editSrednica').val(segment.srednica);
-            $('#editMaterial').val(segment.material);
-            $('#editSprzetZrodlowy').val(segment.sprzet_zrodlowy_id);
-            $('#editSprzetDocelowy').val(segment.sprzet_docelowy_id);
-            $('#editPortZrodlowy').val(segment.port_zrodlowy_id);
-            $('#editPortDocelowy').val(segment.port_docelowy_id);
-            $('#editZawor').val(segment.zawor_id);
-            $('#editStatus').val(segment.status);
-            $('#editOpis').val(segment.opis);
+        if (data.success) {
+            const segment = data.data;
+            $('#segmentModalTitle').text('Edytuj Segment');
+            $('#segmentId').val(segment.id);
+            $('#segmentName').val(segment.nazwa_segmentu);
+            $('#segmentType').val(segment.typ_rurociagu || '');
+            $('#startNode').val(segment.id_wezla_startowego || '');
+            $('#endNode').val(segment.id_wezla_koncowego || '');
+            $('#startPort').val(segment.id_portu_startowego || '');
+            $('#endPort').val(segment.id_portu_koncowego || '');
+            $('#valveSelect').val(segment.id_zaworu || '');
             
-            // Load ports for selected equipment
-            if (segment.sprzet_zrodlowy_id) {
-                loadPortsForEquipment(segment.sprzet_zrodlowy_id, '#editPortZrodlowy');
-            }
-            if (segment.sprzet_docelowy_id) {
-                loadPortsForEquipment(segment.sprzet_docelowy_id, '#editPortDocelowy');
-            }
+            loadNodes();
+            loadValves();
+            loadPorts();
             
-            const modal = new bootstrap.Modal(document.getElementById('editSegmentModal'));
+            const modal = new bootstrap.Modal(document.getElementById('segmentModal'));
             modal.show();
+        } else {
+            alert('Błąd podczas pobierania danych segmentu');
         }
-    }).fail(function() {
-        showAlert('Błąd podczas ładowania danych segmentu', 'danger');
     });
 }
 
-function updateSegment() {
-    let id = $('#editId').val();
-    let formData = $('#editSegmentForm').serialize();
+function saveSegment() {
+    const id = $('#segmentId').val();
+    const isEdit = id !== '';
+    
+    const data = {
+        nazwa_segmentu: $('#segmentName').val(),
+        typ_rurociagu: $('#segmentType').val() || null,
+        id_wezla_startowego: $('#startNode').val() || null,
+        id_wezla_koncowego: $('#endNode').val() || null,
+        id_portu_startowego: $('#startPort').val() || null,
+        id_portu_koncowego: $('#endPort').val() || null,
+        id_zaworu: $('#valveSelect').val() || null
+    };
+    
+    const url = isEdit ? `/topology/api/segmenty/${id}` : '/topology/api/segmenty';
+    const method = isEdit ? 'PUT' : 'POST';
     
     $.ajax({
-        url: `/topology/api/segmenty/${id}`,
-        type: 'PUT',
-        data: formData,
-        success: function(data) {
-            if (data.success) {
-                const modal = bootstrap.Modal.getInstance(document.getElementById('editSegmentModal'));
+        url: url,
+        method: method,
+        contentType: 'application/json',
+        data: JSON.stringify(data),
+        success: function(response) {
+            if (response.success) {
+                const modal = bootstrap.Modal.getInstance(document.getElementById('segmentModal'));
                 modal.hide();
-                loadSegments();
-                showAlert('Segment został zaktualizowany pomyślnie', 'success');
+                location.reload();
             } else {
-                showAlert(data.message || 'Błąd podczas aktualizacji segmentu', 'danger');
+                alert('Błąd: ' + response.message);
             }
         },
         error: function() {
-            showAlert('Błąd podczas aktualizacji segmentu', 'danger');
+            alert('Błąd podczas zapisywania segmentu');
+        }
+    });
+}
+
+function viewSegmentDetails(id) {
+    $.get(`/topology/api/segmenty/${id}`, function(data) {
+        if (data.success) {
+            const segment = data.data;
+            let content = `
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <h6>Informacje podstawowe:</h6>
+                        <table class="table table-sm">
+                            <tr><td><strong>ID:</strong></td><td>${segment.id}</td></tr>
+                            <tr><td><strong>Nazwa:</strong></td><td>${segment.nazwa_segmentu}</td></tr>
+                            <tr><td><strong>Typ rurociągu:</strong></td><td>${segment.typ_rurociagu || '-'}</td></tr>
+                        </table>
+                    </div>
+                </div>
+                <div class="row mb-4">
+                    <div class="col-6">
+                        <h6>Punkt startowy:</h6>
+                        <table class="table table-sm">
+                            <tr><td><strong>Węzeł:</strong></td><td>${segment.wezel_startowy || '-'}</td></tr>
+                            <tr><td><strong>Port:</strong></td><td>${segment.port_startowy || '-'}</td></tr>
+                        </table>
+                    </div>
+                    <div class="col-6">
+                        <h6>Punkt końcowy:</h6>
+                        <table class="table table-sm">
+                            <tr><td><strong>Węzeł:</strong></td><td>${segment.wezel_koncowy || '-'}</td></tr>
+                            <tr><td><strong>Port:</strong></td><td>${segment.port_koncowy || '-'}</td></tr>
+                        </table>
+                    </div>
+                </div>
+            `;
+            
+            if (segment.nazwa_zaworu) {
+                const stateClass = segment.stan_zaworu === 'OTWARTY' ? 'success' : 'danger';
+                const stateIcon = segment.stan_zaworu === 'OTWARTY' ? 'lock-open' : 'lock';
+                content += `
+                    <div class="row">
+                        <div class="col-12">
+                            <h6>Zawór kontrolujący:</h6>
+                            <div class="card">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <h6 class="mb-1">${segment.nazwa_zaworu}</h6>
+                                            <span class="badge bg-${stateClass}">
+                                                <i class="fas fa-${stateIcon}"></i> ${segment.stan_zaworu}
+                                            </span>
+                                        </div>
+                                        <div class="btn-group">
+                                            <button type="button" class="btn btn-sm btn-outline-${segment.stan_zaworu === 'OTWARTY' ? 'danger' : 'success'}"
+                                                    onclick="toggleValve(${segment.id_zaworu}, '${segment.stan_zaworu}')">
+                                                <i class="fas fa-${segment.stan_zaworu === 'OTWARTY' ? 'lock' : 'lock-open'}"></i>
+                                                ${segment.stan_zaworu === 'OTWARTY' ? 'Zamknij' : 'Otwórz'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } else {
+                content += `
+                    <div class="row">
+                        <div class="col-12">
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle"></i> Segment nie ma przypisanego zaworu
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            $('#segmentDetailsContent').html(content);
+            const modal = new bootstrap.Modal(document.getElementById('segmentDetailsModal'));
+            modal.show();
+        } else {
+            alert('Błąd podczas pobierania szczegółów segmentu');
         }
     });
 }
 
 function deleteSegment(id) {
-    if (confirm('Czy na pewno chcesz usunąć ten segment?')) {
+    if (confirm('Czy na pewno chcesz usunąć ten segment? Tej operacji nie można cofnąć.')) {
         $.ajax({
             url: `/topology/api/segmenty/${id}`,
-            type: 'DELETE',
-            success: function(data) {
-                if (data.success) {
-                    loadSegments();
-                    showAlert('Segment został usunięty pomyślnie', 'success');
+            method: 'DELETE',
+            success: function(response) {
+                if (response.success) {
+                    location.reload();
                 } else {
-                    showAlert(data.message || 'Błąd podczas usuwania segmentu', 'danger');
+                    alert('Błąd: ' + response.message);
                 }
             },
             error: function() {
-                showAlert('Błąd podczas usuwania segmentu', 'danger');
+                alert('Błąd podczas usuwania segmentu');
             }
         });
     }
 }
 
-function showSegmentDetails(id) {
-    $.get(`/topology/api/segmenty/${id}`, function(data) {
-        if (data.data) {
-            let segment = data.data;
-            let content = `
-                <div class="row">
-                    <div class="col-md-6">
-                        <h6>Informacje podstawowe</h6>
-                        <table class="table table-sm">
-                            <tr><td><strong>ID:</strong></td><td>${segment.id}</td></tr>
-                            <tr><td><strong>Nazwa:</strong></td><td>${segment.nazwa || '-'}</td></tr>
-                            <tr><td><strong>Typ rurociągu:</strong></td><td>${segment.typ_rurociagu || '-'}</td></tr>
-                            <tr><td><strong>Status:</strong></td><td><span class="badge badge-${getStatusBadgeClass(segment.status)}">${segment.status || 'nieznany'}</span></td></tr>
-                        </table>
-                        
-                        <h6>Parametry techniczne</h6>
-                        <table class="table table-sm">
-                            <tr><td><strong>Długość:</strong></td><td>${segment.dlugosc || '-'} m</td></tr>
-                            <tr><td><strong>Średnica:</strong></td><td>${segment.srednica || '-'} mm</td></tr>
-                            <tr><td><strong>Materiał:</strong></td><td>${segment.material || '-'}</td></tr>
-                        </table>
-                    </div>
-                    <div class="col-md-6">
-                        <h6>Połączenia</h6>
-                        <table class="table table-sm">
-                            <tr><td><strong>Sprzęt źródłowy:</strong></td><td>${segment.sprzet_zrodlowy_nazwa || '-'}</td></tr>
-                            <tr><td><strong>Port źródłowy:</strong></td><td>${segment.port_zrodlowy_nazwa || '-'}</td></tr>
-                            <tr><td><strong>Sprzęt docelowy:</strong></td><td>${segment.sprzet_docelowy_nazwa || '-'}</td></tr>
-                            <tr><td><strong>Port docelowy:</strong></td><td>${segment.port_docelowy_nazwa || '-'}</td></tr>
-                            <tr><td><strong>Zawór:</strong></td><td>${segment.zawor_nazwa || '-'}</td></tr>
-                        </table>
-                        
-                        ${segment.opis ? `<h6>Opis</h6><p>${segment.opis}</p>` : ''}
-                    </div>
-                </div>
-            `;
-            $('#detailsContent').html(content);
-            const modal = new bootstrap.Modal(document.getElementById('detailsSegmentModal'));
-            modal.show();
-        }
-    }).fail(function() {
-        showAlert('Błąd podczas ładowania szczegółów segmentu', 'danger');
-    });
-}
-
-function refreshSegments() {
-    loadSegments();
-    showAlert('Lista segmentów została odświeżona', 'info');
-}
-
-function filterTable() {
-    let searchValue = $('#searchSegments').val().toLowerCase();
-    let filters = {};
+function toggleValve(valveId, currentState) {
+    const newState = currentState === 'OTWARTY' ? 'ZAMKNIETY' : 'OTWARTY';
+    const action = newState === 'OTWARTY' ? 'otworzyć' : 'zamknąć';
     
-    // Get filter values
-    $('#filterRow input, #filterRow select').each(function() {
-        let value = $(this).val().toLowerCase();
-        if (value) {
-            let columnIndex = $(this).parent().index();
-            filters[columnIndex] = value;
-        }
-    });
-    
-    // Filter rows
-    $('#segmentsTableBody tr').each(function() {
-        let row = $(this);
-        let show = true;
-        
-        // Search filter
-        if (searchValue) {
-            let rowText = row.text().toLowerCase();
-            if (rowText.indexOf(searchValue) === -1) {
-                show = false;
-            }
-        }
-        
-        // Column filters
-        Object.keys(filters).forEach(function(columnIndex) {
-            let cellText = row.find('td').eq(columnIndex).text().toLowerCase();
-            if (cellText.indexOf(filters[columnIndex]) === -1) {
-                show = false;
+    if (confirm(`Czy na pewno chcesz ${action} zawór?`)) {
+        $.ajax({
+            url: `/topology/api/zawory/${valveId}`,
+            method: 'PUT',
+            contentType: 'application/json',
+            data: JSON.stringify({ stan: newState }),
+            success: function(response) {
+                if (response.success) {
+                    location.reload();
+                } else {
+                    alert('Błąd: ' + response.message);
+                }
+            },
+            error: function() {
+                alert('Błąd podczas zmiany stanu zaworu');
             }
         });
-        
-        row.toggle(show);
-    });
-}
-
-function getStatusBadgeClass(status) {
-    switch(status) {
-        case 'aktywny': return 'success';
-        case 'nieaktywny': return 'secondary';
-        case 'konserwacja': return 'warning';
-        default: return 'light';
     }
-}
-
-function showAlert(message, type) {
-    let alertHtml = `
-        <div class="alert alert-${type} alert-dismissible fade show" role="alert">
-            ${message}
-            <button type="button" class="close" data-dismiss="alert">
-                <span aria-hidden="true">&times;</span>
-            </button>
-        </div>
-    `;
-    $('#alertContainer').html(alertHtml);
-    
-    // Auto-hide after 5 seconds
-    setTimeout(function() {
-        $('.alert').alert('close');
-    }, 5000);
 }
 </script>
 {% endblock %}
