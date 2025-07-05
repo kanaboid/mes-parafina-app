@@ -34,7 +34,7 @@ CREATE TABLE `alarmy` (
   `czas_zakonczenia` datetime DEFAULT NULL,
   `komentarz` text COLLATE utf8mb4_unicode_ci,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=287 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=291 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -61,7 +61,7 @@ CREATE TABLE `cykle_filtracyjne` (
   KEY `idx_partia_cykl` (`id_partii`,`numer_cyklu`),
   KEY `idx_filtr_czas` (`id_filtra`,`czas_rozpoczecia`),
   CONSTRAINT `cykle_filtracyjne_ibfk_1` FOREIGN KEY (`id_partii`) REFERENCES `partie_surowca` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Historia wszystkich cykli filtracyjnych dla każdej partii';
+) ENGINE=InnoDB AUTO_INCREMENT=14 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Historia wszystkich cykli filtracyjnych dla każdej partii';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -80,7 +80,7 @@ CREATE TABLE `historia_pomiarow` (
   PRIMARY KEY (`id`),
   KEY `idx_historia_sprzet_czas` (`id_sprzetu`,`czas_pomiaru`),
   CONSTRAINT `historia_pomiarow_ibfk_1` FOREIGN KEY (`id_sprzetu`) REFERENCES `sprzet` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=23081 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=38270 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -127,7 +127,7 @@ CREATE TABLE `operacje_log` (
   CONSTRAINT `operacje_log_ibfk_1` FOREIGN KEY (`id_partii_surowca`) REFERENCES `partie_surowca` (`id`) ON DELETE SET NULL,
   CONSTRAINT `operacje_log_ibfk_2` FOREIGN KEY (`id_sprzetu_zrodlowego`) REFERENCES `sprzet` (`id`) ON DELETE SET NULL,
   CONSTRAINT `operacje_log_ibfk_3` FOREIGN KEY (`id_sprzetu_docelowego`) REFERENCES `sprzet` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=41 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Log wszystkich zdarzeń i operacji w procesie';
+) ENGINE=InnoDB AUTO_INCREMENT=48 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Log wszystkich zdarzeń i operacji w procesie';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -145,7 +145,94 @@ CREATE TABLE `operator_temperatures` (
   PRIMARY KEY (`id`),
   KEY `id_sprzetu` (`id_sprzetu`),
   CONSTRAINT `operator_temperatures_ibfk_1` FOREIGN KEY (`id_sprzetu`) REFERENCES `sprzet` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=139 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=143 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `partie_historia`
+--
+
+DROP TABLE IF EXISTS `partie_historia`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `partie_historia` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `id_partii_surowca` int NOT NULL,
+  `typ_operacji` enum('UTWORZENIE','TRANSFER','FILTRACJA','MIESZANIE','DZIELENIE','ZMIANA_STANU','POBOR_PROBKI','ZATWIERDZENIE') COLLATE utf8mb4_unicode_ci NOT NULL,
+  `data_operacji` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `operator` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `lokalizacja_przed` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `lokalizacja_po` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `waga_przed` decimal(10,3) DEFAULT NULL,
+  `waga_po` decimal(10,3) DEFAULT NULL,
+  `parametry_operacji` json DEFAULT NULL,
+  `opis_operacji` text COLLATE utf8mb4_unicode_ci,
+  `id_operacji_log` int DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_partia` (`id_partii_surowca`),
+  KEY `idx_typ_operacji` (`typ_operacji`),
+  KEY `idx_data_operacji` (`data_operacji`),
+  KEY `id_operacji_log` (`id_operacji_log`),
+  CONSTRAINT `partie_historia_ibfk_1` FOREIGN KEY (`id_partii_surowca`) REFERENCES `partie_surowca` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `partie_historia_ibfk_2` FOREIGN KEY (`id_operacji_log`) REFERENCES `operacje_log` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `partie_powiazania`
+--
+
+DROP TABLE IF EXISTS `partie_powiazania`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `partie_powiazania` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `partia_zrodlowa_id` int NOT NULL,
+  `partia_docelowa_id` int NOT NULL,
+  `typ_powiazania` enum('DZIELENIE','LACZENIE','TRANSFORMACJA') COLLATE utf8mb4_unicode_ci NOT NULL,
+  `procent_udzialu` decimal(5,2) DEFAULT NULL,
+  `data_powiazania` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `id_operacji_log` int DEFAULT NULL,
+  `uwagi` text COLLATE utf8mb4_unicode_ci,
+  PRIMARY KEY (`id`),
+  KEY `idx_partia_zrodlowa` (`partia_zrodlowa_id`),
+  KEY `idx_partia_docelowa` (`partia_docelowa_id`),
+  KEY `idx_typ_powiazania` (`typ_powiazania`),
+  KEY `id_operacji_log` (`id_operacji_log`),
+  CONSTRAINT `partie_powiazania_ibfk_1` FOREIGN KEY (`partia_zrodlowa_id`) REFERENCES `partie_surowca` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `partie_powiazania_ibfk_2` FOREIGN KEY (`partia_docelowa_id`) REFERENCES `partie_surowca` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `partie_powiazania_ibfk_3` FOREIGN KEY (`id_operacji_log`) REFERENCES `operacje_log` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `partie_probki`
+--
+
+DROP TABLE IF EXISTS `partie_probki`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `partie_probki` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `id_partii_surowca` int NOT NULL,
+  `numer_probki` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `data_pobrania` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `pobrana_przez` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `lokalizacja_pobrania` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `typ_probki` enum('RUTYNOWA','KONTROLNA','REKLAMACYJNA','WALIDACYJNA') COLLATE utf8mb4_unicode_ci DEFAULT 'RUTYNOWA',
+  `status_probki` enum('POBRANA','W_ANALIZIE','ZATWIERDZONA','ODRZUCONA') COLLATE utf8mb4_unicode_ci DEFAULT 'POBRANA',
+  `wyniki_analizy` json DEFAULT NULL,
+  `data_analizy` timestamp NULL DEFAULT NULL,
+  `analizowana_przez` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `uwagi` text COLLATE utf8mb4_unicode_ci,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `numer_probki` (`numer_probki`),
+  KEY `idx_partia` (`id_partii_surowca`),
+  KEY `idx_numer_probki` (`numer_probki`),
+  KEY `idx_status` (`status_probki`),
+  KEY `idx_data_pobrania` (`data_pobrania`),
+  CONSTRAINT `partie_probki_ibfk_1` FOREIGN KEY (`id_partii_surowca`) REFERENCES `partie_surowca` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -194,12 +281,24 @@ CREATE TABLE `partie_surowca` (
   `reaktor_docelowy` varchar(10) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `ilosc_cykli_filtracyjnych` int DEFAULT '0',
   `historia_operacji` json DEFAULT NULL,
+  `partia_rodzic_id` int DEFAULT NULL,
+  `typ_transformacji` enum('NOWA','TRANSFER','FILTRACJA','MIESZANIE','DZIELENIE') COLLATE utf8mb4_unicode_ci DEFAULT 'NOWA',
+  `etap_procesu` enum('SUROWA','W_PROCESIE','FILTROWANA','GOTOWA','ZATWIERDZONA','ODRZUCONA') COLLATE utf8mb4_unicode_ci DEFAULT 'SUROWA',
+  `pochodzenie_opis` text COLLATE utf8mb4_unicode_ci,
+  `data_ostatniej_modyfikacji` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `utworzona_przez` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `certyfikat_jakosci` text COLLATE utf8mb4_unicode_ci,
+  `uwagi_operatora` text COLLATE utf8mb4_unicode_ci,
   PRIMARY KEY (`id`),
   UNIQUE KEY `unikalny_kod` (`unikalny_kod`),
   UNIQUE KEY `nazwa_partii` (`nazwa_partii`),
   KEY `id_sprzetu` (`id_sprzetu`),
+  KEY `idx_partia_rodzic` (`partia_rodzic_id`),
+  KEY `idx_typ_transformacji` (`typ_transformacji`),
+  KEY `idx_etap_procesu` (`etap_procesu`),
+  CONSTRAINT `fk_partia_rodzic` FOREIGN KEY (`partia_rodzic_id`) REFERENCES `partie_surowca` (`id`) ON DELETE SET NULL,
   CONSTRAINT `partie_surowca_ibfk_1` FOREIGN KEY (`id_sprzetu`) REFERENCES `sprzet` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Każdy wiersz to unikalna partia produkcyjna surowca';
+) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Każdy wiersz to unikalna partia produkcyjna surowca';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -321,6 +420,22 @@ CREATE TABLE `statusy` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `typy_surowca`
+--
+
+DROP TABLE IF EXISTS `typy_surowca`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `typy_surowca` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `nazwa` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `opis` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `nazwa` (`nazwa`)
+) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Słownik typów surowca';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `wezly_rurociagu`
 --
 
@@ -368,4 +483,4 @@ CREATE TABLE `zawory` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2025-07-05  2:07:20
+-- Dump completed on 2025-07-05 21:58:59
