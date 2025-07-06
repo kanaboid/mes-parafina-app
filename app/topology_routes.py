@@ -61,11 +61,16 @@ def pathfinder_view():
         """)
         punkty = cursor.fetchall()
         
+        # Pobierz zawory do selecta
+        cursor.execute("SELECT id, nazwa_zaworu, stan FROM zawory ORDER BY nazwa_zaworu")
+        zawory = cursor.fetchall()
+        
         # Pobierz historię testów
         history = pathfinder_tester.get_test_history(limit=20)
         
         return render_template('topology/pathfinder.html', 
                              punkty=punkty, 
+                             zawory=zawory,
                              test_history=history.get('test_history', []))
     finally:
         cursor.close()

@@ -209,14 +209,71 @@
     </div>
 </div>
 
+<!-- Załaduj jQuery najpierw -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
 <!-- Dodaj vis.js library -->
-<script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+<script type="text/javascript" src="https://cdn.jsdelivr.net/npm/vis-network@latest/standalone/umd/vis-network.min.js"></script>
+<script>
+// Fallback dla vis.js
+window.addEventListener('load', function() {
+    if (typeof vis === 'undefined') {
+        console.error('vis.js nie załadował się z CDN, próbuję alternatywnego CDN...');
+        const script = document.createElement('script');
+        script.src = 'https://unpkg.com/vis-network/standalone/umd/vis-network.min.js';
+        script.onload = function() {
+            console.log('vis.js załadowany z alternatywnego CDN');
+            // Spróbuj ponownie załadować dane po załadowaniu biblioteki
+            if (typeof loadTopologyData === 'function') {
+                loadTopologyData();
+            }
+        };
+        script.onerror = function() {
+            console.error('Nie udało się załadować vis.js z żadnego CDN');
+            alert('Błąd: Nie można załadować biblioteki wizualizacji. Sprawdź połączenie internetowe.');
+        };
+        document.head.appendChild(script);
+    } else {
+        console.log('vis.js załadowany pomyślnie');
+    }
+});
+</script>
 
 <script>
+// Test czy jQuery jest dostępne
+console.log('Sprawdzanie jQuery...');
+if (typeof jQuery !== 'undefined') {
+    console.log('jQuery dostępne jako jQuery');
+} else {
+    console.log('jQuery NIEDOSTĘPNE jako jQuery');
+}
+
+if (typeof $ !== 'undefined') {
+    console.log('jQuery dostępne jako $');
+} else {
+    console.log('jQuery NIEDOSTĘPNE jako $');
+}
+
+// Zabezpieczenie - jeśli $ nie jest dostępne, spróbuj użyć jQuery
+if (typeof $ === 'undefined' && typeof jQuery !== 'undefined') {
+    window.$ = jQuery;
+    console.log('Ustawiono $ = jQuery');
+}
+
 let network = null;
 let topologyData = null;
 
 $(document).ready(function() {
+    console.log('Document ready, jQuery działa:', typeof $);
+    console.log('Testowanie dostępności vis.js:', typeof vis);
+    
+    // Sprawdź czy jQuery jest dostępne
+    if (typeof $ === 'undefined') {
+        console.error('jQuery nie jest dostępne!');
+        alert('Błąd: jQuery nie załadował się poprawnie');
+        return;
+    }
+    
     // Inicjalizacja
     loadTopologyData();
     
@@ -224,20 +281,40 @@ $(document).ready(function() {
     $('#visualizationType').on('change', updateVisualization);
     $('#layoutType').on('change', updateNetworkLayout);
     $('#showLabels, #showValveStates').on('change', updateNetworkOptions);
+    
+    // Test po 2 sekundach
+    setTimeout(function() {
+        console.log('Test po 2 sekundach - vis.js:', typeof vis);
+        if (typeof vis !== 'undefined') {
+            console.log('vis.js jest dostępne');
+        } else {
+            console.error('vis.js NIE jest dostępne');
+            // Spróbuj ręcznie załadować prostą wizualizację
+            showSimpleVisualization();
+        }
+    }, 2000);
 });
 
 function loadTopologyData() {
     $('#loadingIndicator').show();
     
+    console.log('Rozpoczynam ładowanie danych topologii...');
+    
     $.get('/topology/api/visualization/graph', function(data) {
+        console.log('Otrzymane dane:', data);
         if (data.success) {
             topologyData = data.data;
+            console.log('Dane topologii załadowane:', topologyData);
             updateVisualization();
             updateStatistics();
             $('#lastUpdated').text(`Ostatnia aktualizacja: ${new Date().toLocaleString()}`);
         } else {
+            console.error('Błąd API:', data);
             alert('Błąd podczas ładowania danych topologii');
         }
+    }).fail(function(xhr, status, error) {
+        console.error('Błąd AJAX:', status, error);
+        alert('Błąd połączenia z serwerem');
     }).always(function() {
         $('#loadingIndicator').hide();
     });
@@ -263,9 +340,24 @@ function updateVisualization() {
 }
 
 function showInteractiveGraph() {
+    console.log('Pokazuję interaktywny graf...');
     $('#networkContainer').show();
     
-    if (!topologyData) return;
+    if (!topologyData) {
+        console.error('Brak danych topologii!');
+        return;
+    }
+    
+    console.log('Przygotowuję dane dla vis.js...');
+    console.log('Węzły:', topologyData.nodes.length);
+    console.log('Krawędzie:', topologyData.edges.length);
+    
+    // Sprawdź czy vis.js jest dostępne
+    if (typeof vis === 'undefined') {
+        console.error('Biblioteka vis.js nie jest załadowana!');
+        alert('Błąd: biblioteka vis.js nie jest dostępna. Sprawdź połączenie internetowe.');
+        return;
+    }
     
     // Przygotuj dane dla vis.js
     const nodes = new vis.DataSet(topologyData.nodes.map(node => ({
@@ -289,6 +381,7 @@ function showInteractiveGraph() {
     })));
     
     const data = { nodes: nodes, edges: edges };
+    console.log('Dane vis.js przygotowane:', data);
     
     const options = {
         layout: getLayoutOptions(),
@@ -311,26 +404,34 @@ function showInteractiveGraph() {
     
     // Utwórz sieć
     const container = document.getElementById('networkContainer');
-    network = new vis.Network(container, data, options);
+    console.log('Kontener:', container);
     
-    // Obsługa wydarzeń
-    network.on('click', function(params) {
-        if (params.nodes.length > 0) {
-            showNodeDetails(params.nodes[0]);
-        } else if (params.edges.length > 0) {
-            showEdgeDetails(params.edges[0]);
-        } else {
-            hideSelection();
-        }
-    });
-    
-    network.on('hoverNode', function(params) {
-        container.style.cursor = 'pointer';
-    });
-    
-    network.on('blurNode', function(params) {
-        container.style.cursor = 'default';
-    });
+    try {
+        network = new vis.Network(container, data, options);
+        console.log('Sieć vis.js utworzona pomyślnie');
+        
+        // Obsługa wydarzeń
+        network.on('click', function(params) {
+            if (params.nodes.length > 0) {
+                showNodeDetails(params.nodes[0]);
+            } else if (params.edges.length > 0) {
+                showEdgeDetails(params.edges[0]);
+            } else {
+                hideSelection();
+            }
+        });
+        
+        network.on('hoverNode', function(params) {
+            container.style.cursor = 'pointer';
+        });
+        
+        network.on('blurNode', function(params) {
+            container.style.cursor = 'default';
+        });
+    } catch (error) {
+        console.error('Błąd podczas tworzenia sieci vis.js:', error);
+        alert('Błąd podczas tworzenia wizualizacji: ' + error.message);
+    }
 }
 
 function showTextVisualization() {
@@ -543,6 +644,49 @@ function zoomToFit() {
     }
 }
 
+function showSimpleVisualization() {
+    console.log('Pokazuję prostą wizualizację bez vis.js...');
+    $('#networkContainer').show();
+    
+    if (!topologyData) {
+        console.log('Brak danych topologii dla prostej wizualizacji');
+        return;
+    }
+    
+    let html = '<div style="padding: 20px;">';
+    html += '<h4>Mapa Topologii Rurociągu</h4>';
+    html += '<p><em>Uwaga: Interaktywna wizualizacja niedostępna. Ładowanie CDN vis.js może być zablokowane.</em></p>';
+    
+    html += '<h5>Sprzęt:</h5>';
+    html += '<ul>';
+    topologyData.nodes.filter(n => n.category === 'equipment').forEach(node => {
+        const statusText = node.status ? ` (${node.status})` : '';
+        html += `<li><strong>${node.name}</strong> - ${node.type}${statusText}</li>`;
+    });
+    html += '</ul>';
+    
+    html += '<h5>Węzły:</h5>';
+    html += '<ul>';
+    topologyData.nodes.filter(n => n.category === 'junction').forEach(node => {
+        html += `<li><strong>${node.name}</strong></li>`;
+    });
+    html += '</ul>';
+    
+    html += '<h5>Segmenty:</h5>';
+    html += '<ul>';
+    topologyData.edges.forEach(edge => {
+        const sourceNode = topologyData.nodes.find(n => n.id === edge.source);
+        const targetNode = topologyData.nodes.find(n => n.id === edge.target);
+        const status = edge.valve_state === 'OTWARTY' ? '🟢' : '🔴';
+        html += `<li>${status} <strong>${edge.name}</strong>: ${sourceNode?.name} → ${targetNode?.name} (${edge.valve_state})</li>`;
+    });
+    html += '</ul>';
+    
+    html += '</div>';
+    
+    $('#networkContainer').html(html);
+}
+
 function exportVisualization() {
     if (!topologyData) return;
     
@@ -570,6 +714,8 @@ function exportVisualization() {
 #networkContainer {
     border: 1px solid #dee2e6;
     border-radius: 0.25rem;
+    min-height: 500px;
+    background-color: #ffffff;
 }
 
 .legend-item {

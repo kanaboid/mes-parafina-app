@@ -114,7 +114,11 @@
                         <div class="input-group mb-2">
                             <select class="form-control" id="valveSelect">
                                 <option value="">Wybierz zawór...</option>
-                                <!-- Będzie wypełnione dynamicznie -->
+                                {% for zawor in zawory %}
+                                <option value="{{ zawor.nazwa_zaworu }}" data-current-state="{{ zawor.stan }}">
+                                    {{ zawor.nazwa_zaworu }} ({{ zawor.stan }})
+                                </option>
+                                {% endfor %}
                             </select>
                             <select class="form-control" id="newStateSelect">
                                 <option value="OTWARTY">OTWARTY</option>
@@ -264,15 +268,13 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">Szczegóły Testu</h5>
-                <button type="button" class="close" data-dismiss="modal">
-                    <span>&times;</span>
-                </button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body" id="testDetailsContent">
                 <!-- Treść zostanie załadowana dynamicznie -->
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Zamknij</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Zamknij</button>
             </div>
         </div>
     </div>
@@ -282,7 +284,14 @@
 let valveTests = [];
 
 $(document).ready(function() {
-    loadValveOptions();
+    console.log('PathFinder page loaded, jQuery available:', typeof $);
+    console.log('Initial valve options count:', $('#valveSelect option').length);
+    
+    // Sprawdź czy zawory są załadowane z backendu
+    if ($('#valveSelect option').length <= 1) {
+        console.log('No valves loaded from backend, loading via AJAX...');
+        loadValveOptions();
+    }
     
     // Obsługa przełączania niestandardowych zaworów
     $('#useCustomValves').on('change', function() {
@@ -296,40 +305,68 @@ $(document).ready(function() {
 });
 
 function loadValveOptions() {
-    $.get('/topology/api/zawory', function(data) {
-        if (data.success) {
-            let options = '<option value="">Wybierz zawór...</option>';
-            data.data.forEach(valve => {
-                options += `<option value="${valve.nazwa_zaworu}" data-current-state="${valve.stan}">
-                    ${valve.nazwa_zaworu} (${valve.stan})
-                </option>`;
-            });
-            $('#valveSelect').html(options);
+    console.log('Loading valve options...');
+    console.log('valveSelect element exists:', $('#valveSelect').length > 0);
+    
+    $.ajax({
+        url: '/topology/api/zawory',
+        type: 'GET',
+        success: function(data) {
+            console.log('Valve data received:', data);
+            if (data.success) {
+                let options = '<option value="">Wybierz zawór...</option>';
+                data.data.forEach(valve => {
+                    options += `<option value="${valve.nazwa_zaworu}" data-current-state="${valve.stan}">
+                        ${valve.nazwa_zaworu} (${valve.stan})
+                    </option>`;
+                });
+                console.log('Setting HTML for valveSelect:', options);
+                $('#valveSelect').html(options);
+                console.log('Valve options loaded successfully, count:', data.data.length);
+                console.log('valveSelect options after update:', $('#valveSelect option').length);
+            } else {
+                console.error('Failed to load valve options:', data.message);
+            }
+        },
+        error: function(xhr, status, error) {
+            console.error('Error loading valve options:', status, error, xhr.responseText);
         }
     });
 }
 
 function loadCustomValveStates() {
-    $.get('/topology/api/zawory', function(data) {
-        if (data.success) {
-            let content = '';
-            data.data.forEach(valve => {
-                content += `
-                    <div class="form-check form-check-inline mr-3">
-                        <input class="form-check-input" type="checkbox" 
-                               id="valve_${valve.id}" value="${valve.nazwa_zaworu}"
-                               data-current-state="${valve.stan}">
-                        <label class="form-check-label" for="valve_${valve.id}">
-                            ${valve.nazwa_zaworu}
-                        </label>
-                        <select class="form-control form-control-sm mt-1" id="state_${valve.id}">
-                            <option value="OTWARTY" ${valve.stan === 'OTWARTY' ? 'selected' : ''}>OTWARTY</option>
-                            <option value="ZAMKNIETY" ${valve.stan === 'ZAMKNIETY' ? 'selected' : ''}>ZAMKNIĘTY</option>
-                        </select>
-                    </div>
-                `;
-            });
-            $('#valveStatesContainer').html(content);
+    console.log('Loading custom valve states...');
+    $.ajax({
+        url: '/topology/api/zawory',
+        type: 'GET',
+        success: function(data) {
+            console.log('Custom valve states data received:', data);
+            if (data.success) {
+                let content = '';
+                data.data.forEach(valve => {
+                    content += `
+                        <div class="form-check form-check-inline mr-3">
+                            <input class="form-check-input" type="checkbox" 
+                                   id="valve_${valve.id}" value="${valve.nazwa_zaworu}"
+                                   data-current-state="${valve.stan}">
+                            <label class="form-check-label" for="valve_${valve.id}">
+                                ${valve.nazwa_zaworu}
+                            </label>
+                            <select class="form-control form-control-sm mt-1" id="state_${valve.id}">
+                                <option value="OTWARTY" ${valve.stan === 'OTWARTY' ? 'selected' : ''}>OTWARTY</option>
+                                <option value="ZAMKNIETY" ${valve.stan === 'ZAMKNIETY' ? 'selected' : ''}>ZAMKNIĘTY</option>
+                            </select>
+                        </div>
+                    `;
+                });
+                $('#valveStatesContainer').html(content);
+                console.log('Custom valve states loaded successfully, count:', data.data.length);
+            } else {
+                console.error('Failed to load custom valve states:', data.message);
+            }
+        },
+        error: function(xhr, status, error) {
+            console.error('Error loading custom valve states:', status, error, xhr.responseText);
         }
     });
 }
@@ -369,14 +406,22 @@ function testConnection() {
     
     showConnectionResult('Testowanie połączenia...', 'info');
     
-    $.post('/topology/api/pathfinder/test-connection', testData, function(response) {
-        if (response.success) {
-            displayConnectionResult(response.data, response.execution_time_ms);
-        } else {
-            showConnectionResult('Błąd: ' + response.message, 'danger');
+    $.ajax({
+        url: '/topology/api/pathfinder/test-connection',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify(testData),
+        success: function(response) {
+            if (response.success) {
+                displayConnectionResult(response.data, response.execution_time_ms);
+            } else {
+                showConnectionResult('Błąd: ' + response.message, 'danger');
+            }
+        },
+        error: function(xhr, status, error) {
+            console.error('PathFinder API Error:', status, error, xhr.responseText);
+            showConnectionResult('Błąd podczas komunikacji z serwerem: ' + error, 'danger');
         }
-    }).fail(function() {
-        showConnectionResult('Błąd podczas komunikacji z serwerem', 'danger');
     });
 }
 
@@ -396,18 +441,26 @@ function findAllPaths() {
     
     showConnectionResult('Szukanie wszystkich ścieżek...', 'info');
     
-    $.post('/topology/api/pathfinder/find-paths', {
-        start_point: startPoint,
-        end_point: endPoint,
-        max_paths: 5
-    }, function(response) {
-        if (response.success) {
-            displayAllPathsResult(response.data, response.execution_time_ms);
-        } else {
-            showConnectionResult('Błąd: ' + response.message, 'danger');
+    $.ajax({
+        url: '/topology/api/pathfinder/find-paths',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({
+            start_point: startPoint,
+            end_point: endPoint,
+            max_paths: 5
+        }),
+        success: function(response) {
+            if (response.success) {
+                displayAllPathsResult(response.data, response.execution_time_ms);
+            } else {
+                showConnectionResult('Błąd: ' + response.message, 'danger');
+            }
+        },
+        error: function(xhr, status, error) {
+            console.error('PathFinder Find Paths API Error:', status, error, xhr.responseText);
+            showConnectionResult('Błąd podczas komunikacji z serwerem: ' + error, 'danger');
         }
-    }).fail(function() {
-        showConnectionResult('Błąd podczas komunikacji z serwerem', 'danger');
     });
 }
 
@@ -497,11 +550,16 @@ function showConnectionResult(content, alertType) {
 }
 
 function addValveTest() {
+    console.log('Adding valve test...');
     const valveName = $('#valveSelect').val();
     const newState = $('#newStateSelect').val();
     
+    console.log('Selected valve:', valveName, 'New state:', newState);
+    console.log('Available valve options:', $('#valveSelect option').length);
+    
     if (!valveName) {
         alert('Wybierz zawór');
+        console.log('No valve selected');
         return;
     }
     
@@ -520,6 +578,7 @@ function addValveTest() {
         ]
     });
     
+    console.log('Valve test added successfully:', valveTests);
     updateValveTestsList();
     
     // Wyczyść formularz
@@ -569,16 +628,24 @@ function runValveSimulation() {
     
     showSimulationResult('Uruchamianie symulacji...', 'info');
     
-    $.post('/topology/api/pathfinder/simulate-valves', {
-        valve_changes: valveTests
-    }, function(response) {
-        if (response.success) {
-            displaySimulationResult(response.data, response.execution_time_ms);
-        } else {
-            showSimulationResult('Błąd: ' + response.message, 'danger');
+    $.ajax({
+        url: '/topology/api/pathfinder/simulate-valves',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({
+            valve_changes: valveTests
+        }),
+        success: function(response) {
+            if (response.success) {
+                displaySimulationResult(response.data, response.execution_time_ms);
+            } else {
+                showSimulationResult('Błąd: ' + response.message, 'danger');
+            }
+        },
+        error: function(xhr, status, error) {
+            console.error('PathFinder Simulation API Error:', status, error, xhr.responseText);
+            showSimulationResult('Błąd podczas komunikacji z serwerem: ' + error, 'danger');
         }
-    }).fail(function() {
-        showSimulationResult('Błąd podczas komunikacji z serwerem', 'danger');
     });
 }
 
@@ -639,14 +706,20 @@ function showSimulationResult(content, alertType) {
 function analyzeCriticalValves() {
     showCriticalValvesResult('Analizowanie krytycznych zaworów...', 'info');
     
-    $.get('/topology/api/pathfinder/critical-valves', function(response) {
-        if (response.success) {
-            displayCriticalValvesResult(response.data, response.execution_time_ms);
-        } else {
-            showCriticalValvesResult('Błąd: ' + response.message, 'danger');
+    $.ajax({
+        url: '/topology/api/pathfinder/critical-valves',
+        type: 'GET',
+        success: function(response) {
+            if (response.success) {
+                displayCriticalValvesResult(response.data, response.execution_time_ms);
+            } else {
+                showCriticalValvesResult('Błąd: ' + response.message, 'danger');
+            }
+        },
+        error: function(xhr, status, error) {
+            console.error('PathFinder Critical Valves API Error:', status, error, xhr.responseText);
+            showCriticalValvesResult('Błąd podczas komunikacji z serwerem: ' + error, 'danger');
         }
-    }).fail(function() {
-        showCriticalValvesResult('Błąd podczas komunikacji z serwerem', 'danger');
     });
 }
 
@@ -724,7 +797,8 @@ function refreshTestData() {
 function viewTestDetails(testId) {
     // Implementacja szczegółów testu
     $('#testDetailsContent').html('<div class="alert alert-info">Szczegóły testu będą dostępne w przyszłej wersji</div>');
-    $('#testDetailsModal').modal('show');
+    var modal = new bootstrap.Modal(document.getElementById('testDetailsModal'));
+    modal.show();
 }
 </script>
 {% endblock %}

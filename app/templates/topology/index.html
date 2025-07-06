@@ -186,15 +186,13 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="quickActionTitle">Wynik Akcji</h5>
-                <button type="button" class="close" data-dismiss="modal">
-                    <span>&times;</span>
-                </button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body" id="quickActionContent">
                 <!-- Treść zostanie załadowana dynamicznie -->
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Zamknij</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Zamknij</button>
             </div>
         </div>
     </div>
@@ -225,37 +223,77 @@
     background-color: #f1f3f4;
 }
 </style>
+{% endblock %}
 
+{% block scripts %}
 <script>
 $(document).ready(function() {
+    console.log('Topology index page loaded, jQuery available:', typeof $);
+    console.log('Loading topology statistics...');
     loadTopologyStats();
 });
 
 function loadTopologyStats() {
+    console.log('Loading topology statistics...');
+    
     // Załaduj statystyki zaworów
-    $.get('/topology/api/zawory', function(data) {
-        if (data.success) {
-            $('#zawory-count').text(data.count);
-            $('#total-zawory').text(data.count);
-            
-            const openValves = data.data.filter(z => z.stan === 'OTWARTY').length;
-            $('#open-zawory').text(openValves);
+    $.ajax({
+        url: '/topology/api/zawory',
+        type: 'GET',
+        success: function(data) {
+            console.log('Zawory data received:', data);
+            if (data.success) {
+                $('#total-zawory').text(data.count);
+                
+                const openValves = data.data.filter(z => z.stan === 'OTWARTY').length;
+                $('#open-zawory').text(openValves);
+                console.log('Zawory stats updated:', data.count, 'open:', openValves);
+            } else {
+                console.error('Failed to load zawory stats:', data.message);
+            }
+        },
+        error: function(xhr, status, error) {
+            console.error('Error loading zawory stats:', status, error);
+            $('#total-zawory').text('Błąd');
+            $('#open-zawory').text('Błąd');
         }
     });
     
     // Załaduj statystyki węzłów
-    $.get('/topology/api/wezly', function(data) {
-        if (data.success) {
-            $('#wezly-count').text(data.count);
-            $('#total-nodes').text(data.count);
+    $.ajax({
+        url: '/topology/api/wezly',
+        type: 'GET',
+        success: function(data) {
+            console.log('Wezly data received:', data);
+            if (data.success) {
+                $('#total-nodes').text(data.count);
+                console.log('Wezly stats updated:', data.count);
+            } else {
+                console.error('Failed to load wezly stats:', data.message);
+            }
+        },
+        error: function(xhr, status, error) {
+            console.error('Error loading wezly stats:', status, error);
+            $('#total-nodes').text('Błąd');
         }
     });
     
     // Załaduj statystyki segmentów
-    $.get('/topology/api/segmenty', function(data) {
-        if (data.success) {
-            $('#segmenty-count').text(data.count);
-            $('#total-segments').text(data.count);
+    $.ajax({
+        url: '/topology/api/segmenty',
+        type: 'GET',
+        success: function(data) {
+            console.log('Segmenty data received:', data);
+            if (data.success) {
+                $('#total-segments').text(data.count);
+                console.log('Segmenty stats updated:', data.count);
+            } else {
+                console.error('Failed to load segmenty stats:', data.message);
+            }
+        },
+        error: function(xhr, status, error) {
+            console.error('Error loading segmenty stats:', status, error);
+            $('#total-segments').text('Błąd');
         }
     });
 }
@@ -404,13 +442,13 @@ function showSystemStatus() {
     content += '<h6>Status Komponentów:</h6>';
     content += '<ul class="list-group">';
     content += '<li class="list-group-item d-flex justify-content-between align-items-center">';
-    content += 'TopologyManager <span class="badge badge-success">OK</span>';
+    content += 'TopologyManager <span class="badge bg-success">OK</span>';
     content += '</li>';
     content += '<li class="list-group-item d-flex justify-content-between align-items-center">';
-    content += 'PathFinder <span class="badge badge-success">OK</span>';
+    content += 'PathFinder <span class="badge bg-success">OK</span>';
     content += '</li>';
     content += '<li class="list-group-item d-flex justify-content-between align-items-center">';
-    content += 'Baza Danych <span class="badge badge-success">OK</span>';
+    content += 'Baza Danych <span class="badge bg-success">OK</span>';
     content += '</li>';
     content += '</ul>';
     content += '</div>';
@@ -426,7 +464,8 @@ function showSystemStatus() {
 function showQuickActionResult(title, content) {
     $('#quickActionTitle').text(title);
     $('#quickActionContent').html(content);
-    $('#quickActionModal').modal('show');
+    var modal = new bootstrap.Modal(document.getElementById('quickActionModal'));
+    modal.show();
 }
 
 function showError(message) {
