@@ -1512,7 +1512,6 @@ def get_beczki_brudne():
 @bp.route('/api/sprzet/reaktory-puste', methods=['GET'])
 def get_reaktory_puste():
     """Zwraca listę reaktorów w stanie 'Pusty' dostępnych do tankowania"""
-   
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     
@@ -1890,8 +1889,3 @@ def transfer_reaktorow():
             if 'cursor' in locals() and cursor: cursor.close()
             if 'write_cursor' in locals() and write_cursor: write_cursor.close()
             conn.close()
-
-@bp.route('/test-scada')
-def test_scada():
-    """Test page for SCADA panel"""
-    return render_template('test_scada.html')
