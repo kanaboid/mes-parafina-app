@@ -181,3 +181,8 @@ Mamy teraz solidny fundament. Wykonaj powyższe kroki, a gdy Twoja baza danych b
 Napiszemy pierwszy, prosty endpoint API, np. `/api/sprzet/R1`, który będzie wykonywał podobne zapytanie jak powyżej i zwracał dane w formacie JSON.
 
 Daj znać, jak poszło
+
+
+
+
+
