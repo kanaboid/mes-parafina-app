@@ -274,8 +274,7 @@ function showAddValveModal() {
     $('#valveModalTitle').text('Dodaj Zawór');
     $('#valveForm')[0].reset();
     $('#valveId').val('');
-    const modal = new bootstrap.Modal(document.getElementById('valveModal'));
-    modal.show();
+    showModalSafely('valveModal');
 }
 
 function editValve(id) {
@@ -286,8 +285,7 @@ function editValve(id) {
             $('#valveId').val(valve.id);
             $('#valveName').val(valve.nazwa_zaworu);
             $('#valveState').val(valve.stan);
-            const modal = new bootstrap.Modal(document.getElementById('valveModal'));
-            modal.show();
+            showModalSafely('valveModal');
         } else {
             alert('Błąd podczas pobierania danych zaworu');
         }
@@ -370,8 +368,7 @@ function viewValveDetails(id) {
             `;
             
             $('#valveDetailsContent').html(content);
-            const modal = new bootstrap.Modal(document.getElementById('valveDetailsModal'));
-            modal.show();
+            showModalSafely('valveDetailsModal');
         } else {
             alert('Błąd podczas pobierania szczegółów zaworu');
         }

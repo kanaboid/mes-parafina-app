@@ -128,3 +128,7 @@ Doskonale! Rozumiem zadanie. Zanim zacznę implementację, chciałbym doprecyzow
 - nowe funkcje mają być dostępne z głównego menu nawigacji
 - na razie nie potrzebuje uprawnień/ról użytkowników dla zarządzania topologią
 - ma być integracja z systemem alarmów przy problemach z topologią
+
+
+
+SEGM_W_R4_R5_W_R5_R6	-	W_R4_R5	W_R5_R6

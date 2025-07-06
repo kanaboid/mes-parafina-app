@@ -55,6 +55,73 @@
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Uniwersalne zarządzanie modalami -->
+    <script>
+    // Uniwersalna funkcja do zarządzania modalami - naprawia problem z przyciemnionym ekranem
+    function fixModalBackdrop() {
+        // Usuń wszystkie backdrops
+        document.querySelectorAll('.modal-backdrop').forEach(backdrop => backdrop.remove());
+        // Przywróć normalny stan body
+        document.body.classList.remove('modal-open');
+        document.body.style.paddingRight = '';
+        document.body.style.overflow = '';
+    }
+    
+    function showModalSafely(modalId, options = {}) {
+        const modalElement = document.getElementById(modalId);
+        if (!modalElement) return null;
+        
+        const existingModal = bootstrap.Modal.getInstance(modalElement);
+        
+        if (existingModal) {
+            existingModal.show();
+            return existingModal;
+        } else {
+            const modal = new bootstrap.Modal(modalElement, {
+                backdrop: true,
+                keyboard: true,
+                focus: true,
+                ...options
+            });
+            modal.show();
+            return modal;
+        }
+    }
+    
+    function closeAllModals() {
+        document.querySelectorAll('.modal').forEach(modal => {
+            const modalInstance = bootstrap.Modal.getInstance(modal);
+            if (modalInstance) {
+                modalInstance.hide();
+            }
+        });
+        fixModalBackdrop();
+    }
+    
+    // Inicjalizacja globalnych event listenerów
+    document.addEventListener('DOMContentLoaded', function() {
+        // Event listener dla wszystkich modali
+        document.querySelectorAll('.modal').forEach(modal => {
+            modal.addEventListener('hidden.bs.modal', fixModalBackdrop);
+        });
+        
+        // Globalna obsługa ESC
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeAllModals();
+            }
+        });
+        
+        // Obsługa kliknięcia w backdrop
+        document.addEventListener('click', function(e) {
+            if (e.target.classList.contains('modal-backdrop')) {
+                closeAllModals();
+            }
+        });
+    });
+    </script>
+    
     {% block scripts %}{% endblock %}
 </body>
 </html>

@@ -690,28 +690,180 @@ def api_get_points():
 def api_get_sprzet_ports(sprzet_id):
     """API: Pobiera porty dla konkretnego sprzętu"""
     try:
+        porty = topology_manager.get_porty_dla_sprzetu(sprzet_id)
+        return jsonify({
+            'success': True,
+            'data': porty,
+            'count': len(porty)
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Błąd podczas pobierania portów sprzętu: {str(e)}'
+        }), 500
+
+# ================== API DIAGNOSTYCZNE ==================
+
+@topology_bp.route('/api/health-check', methods=['GET'])
+def api_health_check():
+    """API: Sprawdza stan zdrowia topologii i wykrywa problemy"""
+    try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         
-        cursor.execute("""
-            SELECT p.id, p.nazwa_portu as nazwa, p.typ_portu, p.kierunek
-            FROM porty_sprzetu p
-            WHERE p.id_sprzetu = %s
-            ORDER BY p.nazwa_portu
-        """, (sprzet_id,))
+        health_issues = []
+        warnings = []
         
-        ports = cursor.fetchall()
+        # Sprawdź zawory bez segmentów
+        cursor.execute("""
+            SELECT z.nazwa_zaworu 
+            FROM zawory z 
+            LEFT JOIN segmenty s ON z.id = s.id_zaworu 
+            WHERE s.id IS NULL
+        """)
+        orphaned_valves = cursor.fetchall()
+        if orphaned_valves:
+            warnings.append({
+                'type': 'orphaned_valves',
+                'message': f'Znaleziono {len(orphaned_valves)} zaworów bez segmentów',
+                'items': [v['nazwa_zaworu'] for v in orphaned_valves]
+            })
+        
+        # Sprawdź segmenty bez zaworów
+        cursor.execute("""
+            SELECT s.nazwa_segmentu 
+            FROM segmenty s 
+            LEFT JOIN zawory z ON s.id_zaworu = z.id 
+            WHERE z.id IS NULL
+        """)
+        segments_without_valves = cursor.fetchall()
+        if segments_without_valves:
+            health_issues.append({
+                'type': 'segments_without_valves',
+                'message': f'Znaleziono {len(segments_without_valves)} segmentów bez zaworów',
+                'items': [s['nazwa_segmentu'] for s in segments_without_valves]
+            })
+        
+        # Sprawdź węzły bez połączeń
+        cursor.execute("""
+            SELECT w.nazwa_wezla 
+            FROM wezly_rurociagu w 
+            LEFT JOIN segmenty s1 ON w.id = s1.id_wezla_startowego 
+            LEFT JOIN segmenty s2 ON w.id = s2.id_wezla_koncowego 
+            WHERE s1.id IS NULL AND s2.id IS NULL
+        """)
+        isolated_nodes = cursor.fetchall()
+        if isolated_nodes:
+            warnings.append({
+                'type': 'isolated_nodes',
+                'message': f'Znaleziono {len(isolated_nodes)} izolowanych węzłów',
+                'items': [n['nazwa_wezla'] for n in isolated_nodes]
+            })
+        
+        # Sprawdź sprzęt bez portów
+        cursor.execute("""
+            SELECT s.nazwa_unikalna 
+            FROM sprzet s 
+            LEFT JOIN porty_sprzetu p ON s.id = p.id_sprzetu 
+            WHERE p.id IS NULL
+        """)
+        equipment_without_ports = cursor.fetchall()
+        if equipment_without_ports:
+            warnings.append({
+                'type': 'equipment_without_ports',
+                'message': f'Znaleziono {len(equipment_without_ports)} sprzętów bez portów',
+                'items': [e['nazwa_unikalna'] for e in equipment_without_ports]
+            })
+        
+        # Oblicz ogólny stan zdrowia
+        total_issues = len(health_issues)
+        total_warnings = len(warnings)
+        
+        if total_issues > 0:
+            status = 'critical'
+            status_message = f'Krytyczne problemy w topologii: {total_issues}'
+        elif total_warnings > 0:
+            status = 'warning'
+            status_message = f'Ostrzeżenia w topologii: {total_warnings}'
+        else:
+            status = 'healthy'
+            status_message = 'Topologia w dobrym stanie'
         
         cursor.close()
         conn.close()
         
         return jsonify({
             'success': True,
-            'data': ports,
-            'count': len(ports)
+            'data': {
+                'status': status,
+                'message': status_message,
+                'issues': health_issues,
+                'warnings': warnings,
+                'summary': {
+                    'total_issues': total_issues,
+                    'total_warnings': total_warnings,
+                    'checked_at': datetime.now().isoformat()
+                }
+            }
         })
+        
     except Exception as e:
         return jsonify({
             'success': False,
-            'message': f'Błąd podczas pobierania portów sprzętu: {str(e)}'
+            'message': f'Błąd podczas sprawdzania stanu topologii: {str(e)}'
+        }), 500
+
+@topology_bp.route('/api/isolated-nodes', methods=['GET'])
+def api_isolated_nodes():
+    """API: Znajduje izolowane węzły w topologii"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        # Znajdź węzły bez połączeń
+        cursor.execute("""
+            SELECT w.id, w.nazwa_wezla, w.opis,
+                   COUNT(s1.id) + COUNT(s2.id) as connections_count
+            FROM wezly_rurociagu w 
+            LEFT JOIN segmenty s1 ON w.id = s1.id_wezla_startowego 
+            LEFT JOIN segmenty s2 ON w.id = s2.id_wezla_koncowego 
+            GROUP BY w.id, w.nazwa_wezla, w.opis
+            HAVING connections_count = 0
+            ORDER BY w.nazwa_wezla
+        """)
+        isolated_nodes = cursor.fetchall()
+        
+        # Znajdź węzły z tylko jednym połączeniem (martwe końce)
+        cursor.execute("""
+            SELECT w.id, w.nazwa_wezla, w.opis,
+                   COUNT(s1.id) + COUNT(s2.id) as connections_count
+            FROM wezly_rurociagu w 
+            LEFT JOIN segmenty s1 ON w.id = s1.id_wezla_startowego 
+            LEFT JOIN segmenty s2 ON w.id = s2.id_wezla_koncowego 
+            GROUP BY w.id, w.nazwa_wezla, w.opis
+            HAVING connections_count = 1
+            ORDER BY w.nazwa_wezla
+        """)
+        dead_end_nodes = cursor.fetchall()
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'isolated_nodes': isolated_nodes,
+                'dead_end_nodes': dead_end_nodes,
+                'summary': {
+                    'isolated_count': len(isolated_nodes),
+                    'dead_end_count': len(dead_end_nodes),
+                    'analyzed_at': datetime.now().isoformat()
+                }
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Błąd podczas analizy izolowanych węzłów: {str(e)}'
         }), 500

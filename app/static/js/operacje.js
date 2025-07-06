@@ -592,8 +592,7 @@ function pokazKomunikatTransferu(wynik) {
     komunikatTresc.innerHTML = html;
     
     // Pokaż modal
-    const modal = new bootstrap.Modal(modalElement);
-    modal.show();
+    showModalSafely('komunikatModal');
 }
 
 /**

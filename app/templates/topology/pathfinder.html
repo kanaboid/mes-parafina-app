@@ -797,8 +797,7 @@ function refreshTestData() {
 function viewTestDetails(testId) {
     // Implementacja szczegółów testu
     $('#testDetailsContent').html('<div class="alert alert-info">Szczegóły testu będą dostępne w przyszłej wersji</div>');
-    var modal = new bootstrap.Modal(document.getElementById('testDetailsModal'));
-    modal.show();
+    showModalSafely('testDetailsModal');
 }
 </script>
 {% endblock %}
