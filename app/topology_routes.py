@@ -450,6 +450,8 @@ def api_topology_text():
 def api_test_connection():
     """API: Testuje połączenie między punktami"""
     data = request.get_json()
+    print(f"DEBUG: PathFinder API called with data: {data}")
+    
     if not data or 'start_point' not in data or 'end_point' not in data:
         return jsonify({
             'success': False,
@@ -464,6 +466,8 @@ def api_test_connection():
             end_point=data['end_point'],
             valve_states=data.get('valve_states')
         )
+        
+        print(f"DEBUG: PathFinder result: {result}")
         
         execution_time = int((time.time() - start_time) * 1000)
         
@@ -484,6 +488,9 @@ def api_test_connection():
             'execution_time_ms': execution_time
         })
     except Exception as e:
+        print(f"DEBUG: PathFinder API error: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({
             'success': False,
             'message': f'Błąd podczas testowania połączenia: {str(e)}'

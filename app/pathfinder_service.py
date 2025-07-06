@@ -69,21 +69,40 @@ class PathFinder:
 
     def find_path(self, start_node, end_node, open_valves=None):
         """Znajduje najkrótszą ścieżkę między węzłami"""
+        print(f"DEBUG: PathFinder.find_path called with start='{start_node}', end='{end_node}'")
+        
         # Jeśli nie podano stanów zaworów, pobierz z bazy lub użyj wszystkich
         if open_valves is None:
             open_valves = self._get_open_valves()
         
+        print(f"DEBUG: Using open_valves: {open_valves[:5]}... (total: {len(open_valves)})")
+        
+        # Sprawdź czy węzły istnieją w grafie
+        if start_node not in self.graph.nodes():
+            print(f"ERROR: Start node '{start_node}' not found in graph")
+            print(f"Available nodes: {list(self.graph.nodes())[:10]}...")
+            return None
+            
+        if end_node not in self.graph.nodes():
+            print(f"ERROR: End node '{end_node}' not found in graph")
+            print(f"Available nodes: {list(self.graph.nodes())[:10]}...")
+            return None
+        
         temp_graph = self.graph.copy()
+        print(f"DEBUG: Temp graph has {len(temp_graph.nodes())} nodes and {len(temp_graph.edges())} edges")
         
         edges_to_remove = []
         for u, v, data in temp_graph.edges(data=True):
             if data['valve_name'] not in open_valves:
                 edges_to_remove.append((u, v))
         
+        print(f"DEBUG: Removing {len(edges_to_remove)} edges due to closed valves")
         temp_graph.remove_edges_from(edges_to_remove)
+        print(f"DEBUG: After removal: {len(temp_graph.edges())} edges remain")
 
         try:
             path_nodes = nx.shortest_path(temp_graph, source=start_node, target=end_node)
+            print(f"DEBUG: Found path nodes: {path_nodes}")
             
             path_segments = []
             for i in range(len(path_nodes) - 1):
@@ -91,8 +110,10 @@ class PathFinder:
                 if edge_data:
                     path_segments.append(edge_data['segment_name'])
             
+            print(f"DEBUG: Path segments: {path_segments}")
             return path_segments
-        except (nx.NetworkXNoPath, nx.NodeNotFound):
+        except (nx.NetworkXNoPath, nx.NodeNotFound) as e:
+            print(f"DEBUG: No path found - {type(e).__name__}: {e}")
             return None
     
     def _get_open_valves(self):
