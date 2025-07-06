@@ -1,46 +1,571 @@
 {% extends "base.html" %}
 
-{% block title %}Monitoring Filtrów{% endblock %}
+{% block title %}Panel Sterowania SCADA - Filtry{% endblock %}
+
+{% block extra_head %}
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+<style>
+/* PROMOTIC Style SCADA Panel */
+.scada-panel {
+    background: #c0c0c0;
+    min-height: 100vh;
+    color: #000000;
+    font-family: 'Arial', 'MS Sans Serif', sans-serif;
+    font-size: 12px;
+    margin: 0;
+    padding: 0;
+}
+
+.scada-header {
+    background: linear-gradient(to bottom, #e0e0e0 0%, #c0c0c0 50%, #a0a0a0 100%);
+    border: 2px outset #c0c0c0;
+    padding: 10px;
+    text-align: center;
+    margin: 4px;
+}
+
+.scada-title {
+    font-size: 18px;
+    font-weight: bold;
+    color: #000080;
+    margin: 0;
+    text-shadow: 1px 1px 0px #ffffff;
+}
+
+.system-status {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 15px;
+    margin-top: 8px;
+    font-size: 11px;
+}
+
+.status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: normal;
+}
+
+.status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 1px solid #808080;
+    box-shadow: inset -1px -1px 2px rgba(0,0,0,0.3), inset 1px 1px 2px rgba(255,255,255,0.8);
+}
+
+.status-online { 
+    background: radial-gradient(circle at 30% 30%, #00ff00, #008000);
+    box-shadow: 0 0 4px #00ff00, inset -1px -1px 2px rgba(0,0,0,0.3), inset 1px 1px 2px rgba(255,255,255,0.8);
+}
+.status-warning { 
+    background: radial-gradient(circle at 30% 30%, #ffff00, #ff8000);
+    box-shadow: 0 0 4px #ffff00, inset -1px -1px 2px rgba(0,0,0,0.3), inset 1px 1px 2px rgba(255,255,255,0.8);
+}
+.status-error { 
+    background: radial-gradient(circle at 30% 30%, #ff0000, #800000);
+    box-shadow: 0 0 4px #ff0000, inset -1px -1px 2px rgba(0,0,0,0.3), inset 1px 1px 2px rgba(255,255,255,0.8);
+}
+
+.filters-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+    gap: 8px;
+    padding: 8px;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.filter-panel {
+    background: linear-gradient(to bottom, #e0e0e0 0%, #d0d0d0 50%, #c0c0c0 100%);
+    border: 2px outset #c0c0c0;
+    margin: 2px;
+    font-size: 11px;
+    position: relative;
+}
+
+.filter-panel.active-filter {
+    border: 2px outset #c0c0c0;
+    background: linear-gradient(to bottom, #e8f4e8 0%, #d8e8d8 50%, #c8d8c8 100%);
+}
+
+.filter-panel.inactive-filter {
+    opacity: 1;
+    background: linear-gradient(to bottom, #d8d8d8 0%, #c8c8c8 50%, #b8b8b8 100%);
+    filter: none;
+}
+
+.filter-header {
+    background: linear-gradient(to bottom, #0000ff 0%, #000080 100%);
+    color: white;
+    padding: 4px 8px;
+    font-weight: bold;
+    font-size: 12px;
+    text-shadow: 1px 1px 0px rgba(0,0,0,0.5);
+    border-bottom: 1px solid #808080;
+}
+
+.filter-name {
+    font-size: 12px;
+    font-weight: bold;
+    margin: 0;
+}
+
+.filter-id {
+    font-size: 10px;
+    opacity: 0.9;
+    margin: 0;
+}
+
+.operation-status {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: bold;
+    float: right;
+    margin-top: -16px;
+}
+
+.operation-icon {
+    font-size: 12px;
+}
+
+.parameters-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 4px;
+    margin: 4px;
+}
+
+.parameter-box {
+    background: linear-gradient(to bottom, #f0f0f0 0%, #e0e0e0 50%, #d0d0d0 100%);
+    border: 1px inset #c0c0c0;
+    padding: 4px 6px;
+    text-align: center;
+    font-size: 10px;
+}
+
+.parameter-label {
+    font-size: 9px;
+    color: #000080;
+    margin-bottom: 2px;
+    text-transform: uppercase;
+    font-weight: bold;
+}
+
+.parameter-value {
+    font-size: 11px;
+    font-weight: bold;
+    color: #000000;
+    font-family: 'Courier New', monospace;
+}
+
+.timer-display {
+    text-align: center;
+    margin: 4px;
+    padding: 8px;
+    background: linear-gradient(to bottom, #000080 0%, #000040 100%);
+    border: 2px inset #c0c0c0;
+    color: white;
+}
+
+.timer-label {
+    font-size: 9px;
+    color: #c0c0c0;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    font-weight: bold;
+}
+
+.timer-value {
+    font-size: 18px;
+    font-weight: bold;
+    font-family: 'Courier New', monospace;
+    color: #00ff00;
+    text-shadow: 0 0 4px #00ff00;
+    letter-spacing: 1px;
+    background: #000000;
+    padding: 2px 6px;
+    border: 1px inset #404040;
+}
+
+.timer-expired {
+    color: #ff0000 !important;
+    text-shadow: 0 0 4px #ff0000 !important;
+    animation: blink 1s infinite;
+}
+
+@keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0.3; }
+}
+
+.progress-section {
+    margin: 4px;
+    padding: 4px;
+    background: linear-gradient(to bottom, #f0f0f0 0%, #e0e0e0 100%);
+    border: 1px inset #c0c0c0;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 12px;
+    background: #808080;
+    border: 1px inset #c0c0c0;
+    margin-top: 4px;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(to bottom, #00ff00 0%, #008000 100%);
+    transition: width 1s ease;
+    border-right: 1px solid #004000;
+}
+
+.queue-section {
+    margin: 4px;
+    padding: 4px;
+    background: linear-gradient(to bottom, #f8f8f8 0%, #e8e8e8 100%);
+    border: 1px inset #c0c0c0;
+    font-size: 10px;
+}
+
+.queue-item {
+    background: linear-gradient(to bottom, #ffffff 0%, #f0f0f0 100%);
+    border: 1px outset #c0c0c0;
+    padding: 2px 4px;
+    margin: 2px 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 10px;
+}
+
+.batch-code {
+    font-weight: bold;
+    color: #000080;
+    font-family: 'Courier New', monospace;
+}
+
+.connection-status {
+    position: fixed;
+    top: 8px;
+    right: 8px;
+    padding: 4px 8px;
+    background: linear-gradient(to bottom, #e0e0e0 0%, #c0c0c0 100%);
+    border: 2px outset #c0c0c0;
+    font-size: 10px;
+    font-weight: bold;
+    z-index: 1000;
+    color: #000000;
+}
+
+.connected {
+    background: linear-gradient(to bottom, #e8f4e8 0%, #c8d8c8 100%);
+    border: 2px outset #c0c0c0;
+    color: #004000;
+}
+
+.disconnected {
+    background: linear-gradient(to bottom, #f4e8e8 0%, #d8c8c8 100%);
+    border: 2px outset #c0c0c0;
+    color: #400000;
+}
+
+/* Control Buttons */
+.btn {
+    background: linear-gradient(to bottom, #e0e0e0 0%, #c0c0c0 50%, #a0a0a0 100%);
+    border: 2px outset #c0c0c0;
+    padding: 4px 8px;
+    font-weight: bold;
+    cursor: pointer;
+    font-size: 10px;
+    color: #000000;
+    font-family: 'MS Sans Serif', Arial, sans-serif;
+    text-decoration: none;
+    display: inline-block;
+    transition: none;
+}
+
+.btn:hover {
+    background: linear-gradient(to bottom, #f0f0f0 0%, #d0d0d0 50%, #b0b0b0 100%);
+}
+
+.btn:active {
+    border: 2px inset #c0c0c0;
+    background: linear-gradient(to bottom, #a0a0a0 0%, #c0c0c0 50%, #e0e0e0 100%);
+}
+
+.btn-sm {
+    padding: 3px 6px;
+    font-size: 9px;
+}
+
+.btn-warning {
+    background: linear-gradient(to bottom, #ffff80 0%, #ffff00 50%, #c0c000 100%);
+    border: 2px outset #ffff00;
+    color: #000000;
+}
+
+.btn-warning:hover {
+    background: linear-gradient(to bottom, #ffff90 0%, #ffff20 50%, #d0d020 100%);
+}
+
+.btn-warning:active {
+    border: 2px inset #ffff00;
+    background: linear-gradient(to bottom, #c0c000 0%, #ffff00 50%, #ffff80 100%);
+}
+
+.btn-info {
+    background: linear-gradient(to bottom, #80c0ff 0%, #0080ff 50%, #0060c0 100%);
+    border: 2px outset #0080ff;
+    color: #ffffff;
+}
+
+.btn-info:hover {
+    background: linear-gradient(to bottom, #90d0ff 0%, #2090ff 50%, #2070d0 100%);
+}
+
+.btn-info:active {
+    border: 2px inset #0080ff;
+    background: linear-gradient(to bottom, #0060c0 0%, #0080ff 50%, #80c0ff 100%);
+}
+
+.btn-success {
+    background: linear-gradient(to bottom, #80ff80 0%, #00ff00 50%, #00c000 100%);
+    border: 2px outset #00ff00;
+    color: #000000;
+}
+
+.btn-success:hover {
+    background: linear-gradient(to bottom, #90ff90 0%, #20ff20 50%, #20c020 100%);
+}
+
+.btn-success:active {
+    border: 2px inset #00ff00;
+    background: linear-gradient(to bottom, #00c000 0%, #00ff00 50%, #80ff80 100%);
+}
+
+.btn-danger {
+    background: linear-gradient(to bottom, #ff8080 0%, #ff0000 50%, #c00000 100%);
+    border: 2px outset #ff0000;
+    color: #ffffff;
+}
+
+.btn-danger:hover {
+    background: linear-gradient(to bottom, #ff9090 0%, #ff2020 50%, #c02020 100%);
+}
+
+.btn-danger:active {
+    border: 2px inset #ff0000;
+    background: linear-gradient(to bottom, #c00000 0%, #ff0000 50%, #ff8080 100%);
+}
+
+.fa-spin {
+    animation: fa-spin 1s infinite linear;
+}
+
+@keyframes fa-spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-    <h1 class="mb-4">Panel Monitoringu Filtrów</h1>
-    <div class="row">
-        <!-- Kontener dla Filtra Zielonego -->
-        <div class="col-md-6 mb-4">
-            <div class="card h-100" id="filtr-fz-card">
-                <div class="card-header bg-success text-white">
-                    <h2 class="card-title mb-0">Filtr Zielony (FZ)</h2>
+<div class="scada-panel">
+    <!-- Connection Status -->
+    <div id="connection-status" class="connection-status connected">
+        <i class="fas fa-wifi"></i> POŁĄCZONO
+    </div>
+    
+    <!-- Header -->
+    <div class="scada-header">
+        <h1 class="scada-title">
+            <i class="fas fa-filter"></i> PANEL STEROWANIA FILTRÓW
+        </h1>
+        <div class="system-status">
+            <div class="status-indicator">
+                <div class="status-dot status-online"></div>
+                <span>SYSTEM ONLINE</span>
+            </div>
+            <div class="status-indicator">
+                <div class="status-dot" id="data-status"></div>
+                <span id="data-status-text">POBIERANIE DANYCH</span>
+            </div>
+            <div class="status-indicator">
+                <i class="fas fa-clock"></i>
+                <span id="current-time"></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- System Metrics -->
+    <div style="position: fixed; top: 50px; left: 8px; z-index: 1000;">
+        <div style="background: linear-gradient(to bottom, #e0e0e0 0%, #c0c0c0 100%); border: 2px outset #c0c0c0; padding: 8px; color: #000000; min-width: 180px; font-size: 10px;">
+            <div style="background: linear-gradient(to bottom, #0000ff 0%, #000080 100%); color: white; font-weight: bold; margin: -8px -8px 6px -8px; padding: 4px 8px; text-align: center; font-size: 11px;">
+                <i class="fas fa-chart-line"></i> METRYKI SYSTEMU
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+                <div style="display: flex; justify-content: space-between; padding: 2px 0;">
+                    <span>Czas działania:</span>
+                    <span id="system-uptime" style="font-family: 'Courier New', monospace; font-weight: bold;">--:--:--</span>
                 </div>
-                <div class="card-body d-flex flex-column">
-                    <p class="card-text"><strong>Status:</strong> <span id="fz-status" class="fw-bold">Ładowanie...</span></p>
-                    <p class="card-text"><strong>Operacja:</strong> <span id="fz-operacja">---</span></p>
-                    <p class="card-text"><strong>Partia:</strong> <span id="fz-partia">---</span></p>
-                    <p class="card-text"><strong>Kod partii:</strong> <span id="fz-kod-partii">---</span></p>
-                    <p class="card-text"><strong>Trasa:</strong> <span id="fz-trasa">---</span></p>
-                    <div class="mt-auto">
-                        <p class="card-text mb-1"><strong>Pozostały czas:</strong></p>
-                        <h3 id="fz-timer" class="fw-bold text-success">--:--:--</h3>
+                <div style="display: flex; justify-content: space-between; padding: 2px 0;">
+                    <span>Aktywne filtry:</span>
+                    <span id="active-filters" style="font-family: 'Courier New', monospace; font-weight: bold; color: #000080;">0/2</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding: 2px 0;">
+                    <span>Kolejka:</span>
+                    <span id="queue-total" style="font-family: 'Courier New', monospace; font-weight: bold; color: #000080;">0</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding: 2px 0;">
+                    <span>Ostatnia aktualizacja:</span>
+                    <span id="last-update" style="font-family: 'Courier New', monospace; font-weight: bold;">--:--:--</span>
+                </div>
+                <div style="border-top: 1px solid #808080; margin-top: 4px; padding-top: 4px;">
+                    <div style="text-align: center; font-weight: bold; padding: 2px;">
+                        Wydajność: <span id="system-efficiency" style="font-family: 'Courier New', monospace; font-size: 12px;">--</span>%
                     </div>
                 </div>
             </div>
         </div>
-        <!-- Kontener dla Filtra Niebieskiego -->
-        <div class="col-md-6 mb-4">
-            <div class="card h-100" id="filtr-fn-card">
-                <div class="card-header bg-primary text-white">
-                    <h2 class="card-title mb-0">Filtr Niebieski (FN)</h2>
+    </div>
+
+    <!-- Control Panel -->
+    <div style="position: fixed; bottom: 8px; right: 8px; z-index: 1000;">
+        <div style="background: linear-gradient(to bottom, #e0e0e0 0%, #c0c0c0 100%); border: 2px outset #c0c0c0; padding: 8px; color: #000000; font-size: 10px;">
+            <div style="background: linear-gradient(to bottom, #0000ff 0%, #000080 100%); color: white; font-weight: bold; margin: -8px -8px 6px -8px; padding: 4px 8px; text-align: center; font-size: 11px;">KONTROLA</div>
+            <div style="display: flex; gap: 4px; flex-direction: column;">
+                <button id="mute-sounds" class="btn btn-sm btn-warning">
+                    <i class="fas fa-volume-up"></i> DŹWIĘK
+                </button>
+                <button id="pause-updates" class="btn btn-sm btn-info">
+                    <i class="fas fa-pause"></i> PAUZA
+                </button>
+                <button id="force-refresh" class="btn btn-sm btn-success">
+                    <i class="fas fa-sync"></i> ODŚWIEŻ
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters Grid -->
+    <div class="filters-grid">
+        <!-- Filtr Zielony -->
+        <div class="filter-panel" id="filter-fz">
+            <div class="filter-header">
+                <div>
+                    <div class="filter-name">FILTR ZIELONY</div>
+                    <div class="filter-id">FZ-001 | R1-R5</div>
                 </div>
-                <div class="card-body d-flex flex-column">
-                    <p class="card-text"><strong>Status:</strong> <span id="fn-status" class="fw-bold">Ładowanie...</span></p>
-                    <p class="card-text"><strong>Operacja:</strong> <span id="fn-operacja">---</span></p>
-                    <p class="card-text"><strong>Partia:</strong> <span id="fn-partia">---</span></p>
-                    <p class="card-text"><strong>Kod partii:</strong> <span id="fn-kod-partii">---</span></p>
-                    <p class="card-text"><strong>Trasa:</strong> <span id="fn-trasa">---</span></p>
-                    <div class="mt-auto">
-                        <p class="card-text mb-1"><strong>Pozostały czas:</strong></p>
-                        <h3 id="fn-timer" class="fw-bold text-primary">--:--:--</h3>
-                    </div>
+                <div class="operation-status" id="fz-operation-status">
+                    <i class="fas fa-circle-pause operation-icon"></i>
+                    <span id="fz-status-text">STANDBY</span>
+                </div>
+            </div>
+
+            <div class="parameters-grid">
+                <div class="parameter-box">
+                    <div class="parameter-label">Operacja</div>
+                    <div class="parameter-value" id="fz-operation">---</div>
+                </div>
+                <div class="parameter-box">
+                    <div class="parameter-label">Partia</div>
+                    <div class="parameter-value" id="fz-batch">---</div>
+                </div>
+                <div class="parameter-box">
+                    <div class="parameter-label">Kod partii</div>
+                    <div class="parameter-value" id="fz-batch-code">---</div>
+                </div>
+                <div class="parameter-box">
+                    <div class="parameter-label">Trasa</div>
+                    <div class="parameter-value" id="fz-route">---</div>
+                </div>
+            </div>
+
+            <div class="timer-display">
+                <div class="timer-label">Pozostały czas operacji</div>
+                <div class="timer-value" id="fz-timer">--:--:--</div>
+            </div>
+
+            <div class="progress-section">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span>Postęp:</span>
+                    <span id="fz-progress-text">0%</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="fz-progress" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <div class="queue-section">
+                <div style="font-weight: bold; margin-bottom: 10px;">
+                    <i class="fas fa-list"></i> Kolejka oczekujących
+                </div>
+                <div id="fz-queue">
+                    <div style="text-align: center; opacity: 0.6;">Brak partii w kolejce</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filtr Niebieski -->
+        <div class="filter-panel" id="filter-fn">
+            <div class="filter-header">
+                <div>
+                    <div class="filter-name">FILTR NIEBIESKI</div>
+                    <div class="filter-id">FN-001 | R6-R9</div>
+                </div>
+                <div class="operation-status" id="fn-operation-status">
+                    <i class="fas fa-circle-pause operation-icon"></i>
+                    <span id="fn-status-text">STANDBY</span>
+                </div>
+            </div>
+
+            <div class="parameters-grid">
+                <div class="parameter-box">
+                    <div class="parameter-label">Operacja</div>
+                    <div class="parameter-value" id="fn-operation">---</div>
+                </div>
+                <div class="parameter-box">
+                    <div class="parameter-label">Partia</div>
+                    <div class="parameter-value" id="fn-batch">---</div>
+                </div>
+                <div class="parameter-box">
+                    <div class="parameter-label">Kod partii</div>
+                    <div class="parameter-value" id="fn-batch-code">---</div>
+                </div>
+                <div class="parameter-box">
+                    <div class="parameter-label">Trasa</div>
+                    <div class="parameter-value" id="fn-route">---</div>
+                </div>
+            </div>
+
+            <div class="timer-display">
+                <div class="timer-label">Pozostały czas operacji</div>
+                <div class="timer-value" id="fn-timer">--:--:--</div>
+            </div>
+
+            <div class="progress-section">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span>Postęp:</span>
+                    <span id="fn-progress-text">0%</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="fn-progress" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <div class="queue-section">
+                <div style="font-weight: bold; margin-bottom: 10px;">
+                    <i class="fas fa-list"></i> Kolejka oczekujących
+                </div>
+                <div id="fn-queue">
+                    <div style="text-align: center; opacity: 0.6;">Brak partii w kolejce</div>
                 </div>
             </div>
         </div>
