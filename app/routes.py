@@ -896,96 +896,103 @@ def set_temperatura(sprzet_id):
 @bp.route('/filtry')
 def show_filtry_panel():
     """Renderuje stronę z panelem monitoringu filtrów."""
-    return render_template('filtry.html')
+    return render_template('filtry_scada.html')
 
+# NOWY, ZAAWANSOWANY ENDPOINT DO MONITORINGU FILTRÓW
 @bp.route('/api/filtry/status')
-def get_filtry_status():
+def get_filtry_status_scada():
     """
-    Zwraca szczegółowy, aktualny status dla każdego filtra (FZ i FN),
-    wzbogacony o informacje o aktywnej operacji i partii.
+    Zwraca kompletny, szczegółowy status dla każdego filtra (FZ i FN)
+    na potrzeby interfejsu SCADA. Zawiera:
+    - Podstawowe dane i parametry (temperatura, ciśnienie).
+    - Informacje o aktywnej operacji i przetwarzanej partii.
+    - Planowany czas zakończenia operacji.
+    - Listę partii oczekujących w kolejce (jeśli filtr jest wolny).
     """
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
-
+    
     try:
-        # Krok 1: Pobierz wszystkie filtry i ich podstawowy status
-        cursor.execute("SELECT id, nazwa_unikalna, stan_sprzetu FROM sprzet WHERE typ_sprzetu = 'filtr'")
-        filtry = {f['nazwa_unikalna']: f for f in cursor.fetchall()}
+        # 1. Pobierz podstawowe dane o filtrach, w tym ich parametry fizyczne
+        cursor.execute("""
+            SELECT 
+                id, nazwa_unikalna, stan_sprzetu, typ_sprzetu,
+                temperatura_aktualna, cisnienie_aktualne, poziom_aktualny_procent,
+                temperatura_max, cisnienie_max, ostatnia_aktualizacja
+            FROM sprzet 
+            WHERE typ_sprzetu = 'filtr'
+            ORDER BY nazwa_unikalna
+        """)
+        filtry = cursor.fetchall()
         
-        # Przygotuj domyślną odpowiedź
-        wynik = {
-            'FZ': {'id_filtra': filtry.get('FZ', {}).get('id'), 'nazwa_filtra': 'FZ', 'stan_sprzetu': filtry.get('FZ', {}).get('stan_sprzetu', 'Brak danych'), 'aktywna_operacja': None},
-            'FN': {'id_filtra': filtry.get('FN', {}).get('id'), 'nazwa_filtra': 'FN', 'stan_sprzetu': filtry.get('FN', {}).get('stan_sprzetu', 'Brak danych'), 'aktywna_operacja': None}
+        # Słownik z definicjami czasów trwania operacji w minutach
+        DURATIONS = {
+            'Budowanie placka': 30, 'Filtrowanie w koło': 15, 'Przedmuchiwanie': 10,
+            'Dmuchanie filtra': 45, 'Czyszczenie': 20, 'TRANSFER': 30, 'FILTRACJA': 30
         }
 
-        # Krok 2: Pobierz wszystkie aktywne operacje
-        query_aktywne_operacje = """
-            SELECT 
-                ol.id, ol.typ_operacji, ol.czas_rozpoczecia, ol.status_operacji,
-                ps.nazwa_partii,
-                ps.unikalny_kod,
-                zrodlo.nazwa_unikalna AS sprzet_zrodlowy,
-                cel.nazwa_unikalna AS sprzet_docelowy
-            FROM operacje_log ol
-            LEFT JOIN partie_surowca ps ON ol.id_partii_surowca = ps.id
-            LEFT JOIN sprzet zrodlo ON ol.id_sprzetu_zrodlowego = zrodlo.id
-            LEFT JOIN sprzet cel ON ol.id_sprzetu_docelowego = cel.id
-            WHERE ol.status_operacji = 'aktywna'
-        """
-        cursor.execute(query_aktywne_operacje)
-        aktywne_operacje = cursor.fetchall()
-
-        # Krok 3: Dla każdej aktywnej operacji sprawdź, czy używa któregoś z filtrów
-        for op in aktywne_operacje:
-            query_segmenty_operacji = """
-                SELECT s.nazwa_unikalna FROM sprzet s
-                JOIN porty_sprzetu ps ON s.id = ps.id_sprzetu
-                JOIN segmenty seg ON ps.id = seg.id_portu_startowego OR ps.id = seg.id_portu_koncowego
+        # 2. Dla każdego filtra, wzbogać go o dane operacyjne
+        for filtr in filtry:
+            filtr['aktywna_operacja'] = None
+            filtr['kolejka_oczekujacych'] = []
+            
+            # 2a. Sprawdź, czy filtr jest używany w jakiejś aktywnej operacji
+            # Używamy złączenia z log_uzyte_segmenty, aby to ustalić
+            cursor.execute("""
+                SELECT
+                    ol.id as id_operacji, ol.typ_operacji, ol.czas_rozpoczecia, ol.status_operacji,
+                    ol.opis as opis_operacji,
+                    ps.id as id_partii, ps.unikalny_kod, ps.nazwa_partii, ps.typ_surowca,
+                    zrodlo.nazwa_unikalna AS sprzet_zrodlowy,
+                    cel.nazwa_unikalna AS sprzet_docelowy
+                FROM sprzet s
+                JOIN porty_sprzetu ps_port ON s.id = ps_port.id_sprzetu
+                JOIN segmenty seg ON ps_port.id = seg.id_portu_startowego OR ps_port.id = seg.id_portu_koncowego
                 JOIN log_uzyte_segmenty lus ON seg.id = lus.id_segmentu
-                WHERE lus.id_operacji_log = %s AND s.typ_sprzetu = 'filtr'
-            """
-            cursor.execute(query_segmenty_operacji, (op['id'],))
-            uzyte_filtry = [row['nazwa_unikalna'] for row in cursor.fetchall()]
+                JOIN operacje_log ol ON lus.id_operacji_log = ol.id
+                LEFT JOIN partie_surowca ps ON ol.id_partii_surowca = ps.id
+                LEFT JOIN sprzet zrodlo ON ol.id_sprzetu_zrodlowego = zrodlo.id
+                LEFT JOIN sprzet cel ON ol.id_sprzetu_docelowego = cel.id
+                WHERE ol.status_operacji = 'aktywna' AND s.id = %s
+                LIMIT 1
+            """, (filtr['id'],))
+            
+            aktywna_operacja = cursor.fetchone()
+            
+            if aktywna_operacja:
+                filtr['aktywna_operacja'] = aktywna_operacja
+                # Oblicz i dodaj planowany czas zakończenia
+                typ_op = aktywna_operacja.get('typ_operacji')
+                czas_start = aktywna_operacja.get('czas_rozpoczecia')
+                if typ_op in DURATIONS and czas_start:
+                    duration_minutes = DURATIONS[typ_op]
+                    end_time = czas_start + timedelta(minutes=duration_minutes)
+                    filtr['aktywna_operacja']['czas_zakonczenia_iso'] = end_time.isoformat()
+                else:
+                    filtr['aktywna_operacja']['czas_zakonczenia_iso'] = None
+            else:
+                # 2b. Jeśli filtr nie jest zajęty, sprawdź, czy ktoś na niego czeka
+                # To są partie, które mają w polu `id_aktualnego_filtra` nazwę tego filtra
+                cursor.execute("""
+                    SELECT 
+                        ps.id as id_partii, ps.unikalny_kod, ps.nazwa_partii,
+                        ps.aktualny_etap_procesu, s.nazwa_unikalna as nazwa_reaktora
+                    FROM partie_surowca ps
+                    JOIN sprzet s ON ps.id_aktualnego_sprzetu = s.id
+                    WHERE ps.id_aktualnego_filtra = %s AND ps.status_partii NOT IN ('Gotowy do wysłania', 'W magazynie czystym')
+                    ORDER BY ps.czas_rozpoczecia_etapu ASC
+                """, (filtr['nazwa_unikalna'],))
+                filtr['kolejka_oczekujacych'] = cursor.fetchall()
 
-            for nazwa_filtra in uzyte_filtry:
-                if nazwa_filtra in wynik:
-                    wynik[nazwa_filtra]['aktywna_operacja'] = op
-
-        # Krok 4: Sformatuj ostateczną odpowiedź
-        ostateczna_odpowiedz = []
-        for nazwa_filtra, dane in wynik.items():
-            final_obj = {
-                'id_filtra': dane['id_filtra'],
-                'nazwa_filtra': dane['nazwa_filtra'],
-                'stan_sprzetu': dane['stan_sprzetu'],
-                'id_operacji': None, 'typ_operacji': None, 'czas_rozpoczecia': None,
-                'status_operacji': None, 'nazwa_partii': None, 'sprzet_zrodlowy': None,
-                'sprzet_docelowy': None,
-                'unikalny_kod': None
-            }
-            if dane['aktywna_operacja']:
-                final_obj.update(dane['aktywna_operacja'])
-            ostateczna_odpowiedz.append(final_obj)
-
+        return jsonify(filtry)
+        
+    except Exception as e:
+        # Zwróć błąd w formacie JSON dla łatwiejszego debugowania na froncie
+        return jsonify({'error': f'Błąd po stronie serwera: {str(e)}'}), 500
     finally:
-        cursor.close()
-        conn.close()
-
-    # Definicje czasów trwania operacji w minutach
-    DURATIONS = {
-        'Budowanie placka': 30, 'Filtrowanie w koło': 15, 'Przedmuchiwanie': 10,
-        'Dmuchanie filtra': 45, 'Czyszczenie': 20, 'TRANSFER': 30, 'FILTRACJA': 30
-    }
-
-    # Dodajemy obliczony czas zakończenia do danych
-    for filtr in ostateczna_odpowiedz:
-        filtr['czas_zakonczenia_iso'] = None
-        if filtr.get('status_operacji') == 'aktywna' and filtr.get('typ_operacji') in DURATIONS and filtr.get('czas_rozpoczecia'):
-            duration_minutes = DURATIONS[filtr['typ_operacji']]
-            end_time = filtr['czas_rozpoczecia'] + timedelta(minutes=duration_minutes)
-            filtr['czas_zakonczenia_iso'] = end_time.isoformat()
-
-    return jsonify(ostateczna_odpowiedz)
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()
 
 # === NOWE API DLA ZARZĄDZANIA CYKLAMI FILTRACYJNYMI ===
 
@@ -2106,3 +2113,201 @@ def get_alarmy_parametryczne():
 def show_monitoring_parametry():
     """Serwuje stronę monitoringu parametrów sprzętu."""
     return render_template('monitoring_parametry.html')
+
+@bp.route('/api/filtry/monitoring-scada', methods=['GET'])
+def get_filtry_monitoring_scada():
+    """
+    Zwraca kompletne dane monitoringowe dla filtrów w stylu SCADA:
+    - Parametry procesowe (temp, ciśnienie, poziom)
+    - Aktywne operacje i partie
+    - Historia operacji i alarmów
+    - Stany zaworów związanych z filtrami
+    - Przepływ i trendy
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # Pobierz podstawowe dane filtrów z parametrami
+        cursor.execute("""
+            SELECT 
+                id,
+                nazwa_unikalna,
+                typ_sprzetu,
+                stan_sprzetu,
+                temperatura_aktualna,
+                cisnienie_aktualne,
+                poziom_aktualny_procent,
+                temperatura_docelowa,
+                temperatura_max,
+                cisnienie_max,
+                ostatnia_aktualizacja,
+                pojemnosc_kg
+            FROM sprzet 
+            WHERE typ_sprzetu = 'filtr'
+            ORDER BY nazwa_unikalna
+        """)
+        filtry = cursor.fetchall()
+        
+        result = []
+        
+        for filtr in filtry:
+            filtr_data = {
+                'podstawowe': filtr,
+                'operacje': [],
+                'partie': [],
+                'zawory': [],
+                'historia_pomiarow': [],
+                'alarmy': [],
+                'cykle_filtracyjne': [],
+                'status_alarmowy': 'OK'
+            }
+            
+            # Formatuj datę ostatniej aktualizacji
+            if filtr['ostatnia_aktualizacja']:
+                filtr_data['podstawowe']['ostatnia_aktualizacja'] = filtr['ostatnia_aktualizacja'].strftime('%Y-%m-%d %H:%M:%S')
+            
+            # 1. AKTYWNE OPERACJE dla tego filtra
+            cursor.execute("""
+                SELECT 
+                    ol.*,
+                    ps.unikalny_kod,
+                    ps.nazwa_partii,
+                    ps.typ_surowca,
+                    ps.waga_aktualna_kg,
+                    s_start.nazwa_unikalna as sprzet_startowy,
+                    s_end.nazwa_unikalna as sprzet_docelowy
+                FROM operacje_log ol
+                LEFT JOIN partie_surowca ps ON ol.id_partii_surowca = ps.id
+                LEFT JOIN sprzet s_start ON ol.id_sprzetu_zrodlowego = s_start.id
+                LEFT JOIN sprzet s_end ON ol.id_sprzetu_docelowego = s_end.id
+                WHERE ol.status_operacji = 'aktywna'
+                AND (ol.punkt_startowy LIKE %s OR ol.punkt_docelowy LIKE %s)
+                ORDER BY ol.czas_rozpoczecia DESC
+            """, (f"%{filtr['nazwa_unikalna']}%", f"%{filtr['nazwa_unikalna']}%"))
+            
+            operacje = cursor.fetchall()
+            for op in operacje:
+                if op['czas_rozpoczecia']:
+                    op['czas_rozpoczecia'] = op['czas_rozpoczecia'].strftime('%Y-%m-%d %H:%M:%S')
+                if op['czas_zakonczenia']:
+                    op['czas_zakonczenia'] = op['czas_zakonczenia'].strftime('%Y-%m-%d %H:%M:%S')
+            filtr_data['operacje'] = operacje
+            
+            # 2. PARTIE W FILTRZE lub związane z filtrem
+            cursor.execute("""
+                SELECT 
+                    ps.*,
+                    s.nazwa_unikalna as lokalizacja_sprzetu
+                FROM partie_surowca ps
+                LEFT JOIN sprzet s ON ps.id_sprzetu = s.id
+                WHERE ps.id_aktualnego_filtra = %s 
+                OR ps.id_sprzetu = %s
+                ORDER BY ps.data_utworzenia DESC
+                LIMIT 5
+            """, (filtr['nazwa_unikalna'], filtr['id']))
+            
+            partie = cursor.fetchall()
+            for partia in partie:
+                if partia['data_utworzenia']:
+                    partia['data_utworzenia'] = partia['data_utworzenia'].strftime('%Y-%m-%d %H:%M:%S')
+                if partia['czas_rozpoczecia_etapu']:
+                    partia['czas_rozpoczecia_etapu'] = partia['czas_rozpoczecia_etapu'].strftime('%Y-%m-%d %H:%M:%S')
+                if partia['planowany_czas_zakonczenia']:
+                    partia['planowany_czas_zakonczenia'] = partia['planowany_czas_zakonczenia'].strftime('%Y-%m-%d %H:%M:%S')
+            filtr_data['partie'] = partie
+            
+            # 3. ZAWORY związane z filtrem
+            cursor.execute("""
+                SELECT DISTINCT z.id, z.nazwa_zaworu, z.stan
+                FROM zawory z
+                JOIN segmenty s ON z.id = s.id_zaworu
+                JOIN porty_sprzetu ps ON (s.id_portu_startowego = ps.id OR s.id_portu_koncowego = ps.id)
+                WHERE ps.id_sprzetu = %s
+                ORDER BY z.nazwa_zaworu
+            """, (filtr['id'],))
+            filtr_data['zawory'] = cursor.fetchall()
+            
+            # 4. HISTORIA POMIARÓW (ostatnie 24h)
+            cursor.execute("""
+                SELECT 
+                    temperatura,
+                    cisnienie,
+                    czas_pomiaru
+                FROM historia_pomiarow
+                WHERE id_sprzetu = %s 
+                AND czas_pomiaru > NOW() - INTERVAL 24 HOUR
+                ORDER BY czas_pomiaru DESC
+                LIMIT 100
+            """, (filtr['id'],))
+            
+            historia = cursor.fetchall()
+            for pomiar in historia:
+                if pomiar['czas_pomiaru']:
+                    pomiar['czas_pomiaru'] = pomiar['czas_pomiaru'].strftime('%Y-%m-%d %H:%M:%S')
+            filtr_data['historia_pomiarow'] = historia
+            
+            # 5. AKTYWNE ALARMY dla tego filtra
+            cursor.execute("""
+                SELECT *
+                FROM alarmy
+                WHERE nazwa_sprzetu = %s 
+                AND status_alarmu = 'AKTYWNY'
+                ORDER BY czas_wystapienia DESC
+            """, (filtr['nazwa_unikalna'],))
+            
+            alarmy = cursor.fetchall()
+            for alarm in alarmy:
+                if alarm['czas_wystapienia']:
+                    alarm['czas_wystapienia'] = alarm['czas_wystapienia'].strftime('%Y-%m-%d %H:%M:%S')
+            filtr_data['alarmy'] = alarmy
+            
+            # 6. CYKLE FILTRACYJNE (ostatnie 10)
+            cursor.execute("""
+                SELECT 
+                    cf.*,
+                    ps.unikalny_kod,
+                    ps.typ_surowca
+                FROM cykle_filtracyjne cf
+                JOIN partie_surowca ps ON cf.id_partii = ps.id
+                WHERE cf.id_filtra = %s
+                ORDER BY cf.czas_rozpoczecia DESC
+                LIMIT 10
+            """, (filtr['nazwa_unikalna'],))
+            
+            cykle = cursor.fetchall()
+            for cykl in cykle:
+                if cykl['czas_rozpoczecia']:
+                    cykl['czas_rozpoczecia'] = cykl['czas_rozpoczecia'].strftime('%Y-%m-%d %H:%M:%S')
+                if cykl['czas_zakonczenia']:
+                    cykl['czas_zakonczenia'] = cykl['czas_zakonczenia'].strftime('%Y-%m-%d %H:%M:%S')
+            filtr_data['cykle_filtracyjne'] = cykle
+            
+            # 7. OKREŚL STATUS ALARMOWY
+            if len(alarmy) > 0:
+                filtr_data['status_alarmowy'] = 'ALARM'
+            elif (filtr['temperatura_aktualna'] and filtr['temperatura_aktualna'] > filtr['temperatura_max'] * 0.9) or \
+                 (filtr['cisnienie_aktualne'] and filtr['cisnienie_aktualne'] > filtr['cisnienie_max'] * 0.9):
+                filtr_data['status_alarmowy'] = 'OSTRZEZENIE'
+            else:
+                filtr_data['status_alarmowy'] = 'OK'
+            
+            # 8. DODATKOWE OBLICZENIA
+            filtr_data['statystyki'] = {
+                'aktywnych_operacji': len(operacje),
+                'aktywnych_partii': len([p for p in partie if p['status_partii'] not in ['Gotowy do wysłania', 'W magazynie czystym']]),
+                'otwartych_zaworow': len([z for z in filtr_data['zawory'] if z['stan'] == 'OTWARTY']),
+                'cykli_ostatnie_24h': len([c for c in cykle if c['czas_rozpoczecia'] and 
+                                         datetime.strptime(c['czas_rozpoczecia'], '%Y-%m-%d %H:%M:%S') > datetime.now() - timedelta(hours=24)])
+            }
+            
+            result.append(filtr_data)
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({'error': f'Błąd pobierania danych SCADA: {str(e)}'}), 500
+    finally:
+        cursor.close()
+        conn.close()
+

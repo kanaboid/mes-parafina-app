@@ -1,8 +1,10 @@
+{% extends "base.html" %}
+{% block title %}SCADA - Monitoring Filtrów{% endblock %}
+{% block content %}
 <!DOCTYPE html>
 <html lang="pl">
 <head>
-    <meta charset="UTF-8">
-    <title>SCADA - Monitoring Filtrów</title>
+    
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
@@ -215,7 +217,12 @@
         </div>
     </div>
 
-    <script>
+    
+</body>
+</html>
+{% endblock %}
+{% block scripts %}
+<script>
     document.addEventListener('DOMContentLoaded', () => {
         const API_ENDPOINT = '/api/filtry/status';
         const REFRESH_INTERVAL_MS = 5000; // 5 sekund
@@ -371,5 +378,7 @@
         setInterval(fetchData, REFRESH_INTERVAL_MS);
     });
     </script>
-</body>
-</html>
+
+{% endblock %}
+
+
