@@ -103,7 +103,7 @@ class SensorService:
             # Oblicz przyrost temperatury
             minutes_passed = (current_time - operator_temp['czas_ustawienia']).total_seconds() / 60.0
             base_temperature = float(operator_temp['temperatura'])
-            temperature_rise = minutes_passed * 0.5
+            temperature_rise = minutes_passed * 0.14
             new_temperature = base_temperature + temperature_rise
             
             return round(new_temperature, 2)

@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <title>SCADA - Monitoring Filtrów</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #1e222b;
+            --panel-bg-color: #282c34;
+            --border-color: #4b5263;
+            --text-color: #e0e0e0;
+            --header-color: #00aaff;
+            --label-color: #9ab;
+            --value-color: #ffffff;
+            
+            --active-color: #2ecc71;
+            --idle-color: #95a5a6;
+            --error-color: #e74c3c;
+            --transfer-color: #f39c12;
+            
+            --font-display: 'Orbitron', sans-serif;
+            --font-mono: 'Roboto Mono', monospace;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: var(--font-mono);
+            margin: 0;
+            padding: 15px;
+            overflow-y: hidden;
+        }
+
+        .scada-container {
+            display: flex;
+            gap: 15px;
+            height: calc(100vh - 30px);
+        }
+
+        .filter-column {
+            flex: 1;
+            background-color: var(--panel-bg-color);
+            border: 2px solid var(--border-color);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .panel-header {
+            font-family: var(--font-display);
+            font-size: 2.2em;
+            text-align: center;
+            color: var(--header-color);
+            margin: 0;
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 15px;
+            text-shadow: 0 0 5px var(--header-color);
+        }
+        
+        .info-panel {
+            border: 1px solid var(--border-color);
+            padding: 15px;
+            background: #21252b;
+        }
+        
+        .info-panel .title {
+            font-size: 1.1em;
+            font-weight: bold;
+            color: var(--header-color);
+            margin: 0 0 15px 0;
+            text-transform: uppercase;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: 140px 1fr;
+            gap: 8px 15px;
+            font-size: 0.9em;
+        }
+        .info-grid .label { color: var(--label-color); text-align: right; }
+        .info-grid .value { color: var(--value-color); font-weight: bold; }
+        
+        .status-panel { display: flex; align-items: center; justify-content: center; gap: 15px; padding: 10px; background-color: rgba(0,0,0,0.2); border: 1px solid var(--border-color); }
+        .status-led { width: 25px; height: 25px; border-radius: 50%; transition: all 0.3s ease; }
+        .status-led.active { background-color: var(--active-color); box-shadow: 0 0 15px var(--active-color); animation: pulse-green 2s infinite; }
+        .status-led.idle { background-color: var(--idle-color); }
+        .status-led.error { background-color: var(--error-color); box-shadow: 0 0 15px var(--error-color); animation: pulse-red 1s infinite; }
+        .status-text { font-size: 1.4em; font-weight: bold; text-transform: uppercase; }
+
+        .param-bar { margin-top: 5px; }
+        .param-bar progress { width: 100%; height: 18px; -webkit-appearance: none; appearance: none; border: 1px solid var(--border-color); }
+        .param-bar progress::-webkit-progress-bar { background-color: #333; }
+        .param-bar progress::-webkit-progress-value { background-color: var(--header-color); transition: width 0.5s ease-out; }
+        .param-bar progress.alarm::-webkit-progress-value { background-color: var(--error-color); }
+        .param-bar .values { display: flex; justify-content: space-between; font-size: 0.8em; }
+
+        #fz-panel-header { color: #2ecc71; text-shadow: 0 0 5px #2ecc71; }
+        #fn-panel-header { color: #3498db; text-shadow: 0 0 5px #3498db; }
+        .queue-list { list-style: none; padding-left: 0; margin: 0; }
+        .queue-list li { background-color: #333; padding: 5px 10px; margin-bottom: 5px; border-left: 3px solid var(--transfer-color); }
+
+        .idle-message, .error-message { text-align: center; font-size: 1.5em; margin-top: 50px; font-family: var(--font-display); }
+        .idle-message { color: var(--idle-color); }
+        .error-message { color: var(--error-color); }
+        .hidden { display: none; }
+        
+        @keyframes pulse-green { 0% { box-shadow: 0 0 5px #2ecc71; } 50% { box-shadow: 0 0 20px #2ecc71; } 100% { box-shadow: 0 0 5px #2ecc71; } }
+        @keyframes pulse-red { 0% { box-shadow: 0 0 5px #e74c3c; } 50% { box-shadow: 0 0 20px #e74c3c; } 100% { box-shadow: 0 0 5px #e74c3c; } }
+    </style>
+</head>
+<body>
+    <div class="scada-container">
+        <!-- === KOLUMNA FILTRA FZ (Zielony) === -->
+        <div class="filter-column" id="filter-FZ">
+            <h1 class="panel-header" id="fz-panel-header">FILTR ZIELONY (FZ)</h1>
+            <div class="info-panel">
+                <h2 class="title">Status i Parametry</h2>
+                <div class="info-grid">
+                    <span class="label">Status:</span>
+                    <div class="value status-panel">
+                        <div class="status-led" id="fz-led"></div>
+                        <div class="status-text" id="fz-status-text">--</div>
+                    </div>
+                    <span class="label">Temperatura:</span>
+                    <div class="value param-bar">
+                        <progress id="fz-temp-progress" value="0" max="150"></progress>
+                        <div class="values">
+                            <span id="fz-temp-value">-- °C</span>
+                            <span id="fz-temp-max">Max: -- °C</span>
+                        </div>
+                    </div>
+                    <span class="label">Ciśnienie:</span>
+                    <div class="value param-bar">
+                        <progress id="fz-pressure-progress" value="0" max="10"></progress>
+                        <div class="values">
+                            <span id="fz-pressure-value">-- bar</span>
+                            <span id="fz-pressure-max">Max: -- bar</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Panel aktywnej operacji (widoczny tylko gdy jest operacja) -->
+            <div class="info-panel hidden" id="fz-operation-panel">
+                <h2 class="title">Aktywna Operacja</h2>
+                <div class="info-grid">
+                    <span class="label">Typ Operacji:</span><span class="value" id="fz-op-type">--</span>
+                    <span class="label">Partia:</span><span class="value" id="fz-op-batch">--</span>
+                    <span class="label">Trasa:</span><span class="value" id="fz-op-route">--</span>
+                    <span class="label">Pozostały czas:</span><h3 class="value" id="fz-op-timer">--:--:--</h3>
+                </div>
+            </div>
+
+            <!-- Panel kolejki (widoczny tylko gdy filtr jest wolny i jest kolejka) -->
+            <div class="info-panel hidden" id="fz-queue-panel">
+                <h2 class="title">Kolejka Oczekujących</h2>
+                <ul class="queue-list" id="fz-queue-list"></ul>
+            </div>
+
+            <div class="idle-message" id="fz-idle-message">FILTR WOLNY</div>
+            <div class="error-message hidden" id="fz-error-message">BŁĄD POŁĄCZENIA</div>
+        </div>
+        
+        <!-- === KOLUMNA FILTRA FN (Niebieski) === -->
+        <div class="filter-column" id="filter-FN">
+             <h1 class="panel-header" id="fn-panel-header">FILTR NIEBIESKI (FN)</h1>
+            <div class="info-panel">
+                <h2 class="title">Status i Parametry</h2>
+                <div class="info-grid">
+                    <span class="label">Status:</span>
+                    <div class="value status-panel">
+                        <div class="status-led" id="fn-led"></div>
+                        <div class="status-text" id="fn-status-text">--</div>
+                    </div>
+                    <span class="label">Temperatura:</span>
+                    <div class="value param-bar">
+                        <progress id="fn-temp-progress" value="0" max="150"></progress>
+                        <div class="values">
+                            <span id="fn-temp-value">-- °C</span>
+                            <span id="fn-temp-max">Max: -- °C</span>
+                        </div>
+                    </div>
+                    <span class="label">Ciśnienie:</span>
+                    <div class="value param-bar">
+                        <progress id="fn-pressure-progress" value="0" max="10"></progress>
+                        <div class="values">
+                            <span id="fn-pressure-value">-- bar</span>
+                            <span id="fn-pressure-max">Max: -- bar</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="info-panel hidden" id="fn-operation-panel">
+                <h2 class="title">Aktywna Operacja</h2>
+                <div class="info-grid">
+                    <span class="label">Typ Operacji:</span><span class="value" id="fn-op-type">--</span>
+                    <span class="label">Partia:</span><span class="value" id="fn-op-batch">--</span>
+                    <span class="label">Trasa:</span><span class="value" id="fn-op-route">--</span>
+                    <span class="label">Pozostały czas:</span><h3 class="value" id="fn-op-timer">--:--:--</h3>
+                </div>
+            </div>
+
+            <div class="info-panel hidden" id="fn-queue-panel">
+                <h2 class="title">Kolejka Oczekujących</h2>
+                <ul class="queue-list" id="fn-queue-list"></ul>
+            </div>
+
+            <div class="idle-message" id="fn-idle-message">FILTR WOLNY</div>
+            <div class="error-message hidden" id="fn-error-message">BŁĄD POŁĄCZENIA</div>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const API_ENDPOINT = '/api/filtry/status';
+        const REFRESH_INTERVAL_MS = 5000; // 5 sekund
+        const activeTimers = { FZ: null, FN: null };
+
+        // Słownik do mapowania nazw na elementy DOM, aby uniknąć powtarzania getElementById
+        const elements = {
+            FZ: {
+                statusText: document.getElementById('fz-status-text'),
+                led: document.getElementById('fz-led'),
+                tempValue: document.getElementById('fz-temp-value'),
+                tempProgress: document.getElementById('fz-temp-progress'),
+                tempMax: document.getElementById('fz-temp-max'),
+                pressureValue: document.getElementById('fz-pressure-value'),
+                pressureProgress: document.getElementById('fz-pressure-progress'),
+                pressureMax: document.getElementById('fz-pressure-max'),
+                opPanel: document.getElementById('fz-operation-panel'),
+                opType: document.getElementById('fz-op-type'),
+                opBatch: document.getElementById('fz-op-batch'),
+                opRoute: document.getElementById('fz-op-route'),
+                opTimer: document.getElementById('fz-op-timer'),
+                queuePanel: document.getElementById('fz-queue-panel'),
+                queueList: document.getElementById('fz-queue-list'),
+                idleMessage: document.getElementById('fz-idle-message'),
+                errorMessage: document.getElementById('fz-error-message')
+            },
+            FN: {
+                statusText: document.getElementById('fn-status-text'),
+                led: document.getElementById('fn-led'),
+                tempValue: document.getElementById('fn-temp-value'),
+                tempProgress: document.getElementById('fn-temp-progress'),
+                tempMax: document.getElementById('fn-temp-max'),
+                pressureValue: document.getElementById('fn-pressure-value'),
+                pressureProgress: document.getElementById('fn-pressure-progress'),
+                pressureMax: document.getElementById('fn-pressure-max'),
+                opPanel: document.getElementById('fn-operation-panel'),
+                opType: document.getElementById('fn-op-type'),
+                opBatch: document.getElementById('fn-op-batch'),
+                opRoute: document.getElementById('fn-op-route'),
+                opTimer: document.getElementById('fn-op-timer'),
+                queuePanel: document.getElementById('fn-queue-panel'),
+                queueList: document.getElementById('fn-queue-list'),
+                idleMessage: document.getElementById('fn-idle-message'),
+                errorMessage: document.getElementById('fn-error-message')
+            }
+        };
+
+        const updateFilterColumn = (filterId, data) => {
+            const el = elements[filterId];
+            if (!el) return;
+
+            // Reset stanu wizualnego
+            el.errorMessage.classList.add('hidden');
+            el.idleMessage.classList.add('hidden');
+            el.opPanel.classList.add('hidden');
+            el.queuePanel.classList.add('hidden');
+            el.led.className = 'status-led'; // Wyczyść klasy LED
+            if (activeTimers[filterId]) clearInterval(activeTimers[filterId]);
+
+            // Jeśli brak danych dla filtra
+            if (!data) {
+                el.errorMessage.classList.remove('hidden');
+                el.statusText.textContent = 'BRAK DANYCH';
+                el.led.classList.add('error');
+                return;
+            }
+
+            // Aktualizuj status i parametry, które są zawsze widoczne
+            const stan = data.stan_sprzetu || 'Nieznany';
+            el.statusText.textContent = stan;
+            if (stan.toLowerCase().includes('aktywna') || stan.toLowerCase().includes('transfer') || stan.toLowerCase().includes('zajęty')) {
+                el.led.classList.add('active');
+            } else if (stan.toLowerCase().includes('wolny') || stan.toLowerCase().includes('pusty')) {
+                el.led.classList.add('idle');
+            } else {
+                el.led.classList.add('error');
+            }
+
+            const temp = parseFloat(data.temperatura_aktualna) || 0;
+            const tempMax = parseFloat(data.temperatura_max) || 120;
+            el.tempValue.textContent = `${temp.toFixed(1)} °C`;
+            el.tempProgress.value = temp;
+            el.tempProgress.max = tempMax;
+            el.tempMax.textContent = `Max: ${tempMax.toFixed(1)} °C`;
+            el.tempProgress.classList.toggle('alarm', temp > tempMax);
+
+            const pressure = parseFloat(data.cisnienie_aktualne) || 0;
+            const pressureMax = parseFloat(data.cisnienie_max) || 6;
+            el.pressureValue.textContent = `${pressure.toFixed(2)} bar`;
+            el.pressureProgress.value = pressure;
+            el.pressureProgress.max = pressureMax;
+            el.pressureMax.textContent = `Max: ${pressureMax.toFixed(1)} bar`;
+            el.pressureProgress.classList.toggle('alarm', pressure > pressureMax);
+
+            // Wyświetl odpowiedni panel: operacja, kolejka lub wiadomość o bezczynności
+            if (data.aktywna_operacja) {
+                const op = data.aktywna_operacja;
+                el.opPanel.classList.remove('hidden');
+                el.opType.textContent = op.typ_operacji || '---';
+                el.opBatch.textContent = op.unikalny_kod || op.nazwa_partii || '---';
+                el.opRoute.textContent = `${op.sprzet_zrodlowy || '?'} → ${op.sprzet_docelowy || '?'}`;
+                setupLiveTimer(filterId, op.czas_zakonczenia_iso);
+            } else if (data.kolejka_oczekujacych && data.kolejka_oczekujacych.length > 0) {
+                el.queuePanel.classList.remove('hidden');
+                el.queueList.innerHTML = data.kolejka_oczekujacych
+                    .map(item => `<li>${item.unikalny_kod} (w ${item.nazwa_reaktora})</li>`)
+                    .join('');
+            } else {
+                el.idleMessage.classList.remove('hidden');
+            }
+        };
+        
+        const setupLiveTimer = (filterId, endTimeStr) => {
+            const timerEl = elements[filterId].opTimer;
+            if (!endTimeStr) {
+                timerEl.textContent = '--:--:--';
+                return;
+            }
+            const endTime = new Date(endTimeStr);
+
+            const update = () => {
+                const remaining = endTime - new Date();
+                if (remaining <= 0) {
+                    timerEl.textContent = '00:00:00';
+                    clearInterval(activeTimers[filterId]);
+                    return;
+                }
+                const h = Math.floor((remaining / (1000 * 60 * 60)) % 24).toString().padStart(2, '0');
+                const m = Math.floor((remaining / 1000 / 60) % 60).toString().padStart(2, '0');
+                const s = Math.floor((remaining / 1000) % 60).toString().padStart(2, '0');
+                timerEl.textContent = `${h}:${m}:${s}`;
+            };
+            update();
+            activeTimers[filterId] = setInterval(update, 1000);
+        };
+
+        const fetchData = async () => {
+            try {
+                const response = await fetch(API_ENDPOINT);
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                const data = await response.json();
+
+                updateFilterColumn('FZ', data.find(f => f.nazwa_unikalna === 'FZ'));
+                updateFilterColumn('FN', data.find(f => f.nazwa_unikalna === 'FN'));
+            } catch (error) {
+                console.error("Błąd podczas aktualizacji statusu filtrów:", error);
+                updateFilterColumn('FZ', null); // Wywołaj z null aby pokazać błąd
+                updateFilterColumn('FN', null);
+            }
+        };
+
+        fetchData();
+        setInterval(fetchData, REFRESH_INTERVAL_MS);
+    });
+    </script>
+</body>
+</html>

@@ -585,7 +585,49 @@ def get_topologia():
     conn.close()
     return jsonify(segmenty)
 
-
+@bp.route('/api/sprzet/pomiary', methods=['GET'])
+def get_aktualne_pomiary_sprzetu():
+    """
+    Zwraca listę całego sprzętu wraz z jego aktualnymi odczytami temperatury i ciśnienia,
+    bezpośrednio z tabeli `sprzet`.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    # Zapytanie jest teraz bardzo proste, ponieważ wszystkie potrzebne dane są w jednej tabeli.
+    query = """
+        SELECT
+            id,
+            nazwa_unikalna,
+            typ_sprzetu,
+            stan_sprzetu,
+            temperatura_aktualna,
+            cisnienie_aktualne,
+            temperatura_docelowa,
+            temperatura_max,
+            cisnienie_max,
+            ostatnia_aktualizacja
+        FROM sprzet
+        ORDER BY typ_sprzetu, nazwa_unikalna;
+    """
+    
+    try:
+        cursor.execute(query)
+        sprzet_pomiary = cursor.fetchall()
+        
+        # Sformatuj datę ostatniej aktualizacji, aby była przyjazna dla formatu JSON
+        for sprzet in sprzet_pomiary:
+            if sprzet.get('ostatnia_aktualizacja'):
+                sprzet['ostatnia_aktualizacja'] = sprzet['ostatnia_aktualizacja'].strftime('%Y-%m-%d %H:%M:%S')
+            
+        return jsonify(sprzet_pomiary)
+        
+    except Exception as e:
+        return jsonify({'error': f'Błąd bazy danych: {str(e)}'}), 500
+        
+    finally:
+        cursor.close()
+        conn.close()
 
 @bp.route('/api/trasy/sugeruj', methods=['POST'])
 def sugeruj_trase():
@@ -1889,3 +1931,178 @@ def transfer_reaktorow():
             if 'cursor' in locals() and cursor: cursor.close()
             if 'write_cursor' in locals() and write_cursor: write_cursor.close()
             conn.close()
+
+
+@bp.route('/api/monitoring/parametry', methods=['GET'])
+def get_parametry_sprzetu():
+    """Zwraca aktualne temperatury i ciśnienia dla wszystkiego sprzętu."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        cursor.execute("""
+            SELECT 
+                id,
+                nazwa_unikalna,
+                typ_sprzetu,
+                stan_sprzetu,
+                temperatura_aktualna,
+                cisnienie_aktualne,
+                poziom_aktualny_procent,
+                temperatura_docelowa,
+                temperatura_max,
+                cisnienie_max,
+                ostatnia_aktualizacja,
+                CASE 
+                    WHEN temperatura_aktualna > temperatura_max THEN 'PRZEKROCZENIE_TEMP'
+                    WHEN cisnienie_aktualne > cisnienie_max THEN 'PRZEKROCZENIE_CISN'
+                    WHEN temperatura_aktualna IS NULL OR cisnienie_aktualne IS NULL THEN 'BRAK_DANYCH'
+                    ELSE 'OK'
+                END as status_parametrow,
+                CASE 
+                    WHEN ostatnia_aktualizacja IS NULL THEN NULL
+                    WHEN ostatnia_aktualizacja < NOW() - INTERVAL 5 MINUTE THEN 'NIEAKTUALNE'
+                    ELSE 'AKTUALNE'
+                END as status_danych
+            FROM sprzet 
+            ORDER BY typ_sprzetu, nazwa_unikalna
+        """)
+        
+        sprzet_list = cursor.fetchall()
+        
+        # Formatuj daty do JSON
+        for sprzet in sprzet_list:
+            if sprzet['ostatnia_aktualizacja']:
+                sprzet['ostatnia_aktualizacja'] = sprzet['ostatnia_aktualizacja'].strftime('%Y-%m-%d %H:%M:%S')
+        
+        return jsonify(sprzet_list)
+        
+    except Exception as e:
+        return jsonify({'error': f'Błąd pobierania parametrów sprzętu: {str(e)}'}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# ENDPOINT DO POBIERANIA PARAMETRÓW SPRZĘTU 
+@bp.route('/api/monitoring/parametry/<int:sprzet_id>', methods=['GET'])
+def get_parametry_konkretnego_sprzetu(sprzet_id):
+    """Zwraca szczegółowe parametry dla konkretnego sprzętu."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        cursor.execute("""
+            SELECT 
+                id,
+                nazwa_unikalna,
+                typ_sprzetu,
+                stan_sprzetu,
+                temperatura_aktualna,
+                cisnienie_aktualne,
+                poziom_aktualny_procent,
+                temperatura_docelowa,
+                temperatura_max,
+                cisnienie_max,
+                ostatnia_aktualizacja,
+                pojemnosc_kg,
+                id_partii_surowca,
+                CASE 
+                    WHEN temperatura_aktualna > temperatura_max THEN 'PRZEKROCZENIE_TEMP'
+                    WHEN cisnienie_aktualne > cisnienie_max THEN 'PRZEKROCZENIE_CISN'
+                    WHEN temperatura_aktualna IS NULL OR cisnienie_aktualne IS NULL THEN 'BRAK_DANYCH'
+                    ELSE 'OK'
+                END as status_parametrow,
+                CASE 
+                    WHEN ostatnia_aktualizacja IS NULL THEN NULL
+                    WHEN ostatnia_aktualizacja < NOW() - INTERVAL 5 MINUTE THEN 'NIEAKTUALNE'
+                    ELSE 'AKTUALNE'
+                END as status_danych,
+                TIMESTAMPDIFF(MINUTE, ostatnia_aktualizacja, NOW()) as minuty_od_aktualizacji
+            FROM sprzet 
+            WHERE id = %s
+        """, (sprzet_id,))
+        
+        sprzet = cursor.fetchone()
+        
+        if not sprzet:
+            return jsonify({'error': 'Sprzęt nie znaleziony'}), 404
+        
+        # Formatuj datę do JSON
+        if sprzet['ostatnia_aktualizacja']:
+            sprzet['ostatnia_aktualizacja'] = sprzet['ostatnia_aktualizacja'].strftime('%Y-%m-%d %H:%M:%S')
+        
+        # Jeśli sprzęt ma partię, dodaj informacje o niej
+        if sprzet['id_partii_surowca']:
+            cursor.execute("""
+                SELECT unikalny_kod, typ_surowca, waga_aktualna_kg, status_partii
+                FROM partie_surowca 
+                WHERE id = %s
+            """, (sprzet['id_partii_surowca'],))
+            partia = cursor.fetchone()
+            sprzet['partia'] = partia
+        else:
+            sprzet['partia'] = None
+        
+        return jsonify(sprzet)
+        
+    except Exception as e:
+        return jsonify({'error': f'Błąd pobierania parametrów sprzętu: {str(e)}'}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+@bp.route('/api/monitoring/alarmy-parametryczne', methods=['GET'])
+def get_alarmy_parametryczne():
+    """Zwraca listę sprzętu z przekroczonymi parametrami (temperatura/ciśnienie)."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        cursor.execute("""
+            SELECT 
+                id,
+                nazwa_unikalna,
+                typ_sprzetu,
+                temperatura_aktualna,
+                cisnienie_aktualne,
+                temperatura_max,
+                cisnienie_max,
+                ostatnia_aktualizacja,
+                CASE 
+                    WHEN temperatura_aktualna > temperatura_max THEN 'TEMPERATURA_PRZEKROCZONA'
+                    WHEN cisnienie_aktualne > cisnienie_max THEN 'CISNIENIE_PRZEKROCZONE'
+                    ELSE 'INNE'
+                END as typ_alarmu,
+                CASE 
+                    WHEN temperatura_aktualna > temperatura_max THEN temperatura_aktualna - temperatura_max
+                    WHEN cisnienie_aktualne > cisnienie_max THEN cisnienie_aktualne - cisnienie_max
+                    ELSE 0
+                END as przekroczenie_wartosci
+            FROM sprzet 
+            WHERE 
+                (temperatura_aktualna > temperatura_max AND temperatura_aktualna IS NOT NULL)
+                OR 
+                (cisnienie_aktualne > cisnienie_max AND cisnienie_aktualne IS NOT NULL)
+            ORDER BY przekroczenie_wartosci DESC
+        """)
+        
+        alarmy = cursor.fetchall()
+        
+        # Formatuj daty do JSON
+        for alarm in alarmy:
+            if alarm['ostatnia_aktualizacja']:
+                alarm['ostatnia_aktualizacja'] = alarm['ostatnia_aktualizacja'].strftime('%Y-%m-%d %H:%M:%S')
+        
+        return jsonify(alarmy)
+        
+    except Exception as e:
+        return jsonify({'error': f'Błąd pobierania alarmów parametrycznych: {str(e)}'}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+@bp.route('/monitoring-parametry')
+def show_monitoring_parametry():
+    """Serwuje stronę monitoringu parametrów sprzętu."""
+    return render_template('monitoring_parametry.html')

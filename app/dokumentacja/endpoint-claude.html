@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Endpoints - Lista</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        h2 {
+            color: #2c5aa0;
+            border-bottom: 2px solid #2c5aa0;
+            padding-bottom: 5px;
+            margin-top: 30px;
+        }
+        .endpoint {
+            margin: 15px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background-color: #fafafa;
+        }
+        .method {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: bold;
+            margin-right: 10px;
+            font-size: 12px;
+        }
+        .get {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .post {
+            background-color: #ff9800;
+            color: white;
+        }
+        .url {
+            font-family: monospace;
+            background-color: #e8e8e8;
+            padding: 2px 6px;
+            border-radius: 3px;
+            margin-right: 10px;
+        }
+        .description {
+            color: #666;
+            font-style: italic;
+            margin-top: 5px;
+        }
+        .clickable {
+            color: #2c5aa0;
+            text-decoration: none;
+        }
+        .clickable:hover {
+            text-decoration: underline;
+        }
+        .not-clickable {
+            color: #999;
+        }
+        .note {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 20px 0;
+            color: #856404;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Lista API Endpoints</h1>
+        <p style="text-align: center; color: #666;">Serwer: <strong>http://localhost:5000/</strong></p>
+        
+        <div class="note">
+            <strong>Uwaga:</strong> Tylko endpointy GET są klikalne. Endpointy POST wymagają narzędzi takich jak Postman lub formularz.
+        </div>
+
+        <h2>📄 Strony HTML (Frontend)</h2>
+        
+        <div class="endpoint">
+            <span class="method get">GET</span>
+            <a href="http://localhost:5000/" class="url clickable">/</a>
+            <div class="description">Główna strona aplikacji</div>
+        </div>
+
+        <div class="endpoint">
+            <span class="method get">GET</span>
+            <a href="http://localhost:5000/alarms" class="url clickable">/alarms</a>
+            <div class="description">Strona z historią wszystkich alarmów</div>
+        </div>
+
+        <div class="endpoint">
+            <span class="method get">GET</span>
+            <a href="http://localhost:5000/operacje" class="url clickable">/operacje</a>
+            <div class="description">Strona z operacjami tankowania</div>
+        </div>
+
+        <div class="endpoint">
+            <span class="method get">GET</span>
+            <a href="http://localhost:5000/filtry" class="url clickable">/filtry</a>
+            <div class="description">Panel monitoringu filtrów</div>
+        </div>
+
+        <div class="endpoint">
+            <span class="method get">GET</span>
+            <a href="http://localhost:5000/cykle-monitor" class="url clickable">/cykle-monitor</a>
+            <div class="description">Monitoring cykli filtracyjnych</div>
+        </div>
+
+        <div class="endpoint">
+            <span class="method get">GET</span>
+            <a href="http://localhost:5000/aktywne-partie" class="url clickable">/aktywne-partie</a>
+            <div class="description">Zarządzanie aktywnymi partiami</div>
+        </div>
+
+        <h2>🔧 API - Sprzęt i Topologia</h2>
+
+        <div class="endpoint">
+            <span class="method get">GET</span>
+            <a href="http://localhost:5000/api/sprzet" class="url clickable">/api/sprzet</a>
+            <div class="description">Lista całego sprzętu wraz z informacją o partiach</div>
+        </div>
+
+        <div class="endpoint">
+            <span class="method get">GET</span>
+            <a href="http://localhost:5000/api/zawory" class="url clickable">/api/zawory</a>
+            <div class="description">Lista wszystkich zaworów i ich aktualny stan</div>
+        </div>
+
+        <div class="endpoint">
+            <span class="method get">GET</span>
+            <a href="http://localhost:5000/api/topologia" class="url clickable">/api/topologia</a>
+            <div class="description">Pełna lista połączeń (segmentów) do wizualizacji</div>
+        </div>
+
+        <div class="endpoint">
+            <span class="method get">GET</span>
+            <a href="http://localhost:5000/api/sprzet/filtry" class="url clickable">/api/sprzet/filtry</a>
+            <div class="description">Lista filtrów</div>
+        </div>
+
+        <div class="endpoint">
+            <span class="method get">GET</span>
+            <a href="http://localhost:5000/api/sprzet/beczki-brudne" class="url clickable">/api/sprzet/beczki-brudne</a>
+            <div class="description">Lista beczek brudnych dostępnych do tankowania</div>
+        </div>
+
+        <div class="endpoint">
+            <span class="method get">GET</span>
+            <a href="http://localhost:5000/api/sprzet/reaktory-puste" class="url clickable">/api/sprzet/reaktory-puste</a>
+            <div class="description">Lista reaktorów w stanie 'Pusty'</div>
+        </div>
+
+        <div class="endpoint">
+            <span class="method get">GET</span>
+            <a href="http://localhost:5000/api/sprzet/reaktory-z-surowcem" class="url clickable">/api/sprzet/reaktory-z-surowcem</a>
+            <div class="description">Lista reaktorów zawierających surowiec</div>
+        </div>
+
+        <h2>📊 API - Dane i Status</h2>
+
+        <div class="endpoint">
+            <span class="method get">GET</span>
+            <a href="http://localhost:5000/api/operacje/aktywne" class="url clickable">/api/operacje/aktywne</a>
+            <div class="description">Lista wszystkich operacji ze statusem 'aktywna'</div>
+        </div>
+
+        <div class="endpoint">
+            <span class="method get">GET</span>
+            <a href="http://localhost:5000/api/punkty_startowe" class="url clickable">/api/punkty_startowe</a>
+            <div class="description">Lista wszystkich portów wyjściowych (OUT)</div>
+        </div>
+
+        <div class="endpoint">
+            <span class="method get">GET</span>
+            <a href="http://localhost:5000/api/punkty_docelowe" class="url clickable">/api/punkty_docelowe</a>
+            <div class="description">Lista wszystkich portów wejściowych (IN)</div>
+        </div>
+
+        <div class="endpoint">
+            <span class="method get">GET</span>
+            <a href="http://localhost:5000/api/partie/aktywne" class="url clickable">/api/partie/aktywne</a>
+            <div class="description">Lista aktywnych partii z pełnymi szczegółami</div>
+        </div>
+
+        <div class="endpoint">
+            <span class="method get">GET</span>
+            <a href="http://localhost:5000/api/partie/szczegoly/1" class="url clickable">/api/partie/szczegoly/1</a>
+            <div class="description">Szczegółowe informacje o partii (przykład: ID=1)</div>
+        </div>
+
+        <div class="endpoint">
+            <span class="method get">GET</span>
+            <a href="http://localhost:5000/api/partie/aktualny-stan" class="url clickable">/api/partie/aktualny-stan</a>
+            <div class="description">Aktualny stan wszystkich partii w systemie</div>
+        </div>
+
+        <div class="endpoint">
+            <span class="method get">GET</span>
+            <a href="http://localhost:5000/api/typy-surowca" class="url clickable">/api/typy-surowca</a>
+            <div class="description">Lista dostępnych typów surowca</div>
+        </div>
+
+        <h2>🔍 API - Filtry i Cykle</h2>
+
+        <div class="endpoint">
+            <span class="method get">GET</span>
+            <a href="http://localhost:5000/api/filtry/status" class="url clickable">/api/filtry/status</a>
+            <div class="description">Aktualny status filtrów z informacją o operacjach</div>
+        </div>
+
+        <div class="endpoint">
+            <span class="method get">GET</span>
+            <a href="http://localhost:5000/api/filtry/szczegolowy-status" class="url clickable">/api/filtry/szczegolowy-status</a>
+            <div class="description">Szczegółowy status filtrów z partiami i cyklami</div>
+        </div>
+
+        <div class="endpoint">
+            <span class="method get">GET</span>
+            <a href="http://localhost:5000/api/cykle-filtracyjne/1" class="url clickable">/api/cykle-filtracyjne/1</a>
+            <div class="description">Historia cykli filtracyjnych dla partii (przykład: ID=1)</div>
+        </div>
+
+        <h2>🚨 API - Alarmy i Monitoring</h2>
+
+        <div class="endpoint">
+            <span class="method get">GET</span>
+            <a href="http://localhost:5000/api/alarmy/aktywne" class="url clickable">/api/alarmy/aktywne</a>
+            <div class="description">Lista aktywnych alarmów</div>
+        </div>
+
+        <div class="endpoint">
+            <span class="method get">GET</span>
+            <a href="http://localhost:5000/api/pomiary/historia" class="url clickable">/api/pomiary/historia</a>
+            <div class="description">Historia pomiarów z ostatnich 24 godzin</div>
+        </div>
+
+        <h2>🌡️ API - Monitoring Parametrów</h2>
+
+        <div class="endpoint">
+            <span class="method get">GET</span>
+            <a href="http://localhost:5000/api/monitoring/parametry" class="url clickable">/api/monitoring/parametry</a>
+            <div class="description">Aktualne temperatury i ciśnienia dla wszystkiego sprzętu</div>
+        </div>
+
+        <div class="endpoint">
+            <span class="method get">GET</span>
+            <a href="http://localhost:5000/api/monitoring/parametry/1" class="url clickable">/api/monitoring/parametry/1</a>
+            <div class="description">Szczegółowe parametry dla konkretnego sprzętu (przykład: ID=1)</div>
+        </div>
+
+        <div class="endpoint">
+            <span class="method get">GET</span>
+            <a href="http://localhost:5000/api/monitoring/alarmy-parametryczne" class="url clickable">/api/monitoring/alarmy-parametryczne</a>
+            <div class="description">Lista sprzętu z przekroczonymi parametrami (temperatura/ciśnienie)</div>
+        </div>
+
+        <h2>⚙️ API - Operacje (POST - Tylko opisy)</h2>
+        <p style="color: #666; font-style: italic;">Te endpointy wymagają metody POST z danymi JSON:</p>
+
+        <div class="endpoint">
+            <span class="method post">POST</span>
+            <span class="url not-clickable">/api/operacje/tankowanie</span>
+            <div class="description">Tworzy nową partię przez tankowanie (z czystego źródła)</div>
+        </div>
+
+        <div class="endpoint">
+            <span class="method post">POST</span>
+            <span class="url not-clickable">/api/operacje/tankowanie-brudnego</span>
+            <div class="description">Tankowanie brudnego surowca z beczki do reaktora</div>
+        </div>
+
+        <div class="endpoint">
+            <span class="method post">POST</span>
+            <span class="url not-clickable">/api/operacje/rozpocznij_trase</span>
+            <div class="description">Rozpoczyna operację transferu na określonej trasie</div>
+        </div>
+
+        <div class="endpoint">
+            <span class="method post">POST</span>
+            <span class="url not-clickable">/api/operacje/zakoncz</span>
+            <div class="description">Kończy aktywną operację i zamyka zawory</div>
+        </div>
+
+        <div class="endpoint">
+            <span class="method post">POST</span>
+            <span class="url not-clickable">/api/operacje/dobielanie</span>
+            <div class="description">Dodaje ziemię bielejącą do partii (dodaje worki)</div>
+        </div>
+
+        <div class="endpoint">
+            <span class="method post">POST</span>
+            <span class="url not-clickable">/api/operacje/transfer-reaktorow</span>
+            <div class="description">Transfer surowca między reaktorami, opcjonalnie przez filtr</div>
+        </div>
+
+        <div class="endpoint">
+            <span class="method post">POST</span>
+            <span class="url not-clickable">/api/zawory/zmien_stan</span>
+            <div class="description">Zmienia stan pojedynczego zaworu</div>
+        </div>
+
+        <div class="endpoint">
+            <span class="method post">POST</span>
+            <span class="url not-clickable">/api/trasy/sugeruj</span>
+            <div class="description">Znajduje optymalną trasę i zwraca potrzebne zawory</div>
+        </div>
+
+        <div class="endpoint">
+            <span class="method post">POST</span>
+            <span class="url not-clickable">/api/cykle/rozpocznij</span>
+            <div class="description">Rozpoczyna nowy cykl filtracyjny dla partii</div>
+        </div>
+
+        <div class="endpoint">
+            <span class="method post">POST</span>
+            <span class="url not-clickable">/api/cykle/zakoncz</span>
+            <div class="description">Kończy aktualny cykl filtracyjny</div>
+        </div>
+
+        <div class="endpoint">
+            <span class="method post">POST</span>
+            <span class="url not-clickable">/api/partie/aktualizuj-status</span>
+            <div class="description">Aktualizuje status partii</div>
+        </div>
+
+        <div class="endpoint">
+            <span class="method post">POST</span>
+            <span class="url not-clickable">/api/alarmy/potwierdz</span>
+            <div class="description">Potwierdza alarm (zmienia status na 'POTWIERDZONY')</div>
+        </div>
+
+        <div class="endpoint">
+            <span class="method post">POST</span>
+            <span class="url not-clickable">/api/test/sensors</span>
+            <div class="description">Endpoint testowy do wymuszenia odczytu czujników</div>
+        </div>
+
+        <div class="endpoint">
+            <span class="method post">POST</span>
+            <span class="url not-clickable">/api/test/alarm</span>
+            <div class="description">Endpoint do testowania alarmów (wymuszanie alarmu)</div>
+        </div>
+
+        <div class="endpoint">
+            <span class="method post">POST</span>
+            <span class="url not-clickable">/api/sprzet/{id}/temperatura</span>
+            <div class="description">Ustawia docelową temperaturę dla sprzętu</div>
+        </div>
+
+        <div class="note">
+            <strong>Tip:</strong> Dla endpointów POST używaj narzędzi takich jak Postman, curl lub wbudowanych formularzy w aplikacji.
+        </div>
+    </div>
+</body>
+</html>

@@ -94,3 +94,5 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchAndUpdateStatus();
     setInterval(fetchAndUpdateStatus, 5000); // Odświeżaj co 5 sekund
 });
+
+
