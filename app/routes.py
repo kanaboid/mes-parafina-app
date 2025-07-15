@@ -1802,7 +1802,7 @@ def transfer_reaktorow():
                 }), 404
                 
             trasa_segmentow = sciezka_1 + sciezka_filtr + sciezka_2
-            typ_operacji = 'TRANSFER_PRZEZ_FILTR'
+            typ_operacji = f"Transfer {partia['typ_surowca']} z {reaktor_zrodlowy['nazwa_unikalna']} przez {filtr_info['nazwa_unikalna']} do {reaktor_docelowy['nazwa_unikalna']}"
             if not tylko_podglad and partia:
                 opis_operacji = f"Transfer {partia['typ_surowca']} z {reaktor_zrodlowy['nazwa_unikalna']} przez {filtr_info['nazwa_unikalna']} do {reaktor_docelowy['nazwa_unikalna']}"
         else:
@@ -1814,7 +1814,7 @@ def transfer_reaktorow():
                     'message': f'Nie można znaleźć trasy bezpośredniej z {reaktor_zrodlowy["nazwa_unikalna"]} do {reaktor_docelowy["nazwa_unikalna"]}'
                 }), 404
                 
-            typ_operacji = 'TRANSFER_BEZPOSREDNI'
+            typ_operacji = f"Transfer bezpośredni {partia['typ_surowca']} z {reaktor_zrodlowy['nazwa_unikalna']} do {reaktor_docelowy['nazwa_unikalna']}"
             if not tylko_podglad and partia:
                 opis_operacji = f"Transfer bezpośredni {partia['typ_surowca']} z {reaktor_zrodlowy['nazwa_unikalna']} do {reaktor_docelowy['nazwa_unikalna']}"
 
@@ -1879,13 +1879,19 @@ def transfer_reaktorow():
         # Stwórz operację w logu
         sql_log = """
             INSERT INTO operacje_log 
-            (typ_operacji, id_partii_surowca, status_operacji, czas_rozpoczecia, opis, 
+            (typ_operacji, id_sprzetu_zrodlowego, id_sprzetu_docelowego, id_partii_surowca, status_operacji, czas_rozpoczecia, opis, 
              punkt_startowy, punkt_docelowy, ilosc_kg) 
-            VALUES (%s, %s, 'aktywna', NOW(), %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, 'aktywna', NOW(), %s, %s, %s, %s)
         """
         write_cursor.execute(sql_log, (
-            typ_operacji, partia['id'], opis_operacji, 
-            punkt_startowy, punkt_docelowy, partia['waga_aktualna_kg']
+            typ_operacji, 
+            dane['id_reaktora_zrodlowego'], 
+            dane['id_reaktora_docelowego'], 
+            partia['id'], 
+            opis_operacji, 
+            punkt_startowy, 
+            punkt_docelowy, 
+            partia['waga_aktualna_kg']
         ))
         operacja_id = write_cursor.lastrowid
 
@@ -2113,201 +2119,4 @@ def get_alarmy_parametryczne():
 def show_monitoring_parametry():
     """Serwuje stronę monitoringu parametrów sprzętu."""
     return render_template('monitoring_parametry.html')
-
-@bp.route('/api/filtry/monitoring-scada', methods=['GET'])
-def get_filtry_monitoring_scada():
-    """
-    Zwraca kompletne dane monitoringowe dla filtrów w stylu SCADA:
-    - Parametry procesowe (temp, ciśnienie, poziom)
-    - Aktywne operacje i partie
-    - Historia operacji i alarmów
-    - Stany zaworów związanych z filtrami
-    - Przepływ i trendy
-    """
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-    
-    try:
-        # Pobierz podstawowe dane filtrów z parametrami
-        cursor.execute("""
-            SELECT 
-                id,
-                nazwa_unikalna,
-                typ_sprzetu,
-                stan_sprzetu,
-                temperatura_aktualna,
-                cisnienie_aktualne,
-                poziom_aktualny_procent,
-                temperatura_docelowa,
-                temperatura_max,
-                cisnienie_max,
-                ostatnia_aktualizacja,
-                pojemnosc_kg
-            FROM sprzet 
-            WHERE typ_sprzetu = 'filtr'
-            ORDER BY nazwa_unikalna
-        """)
-        filtry = cursor.fetchall()
-        
-        result = []
-        
-        for filtr in filtry:
-            filtr_data = {
-                'podstawowe': filtr,
-                'operacje': [],
-                'partie': [],
-                'zawory': [],
-                'historia_pomiarow': [],
-                'alarmy': [],
-                'cykle_filtracyjne': [],
-                'status_alarmowy': 'OK'
-            }
-            
-            # Formatuj datę ostatniej aktualizacji
-            if filtr['ostatnia_aktualizacja']:
-                filtr_data['podstawowe']['ostatnia_aktualizacja'] = filtr['ostatnia_aktualizacja'].strftime('%Y-%m-%d %H:%M:%S')
-            
-            # 1. AKTYWNE OPERACJE dla tego filtra
-            cursor.execute("""
-                SELECT 
-                    ol.*,
-                    ps.unikalny_kod,
-                    ps.nazwa_partii,
-                    ps.typ_surowca,
-                    ps.waga_aktualna_kg,
-                    s_start.nazwa_unikalna as sprzet_startowy,
-                    s_end.nazwa_unikalna as sprzet_docelowy
-                FROM operacje_log ol
-                LEFT JOIN partie_surowca ps ON ol.id_partii_surowca = ps.id
-                LEFT JOIN sprzet s_start ON ol.id_sprzetu_zrodlowego = s_start.id
-                LEFT JOIN sprzet s_end ON ol.id_sprzetu_docelowego = s_end.id
-                WHERE ol.status_operacji = 'aktywna'
-                AND (ol.punkt_startowy LIKE %s OR ol.punkt_docelowy LIKE %s)
-                ORDER BY ol.czas_rozpoczecia DESC
-            """, (f"%{filtr['nazwa_unikalna']}%", f"%{filtr['nazwa_unikalna']}%"))
-            
-            operacje = cursor.fetchall()
-            for op in operacje:
-                if op['czas_rozpoczecia']:
-                    op['czas_rozpoczecia'] = op['czas_rozpoczecia'].strftime('%Y-%m-%d %H:%M:%S')
-                if op['czas_zakonczenia']:
-                    op['czas_zakonczenia'] = op['czas_zakonczenia'].strftime('%Y-%m-%d %H:%M:%S')
-            filtr_data['operacje'] = operacje
-            
-            # 2. PARTIE W FILTRZE lub związane z filtrem
-            cursor.execute("""
-                SELECT 
-                    ps.*,
-                    s.nazwa_unikalna as lokalizacja_sprzetu
-                FROM partie_surowca ps
-                LEFT JOIN sprzet s ON ps.id_sprzetu = s.id
-                WHERE ps.id_aktualnego_filtra = %s 
-                OR ps.id_sprzetu = %s
-                ORDER BY ps.data_utworzenia DESC
-                LIMIT 5
-            """, (filtr['nazwa_unikalna'], filtr['id']))
-            
-            partie = cursor.fetchall()
-            for partia in partie:
-                if partia['data_utworzenia']:
-                    partia['data_utworzenia'] = partia['data_utworzenia'].strftime('%Y-%m-%d %H:%M:%S')
-                if partia['czas_rozpoczecia_etapu']:
-                    partia['czas_rozpoczecia_etapu'] = partia['czas_rozpoczecia_etapu'].strftime('%Y-%m-%d %H:%M:%S')
-                if partia['planowany_czas_zakonczenia']:
-                    partia['planowany_czas_zakonczenia'] = partia['planowany_czas_zakonczenia'].strftime('%Y-%m-%d %H:%M:%S')
-            filtr_data['partie'] = partie
-            
-            # 3. ZAWORY związane z filtrem
-            cursor.execute("""
-                SELECT DISTINCT z.id, z.nazwa_zaworu, z.stan
-                FROM zawory z
-                JOIN segmenty s ON z.id = s.id_zaworu
-                JOIN porty_sprzetu ps ON (s.id_portu_startowego = ps.id OR s.id_portu_koncowego = ps.id)
-                WHERE ps.id_sprzetu = %s
-                ORDER BY z.nazwa_zaworu
-            """, (filtr['id'],))
-            filtr_data['zawory'] = cursor.fetchall()
-            
-            # 4. HISTORIA POMIARÓW (ostatnie 24h)
-            cursor.execute("""
-                SELECT 
-                    temperatura,
-                    cisnienie,
-                    czas_pomiaru
-                FROM historia_pomiarow
-                WHERE id_sprzetu = %s 
-                AND czas_pomiaru > NOW() - INTERVAL 24 HOUR
-                ORDER BY czas_pomiaru DESC
-                LIMIT 100
-            """, (filtr['id'],))
-            
-            historia = cursor.fetchall()
-            for pomiar in historia:
-                if pomiar['czas_pomiaru']:
-                    pomiar['czas_pomiaru'] = pomiar['czas_pomiaru'].strftime('%Y-%m-%d %H:%M:%S')
-            filtr_data['historia_pomiarow'] = historia
-            
-            # 5. AKTYWNE ALARMY dla tego filtra
-            cursor.execute("""
-                SELECT *
-                FROM alarmy
-                WHERE nazwa_sprzetu = %s 
-                AND status_alarmu = 'AKTYWNY'
-                ORDER BY czas_wystapienia DESC
-            """, (filtr['nazwa_unikalna'],))
-            
-            alarmy = cursor.fetchall()
-            for alarm in alarmy:
-                if alarm['czas_wystapienia']:
-                    alarm['czas_wystapienia'] = alarm['czas_wystapienia'].strftime('%Y-%m-%d %H:%M:%S')
-            filtr_data['alarmy'] = alarmy
-            
-            # 6. CYKLE FILTRACYJNE (ostatnie 10)
-            cursor.execute("""
-                SELECT 
-                    cf.*,
-                    ps.unikalny_kod,
-                    ps.typ_surowca
-                FROM cykle_filtracyjne cf
-                JOIN partie_surowca ps ON cf.id_partii = ps.id
-                WHERE cf.id_filtra = %s
-                ORDER BY cf.czas_rozpoczecia DESC
-                LIMIT 10
-            """, (filtr['nazwa_unikalna'],))
-            
-            cykle = cursor.fetchall()
-            for cykl in cykle:
-                if cykl['czas_rozpoczecia']:
-                    cykl['czas_rozpoczecia'] = cykl['czas_rozpoczecia'].strftime('%Y-%m-%d %H:%M:%S')
-                if cykl['czas_zakonczenia']:
-                    cykl['czas_zakonczenia'] = cykl['czas_zakonczenia'].strftime('%Y-%m-%d %H:%M:%S')
-            filtr_data['cykle_filtracyjne'] = cykle
-            
-            # 7. OKREŚL STATUS ALARMOWY
-            if len(alarmy) > 0:
-                filtr_data['status_alarmowy'] = 'ALARM'
-            elif (filtr['temperatura_aktualna'] and filtr['temperatura_aktualna'] > filtr['temperatura_max'] * 0.9) or \
-                 (filtr['cisnienie_aktualne'] and filtr['cisnienie_aktualne'] > filtr['cisnienie_max'] * 0.9):
-                filtr_data['status_alarmowy'] = 'OSTRZEZENIE'
-            else:
-                filtr_data['status_alarmowy'] = 'OK'
-            
-            # 8. DODATKOWE OBLICZENIA
-            filtr_data['statystyki'] = {
-                'aktywnych_operacji': len(operacje),
-                'aktywnych_partii': len([p for p in partie if p['status_partii'] not in ['Gotowy do wysłania', 'W magazynie czystym']]),
-                'otwartych_zaworow': len([z for z in filtr_data['zawory'] if z['stan'] == 'OTWARTY']),
-                'cykli_ostatnie_24h': len([c for c in cykle if c['czas_rozpoczecia'] and 
-                                         datetime.strptime(c['czas_rozpoczecia'], '%Y-%m-%d %H:%M:%S') > datetime.now() - timedelta(hours=24)])
-            }
-            
-            result.append(filtr_data)
-        
-        return jsonify(result)
-        
-    except Exception as e:
-        return jsonify({'error': f'Błąd pobierania danych SCADA: {str(e)}'}), 500
-    finally:
-        cursor.close()
-        conn.close()
 

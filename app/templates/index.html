@@ -20,6 +20,26 @@
     <header>
         <h1>System Zarządzania Produkcją Parafiny</h1>
     </header>    <main>
+        
+         <!-- NOWA SEKCJA: Aktywne Operacje -->
+        <section id="active-operations-section">
+            <h2>Aktywne Operacje</h2>
+            <table id="operations-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Typ Operacji</th>
+                        <th>ID Partii</th>
+                        <th>Czas Rozpoczęcia</th>
+                        <th>Opis</th>
+                        <th>Akcja</th>
+                    </tr>
+                </thead>
+                <tbody id="operations-table-body">
+                    <!-- JavaScript wstawi tutaj wiersze -->
+                </tbody>
+            </table>
+        </section>
         <!-- Sekcja statusu sprzętu (bez zmian) -->
         <section><!-- Add this new section -->
         <div class="alarm-section">
@@ -57,25 +77,7 @@
             </div>
         </section>
 
-        <!-- NOWA SEKCJA: Aktywne Operacje -->
-        <section id="active-operations-section">
-            <h2>Aktywne Operacje</h2>
-            <table id="operations-table">
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Typ Operacji</th>
-                        <th>ID Partii</th>
-                        <th>Czas Rozpoczęcia</th>
-                        <th>Opis</th>
-                        <th>Akcja</th>
-                    </tr>
-                </thead>
-                <tbody id="operations-table-body">
-                    <!-- JavaScript wstawi tutaj wiersze -->
-                </tbody>
-            </table>
-        </section>
+       
 
         <!-- Sekcja uruchamiania operacji i logów (bez zmian) -->
         <!-- app/templates/index.html -->
