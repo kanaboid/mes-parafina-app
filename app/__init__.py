@@ -34,7 +34,7 @@ def create_app():
 
     @scheduler.task('interval', 
                    id='read_sensors', 
-                   seconds=60,
+                   seconds=600,  # Odczyt co 10 minut
                    max_instances=1,
                    next_run_time=datetime.now())
     def read_sensors():
