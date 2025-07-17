@@ -1,0 +1,399 @@
+{
+"segmenty": [
+	{
+		"id" : 1,
+		"nazwa_segmentu" : "SEGM_R3_OUT_DO_W_R2_R3",
+		"id_portu_startowego" : 6,
+		"id_wezla_startowego" : null,
+		"id_portu_koncowego" : null,
+		"id_wezla_koncowego" : 1,
+		"id_zaworu" : 1
+	},
+	{
+		"id" : 2,
+		"nazwa_segmentu" : "SEGM_W_R2_R3_DO_W_R1_R2",
+		"id_portu_startowego" : null,
+		"id_wezla_startowego" : 1,
+		"id_portu_koncowego" : null,
+		"id_wezla_koncowego" : 2,
+		"id_zaworu" : 2
+	},
+	{
+		"id" : 3,
+		"nazwa_segmentu" : "SEGM_W_R1_R2_DO_W_R1_FZ",
+		"id_portu_startowego" : null,
+		"id_wezla_startowego" : 2,
+		"id_portu_koncowego" : null,
+		"id_wezla_koncowego" : 3,
+		"id_zaworu" : 3
+	},
+	{
+		"id" : 4,
+		"nazwa_segmentu" : "SEGM_R5_OUT_DO_W_R4_R5",
+		"id_portu_startowego" : 10,
+		"id_wezla_startowego" : null,
+		"id_portu_koncowego" : null,
+		"id_wezla_koncowego" : 4,
+		"id_zaworu" : 4
+	},
+	{
+		"id" : 5,
+		"nazwa_segmentu" : "SEGM_W_R4_R5_DO_W_R4_FZ",
+		"id_portu_startowego" : null,
+		"id_wezla_startowego" : 4,
+		"id_portu_koncowego" : null,
+		"id_wezla_koncowego" : 5,
+		"id_zaworu" : 5
+	},
+	{
+		"id" : 6,
+		"nazwa_segmentu" : "SEGM_W_R1_FZ_DO_W_FZ_IN_MAIN",
+		"id_portu_startowego" : null,
+		"id_wezla_startowego" : 3,
+		"id_portu_koncowego" : null,
+		"id_wezla_koncowego" : 6,
+		"id_zaworu" : 6
+	},
+	{
+		"id" : 7,
+		"nazwa_segmentu" : "SEGM_W_R4_FZ_DO_W_FZ_IN_MAIN",
+		"id_portu_startowego" : null,
+		"id_wezla_startowego" : 5,
+		"id_portu_koncowego" : null,
+		"id_wezla_koncowego" : 6,
+		"id_zaworu" : 7
+	},
+	{
+		"id" : 8,
+		"nazwa_segmentu" : "SEGM_W_FZ_IN_MAIN_DO_FZ_IN",
+		"id_portu_startowego" : null,
+		"id_wezla_startowego" : 6,
+		"id_portu_koncowego" : 11,
+		"id_wezla_koncowego" : null,
+		"id_zaworu" : 8
+	},
+	{
+		"id" : 9,
+		"nazwa_segmentu" : "SEGM_FZ_OUT_DO_W_FZ_OUT_MAIN",
+		"id_portu_startowego" : 12,
+		"id_wezla_startowego" : null,
+		"id_portu_koncowego" : null,
+		"id_wezla_koncowego" : 7,
+		"id_zaworu" : 9
+	},
+	{
+		"id" : 10,
+		"nazwa_segmentu" : "SEGM_W_FZ_OUT_MAIN_DO_R1_IN",
+		"id_portu_startowego" : null,
+		"id_wezla_startowego" : 7,
+		"id_portu_koncowego" : 1,
+		"id_wezla_koncowego" : null,
+		"id_zaworu" : 10
+	},
+	{
+		"id" : 11,
+		"nazwa_segmentu" : "SEGM_W_FZ_OUT_MAIN_DO_R2_IN",
+		"id_portu_startowego" : null,
+		"id_wezla_startowego" : 7,
+		"id_portu_koncowego" : 3,
+		"id_wezla_koncowego" : null,
+		"id_zaworu" : 11
+	},
+	{
+		"id" : 12,
+		"nazwa_segmentu" : "SEGM_W_FZ_OUT_MAIN_DO_R3_IN",
+		"id_portu_startowego" : null,
+		"id_wezla_startowego" : 7,
+		"id_portu_koncowego" : 5,
+		"id_wezla_koncowego" : null,
+		"id_zaworu" : 12
+	},
+	{
+		"id" : 13,
+		"nazwa_segmentu" : "SEGM_W_FZ_OUT_MAIN_DO_R4_IN",
+		"id_portu_startowego" : null,
+		"id_wezla_startowego" : 7,
+		"id_portu_koncowego" : 7,
+		"id_wezla_koncowego" : null,
+		"id_zaworu" : 13
+	},
+	{
+		"id" : 14,
+		"nazwa_segmentu" : "SEGM_W_FZ_OUT_MAIN_DO_R5_IN",
+		"id_portu_startowego" : null,
+		"id_wezla_startowego" : 7,
+		"id_portu_koncowego" : 9,
+		"id_wezla_koncowego" : null,
+		"id_zaworu" : 14
+	},
+	{
+		"id" : 15,
+		"nazwa_segmentu" : "SEGM_FZ_IN_DO_FZ_OUT",
+		"id_portu_startowego" : 11,
+		"id_wezla_startowego" : null,
+		"id_portu_koncowego" : 12,
+		"id_wezla_koncowego" : null,
+		"id_zaworu" : 15
+	},
+	{
+		"id" : 16,
+		"nazwa_segmentu" : "SEGM_R2_OUT_DO_W_R1_R2",
+		"id_portu_startowego" : 4,
+		"id_wezla_startowego" : null,
+		"id_portu_koncowego" : null,
+		"id_wezla_koncowego" : 2,
+		"id_zaworu" : 16
+	},
+	{
+		"id" : 17,
+		"nazwa_segmentu" : "SEGM_R1_OUT_DO_W_R1_FZ",
+		"id_portu_startowego" : 2,
+		"id_wezla_startowego" : null,
+		"id_portu_koncowego" : null,
+		"id_wezla_koncowego" : 3,
+		"id_zaworu" : 17
+	},
+	{
+		"id" : 18,
+		"nazwa_segmentu" : "SEGM_R4_OUT_DO_W_R4_FZ",
+		"id_portu_startowego" : 8,
+		"id_wezla_startowego" : null,
+		"id_portu_koncowego" : null,
+		"id_wezla_koncowego" : 5,
+		"id_zaworu" : 18
+	},
+	{
+		"id" : 21,
+		"nazwa_segmentu" : "SEGM_FN_IN_DO_FN_OUT",
+		"id_portu_startowego" : 13,
+		"id_wezla_startowego" : null,
+		"id_portu_koncowego" : 14,
+		"id_wezla_koncowego" : null,
+		"id_zaworu" : 21
+	},
+	{
+		"id" : 22,
+		"nazwa_segmentu" : "SEGM_W_R3_R6_R9_W_R3_R2",
+		"id_portu_startowego" : null,
+		"id_wezla_startowego" : 13,
+		"id_portu_koncowego" : null,
+		"id_wezla_koncowego" : 1,
+		"id_zaworu" : 30
+	},
+	{
+		"id" : 23,
+		"nazwa_segmentu" : "SEGM_W_R7_R8_W_R8_R9",
+		"id_portu_startowego" : null,
+		"id_wezla_startowego" : 11,
+		"id_portu_koncowego" : null,
+		"id_wezla_koncowego" : 10,
+		"id_zaworu" : 27
+	},
+	{
+		"id" : 24,
+		"nazwa_segmentu" : "SEGM_W_R7_FN_W_R7_R8",
+		"id_portu_startowego" : null,
+		"id_wezla_startowego" : 10,
+		"id_portu_koncowego" : null,
+		"id_wezla_koncowego" : 9,
+		"id_zaworu" : 26
+	},
+	{
+		"id" : 25,
+		"nazwa_segmentu" : "SEGM_R7_OUT_W_R7_FN",
+		"id_portu_startowego" : 24,
+		"id_wezla_startowego" : null,
+		"id_portu_koncowego" : null,
+		"id_wezla_koncowego" : 9,
+		"id_zaworu" : 22
+	},
+	{
+		"id" : 26,
+		"nazwa_segmentu" : "SEGM_R8_OUT_W_R7_R8",
+		"id_portu_startowego" : 25,
+		"id_wezla_startowego" : null,
+		"id_portu_koncowego" : null,
+		"id_wezla_koncowego" : 10,
+		"id_zaworu" : 23
+	},
+	{
+		"id" : 27,
+		"nazwa_segmentu" : "SEGM_R9_OUT_W_R8_R9",
+		"id_portu_startowego" : 26,
+		"id_wezla_startowego" : null,
+		"id_portu_koncowego" : null,
+		"id_wezla_koncowego" : 11,
+		"id_zaworu" : 24
+	},
+	{
+		"id" : 28,
+		"nazwa_segmentu" : "SEGM_W_R8_R9_W_R3_R6_R9",
+		"id_portu_startowego" : null,
+		"id_wezla_startowego" : 11,
+		"id_portu_koncowego" : null,
+		"id_wezla_koncowego" : 13,
+		"id_zaworu" : 28
+	},
+	{
+		"id" : 31,
+		"nazwa_segmentu" : "SEGM_W_R3_R6_R9_W_R5_R6",
+		"id_portu_startowego" : null,
+		"id_wezla_startowego" : 13,
+		"id_portu_koncowego" : null,
+		"id_wezla_koncowego" : 15,
+		"id_zaworu" : 29
+	},
+	{
+		"id" : 32,
+		"nazwa_segmentu" : "SEGM_W_R7_FN_FN_IN",
+		"id_portu_startowego" : null,
+		"id_wezla_startowego" : 9,
+		"id_portu_koncowego" : 13,
+		"id_wezla_koncowego" : null,
+		"id_zaworu" : 25
+	},
+	{
+		"id" : 33,
+		"nazwa_segmentu" : "SEGM_R6_OUT_W_R5_R6",
+		"id_portu_startowego" : 23,
+		"id_wezla_startowego" : null,
+		"id_portu_koncowego" : null,
+		"id_wezla_koncowego" : 15,
+		"id_zaworu" : 31
+	},
+	{
+		"id" : 34,
+		"nazwa_segmentu" : "SEGM_W_R4_R5_W_R5_R6",
+		"id_portu_startowego" : null,
+		"id_wezla_startowego" : 4,
+		"id_portu_koncowego" : null,
+		"id_wezla_koncowego" : 15,
+		"id_zaworu" : 32
+	},
+	{
+		"id" : 36,
+		"nazwa_segmentu" : "SEGM_FN_OUT_DO_W_FN_OUT",
+		"id_portu_startowego" : 14,
+		"id_wezla_startowego" : null,
+		"id_portu_koncowego" : null,
+		"id_wezla_koncowego" : 8,
+		"id_zaworu" : 33
+	},
+	{
+		"id" : 37,
+		"nazwa_segmentu" : "SEGM_W_FN_OUT_MAIN_DO_R6_IN",
+		"id_portu_startowego" : null,
+		"id_wezla_startowego" : 8,
+		"id_portu_koncowego" : 16,
+		"id_wezla_koncowego" : null,
+		"id_zaworu" : 34
+	},
+	{
+		"id" : 38,
+		"nazwa_segmentu" : "SEGM_W_FN_OUT_MAIN_DO_R7_IN",
+		"id_portu_startowego" : null,
+		"id_wezla_startowego" : 8,
+		"id_portu_koncowego" : 17,
+		"id_wezla_koncowego" : null,
+		"id_zaworu" : 35
+	},
+	{
+		"id" : 39,
+		"nazwa_segmentu" : "SEGM_W_FN_OUT_MAIN_DO_R8_IN",
+		"id_portu_startowego" : null,
+		"id_wezla_startowego" : 8,
+		"id_portu_koncowego" : 18,
+		"id_wezla_koncowego" : null,
+		"id_zaworu" : 36
+	},
+	{
+		"id" : 40,
+		"nazwa_segmentu" : "SEGM_W_FN_OUT_MAIN_DO_R9_IN",
+		"id_portu_startowego" : null,
+		"id_wezla_startowego" : 8,
+		"id_portu_koncowego" : 19,
+		"id_wezla_koncowego" : null,
+		"id_zaworu" : 37
+	},
+	{
+		"id" : 48,
+		"nazwa_segmentu" : "SEGM_W_R1_FZ_DO_W_R1_R2",
+		"id_portu_startowego" : null,
+		"id_wezla_startowego" : 3,
+		"id_portu_koncowego" : null,
+		"id_wezla_koncowego" : 2,
+		"id_zaworu" : 3
+	},
+	{
+		"id" : 49,
+		"nazwa_segmentu" : "SEGM_W_R1_R2_DO_W_R2_R3",
+		"id_portu_startowego" : null,
+		"id_wezla_startowego" : 2,
+		"id_portu_koncowego" : null,
+		"id_wezla_koncowego" : 1,
+		"id_zaworu" : 2
+	},
+	{
+		"id" : 50,
+		"nazwa_segmentu" : "SEGM_W_R4_FZ_DO_W_R4_R5",
+		"id_portu_startowego" : null,
+		"id_wezla_startowego" : 5,
+		"id_portu_koncowego" : null,
+		"id_wezla_koncowego" : 4,
+		"id_zaworu" : 5
+	},
+	{
+		"id" : 51,
+		"nazwa_segmentu" : "SEGM_W_R5_R6_DO_W_R4_R5",
+		"id_portu_startowego" : null,
+		"id_wezla_startowego" : 15,
+		"id_portu_koncowego" : null,
+		"id_wezla_koncowego" : 4,
+		"id_zaworu" : 32
+	},
+	{
+		"id" : 52,
+		"nazwa_segmentu" : "SEGM_W_R2_R3_DO_W_R3_R6_R9",
+		"id_portu_startowego" : null,
+		"id_wezla_startowego" : 1,
+		"id_portu_koncowego" : null,
+		"id_wezla_koncowego" : 13,
+		"id_zaworu" : 30
+	},
+	{
+		"id" : 53,
+		"nazwa_segmentu" : "SEGM_W_R5_R6_DO_W_R3_R6_R9",
+		"id_portu_startowego" : null,
+		"id_wezla_startowego" : 15,
+		"id_portu_koncowego" : null,
+		"id_wezla_koncowego" : 13,
+		"id_zaworu" : 29
+	},
+	{
+		"id" : 54,
+		"nazwa_segmentu" : "SEGM_W_R7_FN_DO_W_R7_R8",
+		"id_portu_startowego" : null,
+		"id_wezla_startowego" : 9,
+		"id_portu_koncowego" : null,
+		"id_wezla_koncowego" : 10,
+		"id_zaworu" : 26
+	},
+	{
+		"id" : 55,
+		"nazwa_segmentu" : "SEGM_W_R7_R8_DO_W_R8_R9",
+		"id_portu_startowego" : null,
+		"id_wezla_startowego" : 10,
+		"id_portu_koncowego" : null,
+		"id_wezla_koncowego" : 11,
+		"id_zaworu" : 27
+	},
+	{
+		"id" : 56,
+		"nazwa_segmentu" : "SEGM_W_R8_R9_DO_W_R3_R6_R9",
+		"id_portu_startowego" : null,
+		"id_wezla_startowego" : 13,
+		"id_portu_koncowego" : null,
+		"id_wezla_koncowego" : 11,
+		"id_zaworu" : 28
+	}
+]}
