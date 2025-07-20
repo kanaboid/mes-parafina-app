@@ -43,9 +43,14 @@ class ApolloService:
             """, (id_sesji, waga_kg, czas_startu, operator))
             
             # 3. Stwórz nową partię surowca dla Apollo
+            cursor.execute("SELECT nazwa_unikalna FROM sprzet WHERE id = %s", (id_sprzetu,))
+            sprzet_info = cursor.fetchone()
+            nazwa_sprzetu = sprzet_info['nazwa_unikalna'] if sprzet_info else f"ID{id_sprzetu}"
+            
             teraz = datetime.now()
-            unikalny_kod_partii = f"AP{id_sprzetu}-{teraz.strftime('%Y%m%d-%H%M%S')}"
-            nazwa_partii = f"Partia w Apollo {id_sprzetu} ({typ_surowca})"
+            timestamp_str = teraz.strftime('%Y%m%d-%H%M%S')
+            unikalny_kod_partii = f"{nazwa_sprzetu}-{timestamp_str}"
+            nazwa_partii = f"Partia w {nazwa_sprzetu} ({typ_surowca}) - {timestamp_str}"
             
             cursor.execute("""
                 INSERT INTO partie_surowca
@@ -102,9 +107,14 @@ class ApolloService:
                 sesja_info = cursor.fetchone()
                 typ_surowca = sesja_info['typ_surowca'] if sesja_info else 'Nieznany'
 
+                cursor.execute("SELECT nazwa_unikalna FROM sprzet WHERE id = %s", (id_sprzetu,))
+                sprzet_info = cursor.fetchone()
+                nazwa_sprzetu = sprzet_info['nazwa_unikalna'] if sprzet_info else f"ID{id_sprzetu}"
+
                 teraz = datetime.now()
-                unikalny_kod_partii = f"AP{id_sprzetu}-{teraz.strftime('%Y%m%d-%H%M%S')}-AUTOCREATED"
-                nazwa_partii = f"Partia w Apollo {id_sprzetu} ({typ_surowca})"
+                timestamp_str = teraz.strftime('%Y%m%d-%H%M%S')
+                unikalny_kod_partii = f"{nazwa_sprzetu}-{timestamp_str}-AUTOCREATED"
+                nazwa_partii = f"Partia w {nazwa_sprzetu} ({typ_surowca}) - {timestamp_str}"
                 
                 cursor.execute("""
                     INSERT INTO partie_surowca

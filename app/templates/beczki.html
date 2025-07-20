@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block title %}Stan Beczek i Reaktorów{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1 class="mb-4">Stan Beczek i Reaktorów</h1>
+
+    <!-- Sekcja Reaktorów -->
+    <div class="mb-5">
+        <h2>Reaktory</h2>
+        <div id="reaktory-container" class="row">
+            <!-- Karty reaktorów będą wstawiane tutaj przez JavaScript -->
+        </div>
+    </div>
+
+    <!-- Sekcja Beczek Brudnych -->
+    <div class="mb-5">
+        <h2>Beczki Brudne</h2>
+        <div id="beczki-brudne-container" class="row">
+            <!-- Karty beczek będą wstawiane tutaj przez JavaScript -->
+        </div>
+    </div>
+
+    <!-- Sekcja Beczek Czystych -->
+    <div class="mb-5">
+        <h2>Beczki Czyste</h2>
+        <div id="beczki-czyste-container" class="row">
+            <!-- Karty beczek będą wstawiane tutaj przez JavaScript -->
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/beczki.js') }}"></script>
+{% endblock %} 

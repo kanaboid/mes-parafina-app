@@ -945,23 +945,41 @@ def end_apollo_transfer():
         czas_transferu = datetime.now().strftime('%H%M%S')
 
         if partia_w_celu:
-            if partia_w_celu['typ_surowca'] == typ_surowca_zrodla:
+            typ_surowca_w_celu = partia_w_celu['typ_surowca']
+            
+            # Jeśli typy są takie same, po prostu zaktualizuj wagę
+            if typ_surowca_w_celu == typ_surowca_zrodla:
                 nowa_waga = float(partia_w_celu['waga_aktualna_kg']) + waga_kg
                 cursor.execute("UPDATE partie_surowca SET waga_aktualna_kg = %s WHERE id = %s", (nowa_waga, partia_w_celu['id']))
             else:
-                # Archiwizuj starą partię z celu
+                # Jeśli typy są różne - tworzymy mieszaninę
                 cursor.execute("UPDATE partie_surowca SET id_sprzetu = NULL, status_partii = 'Archiwalna' WHERE id = %s", (partia_w_celu['id'],))
                 
-                # Oblicz nową wagę i stwórz opis
+                # Inteligentne tworzenie nowego typu mieszaniny
+                skladniki_typow = set()
+                if typ_surowca_w_celu.startswith('MIX('):
+                    # Wyciągnij istniejące typy z MIX(...)
+                    istniejace_typy = typ_surowca_w_celu[4:-1].split(',')
+                    for t in istniejace_typy:
+                        skladniki_typow.add(t.strip())
+                else:
+                    skladniki_typow.add(typ_surowca_w_celu)
+                
+                skladniki_typow.add(typ_surowca_zrodla)
+                nowy_typ_mieszaniny = f"MIX({', '.join(sorted(list(skladniki_typow)))})"
+
+                # Nowy, bardziej szczegółowy opis
                 nowa_waga = float(partia_w_celu['waga_aktualna_kg']) + waga_kg
-                pochodzenie_opis = f"Mieszanina z partii ID {partia_w_celu['id']} i transferu z Apollo (Partia ID: {partia_w_apollo['id']})."
+                pochodzenie_opis = (f"Mieszanina stworzona z: "
+                                    f"{partia_w_celu['waga_aktualna_kg']}kg partii '{partia_w_celu['unikalny_kod']}' ({typ_surowca_w_celu}) "
+                                    f"oraz {waga_kg}kg transferu z Apollo ({typ_surowca_zrodla}).")
+                
                 unikalny_kod = f"MIX-{data_transferu}_{czas_transferu}-{zrodlo_nazwa}-{cel_nazwa}"
                 
-                # Stwórz nową partię "Mieszanina"
                 cursor.execute("""
                     INSERT INTO partie_surowca (unikalny_kod, nazwa_partii, typ_surowca, waga_aktualna_kg, waga_poczatkowa_kg, id_sprzetu, zrodlo_pochodzenia, pochodzenie_opis, status_partii, typ_transformacji)
-                    VALUES (%s, %s, 'Mieszanina', %s, %s, %s, 'apollo', %s, 'Surowy w reaktorze', 'MIESZANIE')
-                """, (unikalny_kod, unikalny_kod, nowa_waga, nowa_waga, id_celu, pochodzenie_opis))
+                    VALUES (%s, %s, %s, %s, %s, %s, 'apollo', %s, 'Surowy w reaktorze', 'MIESZANIE')
+                """, (unikalny_kod, unikalny_kod, nowy_typ_mieszaniny, nowa_waga, nowa_waga, id_celu, pochodzenie_opis))
                 nowa_partia_id = cursor.lastrowid
 
                 # Zapisz składniki w nowej tabeli

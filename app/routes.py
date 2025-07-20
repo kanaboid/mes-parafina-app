@@ -60,6 +60,11 @@ def show_operacje():
 def show_operacje_apollo():
     """Wyświetla stronę do zarządzania transferami z Apollo."""
     return render_template('operacje_apollo.html')
+
+@bp.route('/beczki')
+def beczki():
+    """Renderuje nową stronę do podglądu zawartości beczek i reaktorów."""
+    return render_template('beczki.html')
 # --- KONIEC NOWEJ FUNKCJI ---
 
 # 2. Stworzenie pierwszego, prawdziwego endpointu API
@@ -1626,4 +1631,168 @@ def get_historia_sesji_apollo(id_sesji):
     finally:
         cursor.close()
         conn.close()
+
+def get_base_components_recursive(partia_id, cursor):
+    """
+    Rekurencyjnie znajduje bazowe składniki dla danej partii, zwracając słownik:
+    {'TYP_SUROWCA': waga, ...}
+    """
+    cursor.execute("SELECT id, typ_surowca, waga_poczatkowa_kg FROM partie_surowca WHERE id = %s", (partia_id,))
+    partia_info = cursor.fetchone()
+
+    if not partia_info:
+        return {}
+
+    # Jeśli partia nie jest mieszaniną, jest składnikiem bazowym. Zwróć jej typ i wagę.
+    if not partia_info['typ_surowca'].startswith('MIX('):
+        return { partia_info['typ_surowca']: float(partia_info['waga_poczatkowa_kg']) }
+
+    # Partia jest mieszaniną, znajdź jej bezpośrednie składniki.
+    query = """
+        SELECT 
+            ps.id_partii_skladowej,
+            ps.waga_skladowa_kg,
+            p.waga_poczatkowa_kg AS waga_calkowita_skladowej
+        FROM partie_skladniki ps
+        JOIN partie_surowca p ON ps.id_partii_skladowej = p.id
+        WHERE ps.id_partii_wynikowej = %s;
+    """
+    cursor.execute(query, (partia_id,))
+    direct_components = cursor.fetchall()
+    
+    final_composition_agg = {}
+
+    for comp in direct_components:
+        # Rekurencyjnie pobierz bazowe składniki dla każdego składnika
+        child_base_components = get_base_components_recursive(comp['id_partii_skladowej'], cursor)
+        
+        weight_of_comp_used_in_mix = float(comp['waga_skladowa_kg'])
+        total_initial_weight_of_child_batch = float(comp['waga_calkowita_skladowej'])
+
+        if total_initial_weight_of_child_batch == 0:
+            continue
+            
+        # Rozdziel wagę użytego składnika proporcjonalnie na jego bazowe komponenty
+        for base_type, base_weight_in_child in child_base_components.items():
+            proportion = base_weight_in_child / total_initial_weight_of_child_batch
+            weight_contribution = proportion * weight_of_comp_used_in_mix
+            final_composition_agg[base_type] = final_composition_agg.get(base_type, 0) + weight_contribution
+            
+    return final_composition_agg
+
+@bp.route('/api/sprzet/stan-partii', methods=['GET'])
+def get_stan_partii_w_sprzecie():
+    """
+    Zwraca stan całego sprzętu, który może przechowywać partie, 
+    wraz z informacjami o aktualnie znajdującej się w nim partii.
+    """
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        # Pobierz cały sprzęt, który nas interesuje, wraz z dołączonymi partiami
+        query = """
+            SELECT
+                s.id, s.nazwa_unikalna, s.typ_sprzetu, s.stan_sprzetu,
+                p.id AS partia_id, p.unikalny_kod, p.typ_surowca, p.waga_aktualna_kg
+            FROM sprzet s
+            LEFT JOIN partie_surowca p ON s.id = p.id_sprzetu
+            WHERE s.typ_sprzetu IN ('reaktor', 'beczka_brudna', 'beczka_czysta')
+            ORDER BY s.typ_sprzetu, s.nazwa_unikalna;
+        """
+        cursor.execute(query)
+        wyniki = cursor.fetchall()
+        
+        # Przygotuj strukturę odpowiedzi
+        odpowiedz = {
+            'reaktory': [],
+            'beczki_brudne': [],
+            'beczki_czyste': []
+        }
+
+        for row in wyniki:
+            sprzet_info = {
+                'id': row['id'],
+                'nazwa_unikalna': row['nazwa_unikalna'],
+                'typ_sprzetu': row['typ_sprzetu'],
+                'stan_sprzetu': row['stan_sprzetu'],
+                'partia': None
+            }
+            if row['partia_id']:
+                partia_info = {
+                    'id': row['partia_id'],
+                    'unikalny_kod': row['unikalny_kod'],
+                    'typ_surowca': row['typ_surowca'],
+                    'waga_aktualna_kg': float(row['waga_aktualna_kg']),
+                    'sklad': None  # Domyślnie brak składu
+                }
+
+                # Jeśli partia jest mieszaniną, oblicz jej skład
+                if partia_info['typ_surowca'].startswith('MIX('):
+                    sklad_dict = get_base_components_recursive(partia_info['id'], cursor)
+                    total_waga_skladu = sum(sklad_dict.values())
+                    
+                    if total_waga_skladu > 0:
+                        sklad_list = []
+                        for typ, waga in sklad_dict.items():
+                            procent = (waga / total_waga_skladu) * 100
+                            sklad_list.append({
+                                'typ_surowca': typ,
+                                'waga_kg': round(waga, 2),
+                                'procent': round(procent, 2)
+                            })
+                        partia_info['sklad'] = sorted(sklad_list, key=lambda x: x['typ_surowca'])
+
+                sprzet_info['partia'] = partia_info
+            
+            if row['typ_sprzetu'] == 'reaktor':
+                odpowiedz['reaktory'].append(sprzet_info)
+            elif row['typ_sprzetu'] == 'beczka_brudna':
+                odpowiedz['beczki_brudne'].append(sprzet_info)
+            elif row['typ_sprzetu'] == 'beczka_czysta':
+                odpowiedz['beczki_czyste'].append(sprzet_info)
+
+        return jsonify(odpowiedz)
+
+    except mysql.connector.Error as err:
+        return jsonify({'error': f'Błąd bazy danych: {err}'}), 500
+    finally:
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@bp.route('/api/partie/<int:partia_id>/skladniki', methods=['GET'])
+def get_skladniki_partii(partia_id):
+    """Zwraca listę składników dla danej partii (mieszaniny)."""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        query = """
+            SELECT 
+                ps.id_partii_skladowej,
+                p.unikalny_kod AS unikalny_kod_skladowej,
+                ps.waga_skladowa_kg
+            FROM partie_skladniki ps
+            JOIN partie_surowca p ON ps.id_partii_skladowej = p.id
+            WHERE ps.id_partii_wynikowej = %s
+            ORDER BY ps.data_dodania;
+        """
+        cursor.execute(query, (partia_id,))
+        skladniki = cursor.fetchall()
+
+        # Konwersja Decimal na float dla JSON
+        for s in skladniki:
+            s['waga_skladowa_kg'] = float(s['waga_skladowa_kg'])
+
+        return jsonify(skladniki)
+
+    except mysql.connector.Error as err:
+        return jsonify({'error': f'Błąd bazy danych: {err}'}), 500
+    finally:
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()
 
