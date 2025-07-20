@@ -256,3 +256,9 @@ h2 { color: #2980b9; border-bottom: 2px solid #ecf0f1; padding-bottom: 0.5rem; }
     background-color: #3498db;
     color: white;
 }
+
+/* Custom Toastify width */
+.info-toast {
+    max-width: 350px;
+    width: 100%;
+}

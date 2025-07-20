@@ -194,7 +194,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function fetchAndDisplayActiveOperations() {
         if (isMouseOverVisuals) return;
         try {
-            const response = await fetch('/api/operacje/aktywne');
+            const response = await fetch('/api/operations/aktywne');
             const operations = await response.json();
             operationsTableBody.innerHTML = '';
             if (operations.length === 0) {

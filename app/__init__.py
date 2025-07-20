@@ -61,9 +61,11 @@ def create_app():
     from . import routes
     from .cykle_api import cykle_bp
     from .topology_routes import topology_bp  # Dodaj import topology blueprint
+    from .operations_routes import bp as operations_bp # Import nowego blueprintu
     app.register_blueprint(routes.bp)
     app.register_blueprint(cykle_bp)
     app.register_blueprint(topology_bp)  # Zarejestruj topology blueprint
+    app.register_blueprint(operations_bp) # Zarejestruj nowy blueprint
 
     @app.route('/hello')
     def hello():

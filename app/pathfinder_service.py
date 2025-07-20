@@ -2,6 +2,7 @@
 
 import networkx as nx
 from .db import get_db_connection  # Importujemy funkcję do połączenia z bazą danych
+import mysql.connector # Added for mysql.connector.Error
 
 class PathFinder:
     def __init__(self, app=None):
@@ -150,6 +151,43 @@ class PathFinder:
             except Exception as ex:
                 print(f"Błąd podczas pobierania wszystkich zaworów: {ex}")
                 return []
+
+    @staticmethod
+    def release_path(zawory_names=None, segment_names=None):
+        """Zwalnia zasoby po zakończeniu operacji - zamyka zawory."""
+        if not zawory_names:
+            print("INFO: Brak zaworów do zwolnienia w release_path.")
+            return
+
+        conn = None
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+
+            # Zamykanie zaworów
+            if isinstance(zawory_names, str):
+                zawory_names = zawory_names.split(',')
+            
+            if zawory_names:
+                placeholders = ', '.join(['%s'] * len(zawory_names))
+                sql = f"UPDATE zawory SET stan = 'ZAMKNIETY' WHERE nazwa_zaworu IN ({placeholders})"
+                cursor.execute(sql, zawory_names)
+
+            # W przyszłości można dodać logikę zwalniania segmentów, jeśli będzie potrzebna
+            
+            conn.commit()
+            print(f"INFO: Pomyślnie zamknięto zawory: {zawory_names}")
+
+        except mysql.connector.Error as err:
+            if conn:
+                conn.rollback()
+            print(f"Błąd bazy danych podczas zwalniania ścieżki: {err}")
+            # Rzucenie wyjątku, aby operacja nadrzędna mogła go obsłużyć
+            raise
+        finally:
+            if conn and conn.is_connected():
+                cursor.close()
+                conn.close()
 
 # USUWAMY globalną instancję. Będziemy ją tworzyć w __init__.py
 # pathfinder_instance = PathFinder()
