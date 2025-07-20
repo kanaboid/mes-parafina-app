@@ -36,33 +36,42 @@ document.addEventListener('DOMContentLoaded', () => {
         endTransfer: document.getElementById('end-transfer-form')
     };
 
+    const loadingHistoryModal = new bootstrap.Modal(document.getElementById('loading-history-modal'));
+    const loadingHistoryApolloName = document.getElementById('loading-history-apollo-name');
+    const loadingHistoryTableBody = document.getElementById('loading-history-table-body');
+
     // --- FUNKCJE RENDERUJĄCE ---
 
     /**
      * Tworzy i zwraca kartę statusu dla pojedynczego Apollo.
      * @param {object} apollo - Obiekt z danymi Apollo.
      */
-    function createApolloCard(apollo) {
-        const isActive = apollo.aktywna_sesja;
+    function createApolloCard(apollo, stan) {
+        const isActive = stan.aktywna_sesja;
         const cardClass = isActive ? 'border-primary' : 'border-secondary';
         const headerClass = isActive ? 'bg-primary text-white' : 'bg-light';
 
-        const buttons = isActive 
-            ? `
-                <button class="btn btn-secondary btn-sm action-btn" data-action="history" data-id="${apollo.id_sprzetu}" data-name="${apollo.nazwa_apollo}" data-session-id="${apollo.id_sesji}">Historia</button>
-                <button class="btn btn-info btn-sm action-btn" data-action="add-surowiec" data-id="${apollo.id_sprzetu}" data-name="${apollo.nazwa_apollo}">Dodaj surowiec</button>
-                <button class="btn btn-success btn-sm action-btn" data-action="start-transfer" data-id="${apollo.id_sprzetu}" data-name="${apollo.nazwa_apollo}">Rozpocznij transfer</button>
-                <button class="btn btn-danger btn-sm action-btn" data-action="end-session" data-id="${apollo.id_sprzetu}" data-name="${apollo.nazwa_apollo}">Zakończ sesję</button>
-            ` 
-            : `
-                <button class="btn btn-primary btn-sm action-btn" data-action="start-session" data-id="${apollo.id_sprzetu}" data-name="${apollo.nazwa_apollo}">Rozpocznij nową sesję</button>
+        // Przyciski akcji w zależności od stanu
+        let buttons = '';
+        if (stan.aktywna_sesja) {
+            buttons = `
+                <button class="btn btn-primary btn-sm me-2 btn-add-surowiec" data-apollo-id="${apollo.id}" data-apollo-name="${apollo.nazwa_unikalna}">Dodaj surowiec</button>
+                <button class="btn btn-success btn-sm me-2 btn-start-transfer" data-apollo-id="${apollo.id}" data-apollo-name="${apollo.nazwa_unikalna}">Nowy transfer</button>
+                <hr class="my-2">
+                <button class="btn btn-info btn-sm me-2 btn-show-history" data-apollo-id="${apollo.id}" data-apollo-name="${apollo.nazwa_unikalna}" data-sesja-id="${stan.id_sesji}">Historia roztankowań</button>
+                <button class="btn btn-secondary btn-sm me-2 btn-show-loading-history" data-apollo-id="${apollo.id}" data-apollo-name="${apollo.nazwa_unikalna}" data-sesja-id="${stan.id_sesji}">Historia załadunku</button>
+                <hr class="my-2">
+                <button class="btn btn-danger btn-sm btn-end-session" data-apollo-id="${apollo.id}" data-apollo-name="${apollo.nazwa_unikalna}">Zakończ sesję</button>
             `;
+        } else {
+            buttons = `<button class="btn btn-primary btn-start-session" data-apollo-id="${apollo.id}" data-apollo-name="${apollo.nazwa_unikalna}">Rozpocznij nową sesję</button>`;
+        }
 
         const cardHTML = `
             <div class="col-md-6">
                 <div class="card h-100 ${cardClass}">
                     <div class="card-header ${headerClass}">
-                        <h5 class="card-title mb-0">${apollo.nazwa_apollo}</h5>
+                        <h5 class="card-title mb-0">${apollo.nazwa_unikalna}</h5>
                     </div>
                     <div class="card-body">
                         ${isActive 
@@ -104,7 +113,7 @@ document.addEventListener('DOMContentLoaded', () => {
             apolloStatusContainer.innerHTML = '';
             if (apolloList.length > 0) {
                 apolloList.forEach(apollo => {
-                    apolloStatusContainer.innerHTML += createApolloCard(apollo);
+                    apolloStatusContainer.innerHTML += createApolloCard(apollo, apollo); // Pass apollo and stan
                 });
             } else {
                 apolloStatusContainer.innerHTML = '<p class="text-muted">Nie znaleziono żadnych urządzeń Apollo.</p>';
@@ -231,6 +240,42 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
+    // NOWA FUNKCJA do pokazywania historii załadunku
+    async function showLoadingHistory(apolloId, apolloName, sesjaId) {
+        loadingHistoryApolloName.textContent = apolloName;
+        loadingHistoryTableBody.innerHTML = '<tr><td colspan="5">Ładowanie...</td></tr>';
+        loadingHistoryModal.show();
+
+        try {
+            const response = await fetch(`/api/apollo/sesja/${sesjaId}/historia-zaladunku`);
+            if (!response.ok) throw new Error('Błąd sieci');
+            
+            const historia = await response.json();
+            loadingHistoryTableBody.innerHTML = '';
+
+            if (historia.length > 0) {
+                historia.forEach(wpis => {
+                    const row = `
+                        <tr>
+                            <td>${new Date(wpis.czas_zdarzenia).toLocaleString()}</td>
+                            <td>${wpis.typ_zdarzenia === 'DODANIE_SUROWCA' ? 'Dodanie surowca' : 'Korekta ręczna'}</td>
+                            <td>${wpis.waga_kg}</td>
+                            <td>${wpis.operator || '-'}</td>
+                            <td>${wpis.uwagi || '-'}</td>
+                        </tr>
+                    `;
+                    loadingHistoryTableBody.insertAdjacentHTML('beforeend', row);
+                });
+            } else {
+                loadingHistoryTableBody.innerHTML = '<tr><td colspan="5" class="text-center">Brak historii załadunków dla tej sesji.</td></tr>';
+            }
+        } catch (error) {
+            console.error('Błąd podczas pobierania historii załadunku:', error);
+            loadingHistoryTableBody.innerHTML = '<tr><td colspan="5" class="text-danger text-center">Nie udało się załadować historii.</td></tr>';
+        }
+    }
+
+
     // --- OBSŁUGA ZDARZEŃ ---
     
     // Odświeżanie
@@ -294,6 +339,17 @@ document.addEventListener('DOMContentLoaded', () => {
             if (confirm(`Czy na pewno chcesz anulować operację o ID ${opId}? Tej akcji nie można cofnąć.`)) {
                 handleCancelTransfer(opId);
             }
+        }
+    });
+
+    // Delegacja eventów - dodanie obsługi nowego przycisku
+    document.body.addEventListener('click', function(event) {
+        const target = event.target;
+        if (target.classList.contains('btn-show-loading-history')) {
+            const apolloId = target.dataset.apolloId;
+            const apolloName = target.dataset.apolloName;
+            const sesjaId = target.dataset.sesjaId;
+            showLoadingHistory(apolloId, apolloName, sesjaId);
         }
     });
 

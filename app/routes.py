@@ -9,6 +9,7 @@ from .db import get_db_connection  # Importujemy funkcję do połączenia z baz�
 from .pathfinder_service import PathFinder
 from .apollo_service import ApolloService  # Importujemy serwis Apollo
 from mysql.connector.errors import OperationalError
+from decimal import Decimal
 
 def get_pathfinder():
     """Pobiera instancję serwisu PathFinder z kontekstu aplikacji."""
@@ -1788,6 +1789,44 @@ def get_skladniki_partii(partia_id):
             s['waga_skladowa_kg'] = float(s['waga_skladowa_kg'])
 
         return jsonify(skladniki)
+
+    except mysql.connector.Error as err:
+        return jsonify({'error': f'Błąd bazy danych: {err}'}), 500
+    finally:
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@bp.route('/api/apollo/sesja/<int:sesja_id>/historia-zaladunku', methods=['GET'])
+def get_historia_zaladunku_sesji(sesja_id):
+    """Zwraca historię załadunków i korekt dla danej sesji Apollo."""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        query = """
+            SELECT 
+                typ_zdarzenia,
+                waga_kg,
+                czas_zdarzenia,
+                operator,
+                uwagi
+            FROM apollo_tracking
+            WHERE id_sesji = %s AND typ_zdarzenia IN ('DODANIE_SUROWCA', 'KOREKTA_RECZNA')
+            ORDER BY czas_zdarzenia DESC;
+        """
+        cursor.execute(query, (sesja_id,))
+        historia = cursor.fetchall()
+
+        # Konwersja typów dla JSON
+        for wpis in historia:
+            if isinstance(wpis.get('czas_zdarzenia'), datetime):
+                wpis['czas_zdarzenia'] = wpis['czas_zdarzenia'].isoformat()
+            if isinstance(wpis.get('waga_kg'), Decimal):
+                wpis['waga_kg'] = float(wpis['waga_kg'])
+
+        return jsonify(historia)
 
     except mysql.connector.Error as err:
         return jsonify({'error': f'Błąd bazy danych: {err}'}), 500
