@@ -46,32 +46,31 @@ document.addEventListener('DOMContentLoaded', () => {
      * Tworzy i zwraca kartę statusu dla pojedynczego Apollo.
      * @param {object} apollo - Obiekt z danymi Apollo.
      */
-    function createApolloCard(apollo, stan) {
-        const isActive = stan.aktywna_sesja;
+    function createApolloCard(apollo) {
+        const isActive = apollo.aktywna_sesja;
         const cardClass = isActive ? 'border-primary' : 'border-secondary';
         const headerClass = isActive ? 'bg-primary text-white' : 'bg-light';
 
-        // Przyciski akcji w zależności od stanu
         let buttons = '';
-        if (stan.aktywna_sesja) {
+        if (apollo.aktywna_sesja) {
             buttons = `
-                <button class="btn btn-primary btn-sm me-2 btn-add-surowiec" data-apollo-id="${apollo.id}" data-apollo-name="${apollo.nazwa_unikalna}">Dodaj surowiec</button>
-                <button class="btn btn-success btn-sm me-2 btn-start-transfer" data-apollo-id="${apollo.id}" data-apollo-name="${apollo.nazwa_unikalna}">Nowy transfer</button>
-                <hr class="my-2">
-                <button class="btn btn-info btn-sm me-2 btn-show-history" data-apollo-id="${apollo.id}" data-apollo-name="${apollo.nazwa_unikalna}" data-sesja-id="${stan.id_sesji}">Historia roztankowań</button>
-                <button class="btn btn-secondary btn-sm me-2 btn-show-loading-history" data-apollo-id="${apollo.id}" data-apollo-name="${apollo.nazwa_unikalna}" data-sesja-id="${stan.id_sesji}">Historia załadunku</button>
-                <hr class="my-2">
-                <button class="btn btn-danger btn-sm btn-end-session" data-apollo-id="${apollo.id}" data-apollo-name="${apollo.nazwa_unikalna}">Zakończ sesję</button>
+                <button class="btn btn-secondary btn-sm action-btn" data-action="history" data-id="${apollo.id_sprzetu}" data-name="${apollo.nazwa_apollo}" data-session-id="${apollo.id_sesji}">Historia transferów</button>
+                <button class="btn btn-dark btn-sm action-btn" data-action="show-loading-history" data-id="${apollo.id_sprzetu}" data-name="${apollo.nazwa_apollo}" data-session-id="${apollo.id_sesji}">Historia załadunku</button>
+                <button class="btn btn-info btn-sm action-btn" data-action="add-surowiec" data-id="${apollo.id_sprzetu}" data-name="${apollo.nazwa_apollo}">Dodaj surowiec</button>
+                <button class="btn btn-success btn-sm action-btn" data-action="start-transfer" data-id="${apollo.id_sprzetu}" data-name="${apollo.nazwa_apollo}">Rozpocznij transfer</button>
+                <button class="btn btn-danger btn-sm action-btn" data-action="end-session" data-id="${apollo.id_sprzetu}" data-name="${apollo.nazwa_apollo}">Zakończ sesję</button>
             `;
         } else {
-            buttons = `<button class="btn btn-primary btn-start-session" data-apollo-id="${apollo.id}" data-apollo-name="${apollo.nazwa_unikalna}">Rozpocznij nową sesję</button>`;
+            buttons = `
+                <button class="btn btn-primary btn-sm action-btn" data-action="start-session" data-id="${apollo.id_sprzetu}" data-name="${apollo.nazwa_apollo}">Rozpocznij nową sesję</button>
+            `;
         }
 
         const cardHTML = `
             <div class="col-md-6">
                 <div class="card h-100 ${cardClass}">
                     <div class="card-header ${headerClass}">
-                        <h5 class="card-title mb-0">${apollo.nazwa_unikalna}</h5>
+                        <h5 class="card-title mb-0">${apollo.nazwa_apollo}</h5>
                     </div>
                     <div class="card-body">
                         ${isActive 
@@ -113,7 +112,7 @@ document.addEventListener('DOMContentLoaded', () => {
             apolloStatusContainer.innerHTML = '';
             if (apolloList.length > 0) {
                 apolloList.forEach(apollo => {
-                    apolloStatusContainer.innerHTML += createApolloCard(apollo, apollo); // Pass apollo and stan
+                    apolloStatusContainer.innerHTML += createApolloCard(apollo);
                 });
             } else {
                 apolloStatusContainer.innerHTML = '<p class="text-muted">Nie znaleziono żadnych urządzeń Apollo.</p>';
@@ -318,10 +317,16 @@ document.addEventListener('DOMContentLoaded', () => {
                         handleEndSession(id);
                     }
                     break;
-                case 'history':
+                case 'history': {
                     const sessionId = button.dataset.sessionId;
                     showHistory(sessionId, name);
                     break;
+                }
+                case 'show-loading-history': {
+                    const sesjaId = button.dataset.sessionId;
+                    showLoadingHistory(id, name, sesjaId);
+                    break;
+                }
             }
         }
     });
@@ -339,17 +344,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (confirm(`Czy na pewno chcesz anulować operację o ID ${opId}? Tej akcji nie można cofnąć.`)) {
                 handleCancelTransfer(opId);
             }
-        }
-    });
-
-    // Delegacja eventów - dodanie obsługi nowego przycisku
-    document.body.addEventListener('click', function(event) {
-        const target = event.target;
-        if (target.classList.contains('btn-show-loading-history')) {
-            const apolloId = target.dataset.apolloId;
-            const apolloName = target.dataset.apolloName;
-            const sesjaId = target.dataset.sesjaId;
-            showLoadingHistory(apolloId, apolloName, sesjaId);
         }
     });
 
