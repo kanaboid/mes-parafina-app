@@ -10,7 +10,7 @@ class ApolloService:
 
     @staticmethod
     def rozpocznij_sesje_apollo(id_sprzetu, typ_surowca, waga_kg, operator=None):
-        """Rozpoczyna nową sesję wytapiania w danym Apollo."""
+        """Rozpoczyna nową sesję wytapiania i tworzy partię surowca w Apollo."""
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         
@@ -42,6 +42,17 @@ class ApolloService:
                 VALUES (%s, 'DODANIE_SUROWCA', %s, %s, %s)
             """, (id_sesji, waga_kg, czas_startu, operator))
             
+            # 3. Stwórz nową partię surowca dla Apollo
+            teraz = datetime.now()
+            unikalny_kod_partii = f"AP{id_sprzetu}-{teraz.strftime('%Y%m%d-%H%M%S')}"
+            nazwa_partii = f"Partia w Apollo {id_sprzetu} ({typ_surowca})"
+            
+            cursor.execute("""
+                INSERT INTO partie_surowca
+                (unikalny_kod, nazwa_partii, typ_surowca, waga_poczatkowa_kg, waga_aktualna_kg, id_sprzetu, zrodlo_pochodzenia, status_partii, typ_transformacji)
+                VALUES (%s, %s, %s, %s, %s, %s, 'apollo', 'Surowy w reaktorze', 'NOWA')
+            """, (unikalny_kod_partii, nazwa_partii, typ_surowca, waga_kg, waga_kg, id_sprzetu))
+
             conn.commit()
             return id_sesji
             
@@ -54,7 +65,7 @@ class ApolloService:
 
     @staticmethod
     def dodaj_surowiec_do_apollo(id_sprzetu, waga_kg, operator=None):
-        """Dodaje stały surowiec do aktywnej sesji w Apollo."""
+        """Dodaje stały surowiec do aktywnej sesji i aktualizuje wagę partii w Apollo."""
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         
@@ -77,6 +88,30 @@ class ApolloService:
                 VALUES (%s, 'DODANIE_SUROWCA', %s, %s, %s)
             """, (id_sesji, waga_kg, datetime.now(), operator))
             
+            # Zaktualizuj wagę partii w Apollo
+            cursor.execute("""
+                UPDATE partie_surowca
+                SET waga_aktualna_kg = waga_aktualna_kg + %s
+                WHERE id_sprzetu = %s
+            """, (waga_kg, id_sprzetu))
+            
+            if cursor.rowcount == 0:
+                # Jeśli z jakiegoś powodu partia nie istnieje, stwórz ją
+                # (zabezpieczenie dla starszych danych lub nieprzewidzianych sytuacji)
+                cursor.execute("SELECT typ_surowca FROM apollo_sesje WHERE id = %s", (id_sesji,))
+                sesja_info = cursor.fetchone()
+                typ_surowca = sesja_info['typ_surowca'] if sesja_info else 'Nieznany'
+
+                teraz = datetime.now()
+                unikalny_kod_partii = f"AP{id_sprzetu}-{teraz.strftime('%Y%m%d-%H%M%S')}-AUTOCREATED"
+                nazwa_partii = f"Partia w Apollo {id_sprzetu} ({typ_surowca})"
+                
+                cursor.execute("""
+                    INSERT INTO partie_surowca
+                    (unikalny_kod, nazwa_partii, typ_surowca, waga_poczatkowa_kg, waga_aktualna_kg, id_sprzetu, zrodlo_pochodzenia, status_partii, typ_transformacji)
+                    VALUES (%s, %s, %s, %s, %s, %s, 'apollo', 'Surowy w reaktorze', 'NOWA')
+                """, (unikalny_kod_partii, nazwa_partii, typ_surowca, waga_kg, waga_kg, id_sprzetu))
+
             conn.commit()
             
         except mysql.connector.Error as err:

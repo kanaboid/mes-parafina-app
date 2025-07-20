@@ -871,7 +871,7 @@ def start_apollo_transfer():
 
 @bp.route('/apollo-transfer/end', methods=['POST'])
 def end_apollo_transfer():
-    """Kończy operację transferu z Apollo, zwalnia zasoby i aktualizuje stany."""
+    """Kończy operację transferu z Apollo, zwalnia zasoby i zarządza partiami surowca."""
     data = request.get_json()
     
     conn = None
@@ -883,30 +883,42 @@ def end_apollo_transfer():
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
 
+        # Pobierz dane operacji
         cursor.execute("SELECT id_sprzetu_zrodlowego, id_sprzetu_docelowego FROM operacje_log WHERE id = %s", (id_operacji,))
         operacja = cursor.fetchone()
-        if not operacja:
-            raise ValueError('Nie znaleziono operacji o podanym ID.')
+        if not operacja: raise ValueError('Nie znaleziono operacji o podanym ID.')
         
         id_apollo = operacja['id_sprzetu_zrodlowego']
         id_celu = operacja['id_sprzetu_docelowego']
         
-        cursor.execute("SELECT id, nazwa_unikalna, typ_sprzetu, stan_sprzetu FROM sprzet WHERE id = %s", (id_celu,))
-        cel_info = cursor.fetchone()
-
+        # Znajdź sesję Apollo i typ surowca
         cursor.execute("SELECT id, typ_surowca FROM apollo_sesje WHERE id_sprzetu = %s AND status_sesji = 'aktywna'", (id_apollo,))
         sesja = cursor.fetchone()
-        if not sesja:
-            raise ValueError('Nie znaleziono aktywnej sesji dla danego Apollo.')
-        id_sesji = sesja['id']
+        if not sesja: raise ValueError('Nie znaleziono aktywnej sesji dla danego Apollo.')
         typ_surowca_zrodla = sesja['typ_surowca']
 
-        cursor.execute("""
-            UPDATE operacje_log 
-            SET status_operacji = 'zakonczona', czas_zakonczenia = NOW(), ilosc_kg = %s, zmodyfikowane_przez = %s, id_apollo_sesji = %s
-            WHERE id = %s
-        """, (waga_kg, operator, id_sesji, id_operacji))
+        # Pobierz nazwy sprzętu do generowania kodu partii
+        cursor.execute("SELECT nazwa_unikalna FROM sprzet WHERE id = %s", (id_apollo,))
+        zrodlo_info = cursor.fetchone()
+        cursor.execute("SELECT nazwa_unikalna FROM sprzet WHERE id = %s", (id_celu,))
+        cel_info = cursor.fetchone()
+        zrodlo_nazwa = zrodlo_info['nazwa_unikalna'] if zrodlo_info else f"ID{id_apollo}"
+        cel_nazwa = cel_info['nazwa_unikalna'] if cel_info else f"ID{id_celu}"
 
+        # DODATKOWY KROK: Znajdź partię źródłową w Apollo
+        cursor.execute("SELECT * FROM partie_surowca WHERE id_sprzetu = %s LIMIT 1", (id_apollo,))
+        partia_w_apollo = cursor.fetchone()
+        if not partia_w_apollo:
+            # To nie powinno się zdarzyć po zmianach w ApolloService, ale dodajemy zabezpieczenie
+            raise ValueError(f"Nie znaleziono partii surowca dla Apollo o ID {id_apollo}.")
+
+        # 1. Zakończ operację w logu
+        cursor.execute("""
+            UPDATE operacje_log SET status_operacji = 'zakonczona', czas_zakonczenia = NOW(), ilosc_kg = %s, zmodyfikowane_przez = %s, id_apollo_sesji = %s
+            WHERE id = %s
+        """, (waga_kg, operator, sesja['id'], id_operacji))
+
+        # 2. ZWOLNIJ ZASOBY (przywrócona, poprawna logika)
         sql_znajdz_zawory = """
             SELECT DISTINCT z.nazwa_zaworu FROM zawory z
             JOIN segmenty s ON z.id = s.id_zaworu
@@ -921,49 +933,76 @@ def end_apollo_transfer():
             sql_zamknij_zawory = f"UPDATE zawory SET stan = 'ZAMKNIETY' WHERE nazwa_zaworu IN ({placeholders})"
             cursor.execute(sql_zamknij_zawory, zawory_do_zamkniecia)
 
+        # 3. Zaktualizuj stany sprzętu
         cursor.execute("UPDATE sprzet SET stan_sprzetu = 'Gotowy' WHERE id = %s", (id_apollo,))
         cursor.execute("UPDATE sprzet SET stan_sprzetu = 'Zatankowany' WHERE id = %s", (id_celu,))
         
-        cursor.execute("SELECT id, typ_surowca, waga_aktualna_kg FROM partie_surowca WHERE id_aktualnego_sprzetu = %s AND status_partii = 'Surowy w reaktorze' LIMIT 1", (id_celu,))
+        # 4. ZARZĄDZANIE PARTIAMI (nowa logika z `partie_skladniki`)
+        cursor.execute("SELECT * FROM partie_surowca WHERE id_sprzetu = %s LIMIT 1", (id_celu,))
         partia_w_celu = cursor.fetchone()
 
-        if partia_w_celu:
-            # Aktualizuj istniejącą partię
-            nowa_waga = float(partia_w_celu['waga_aktualna_kg']) + waga_kg
-            nowy_typ = typ_surowca_zrodla if partia_w_celu['typ_surowca'] == typ_surowca_zrodla else 'Mieszanina'
-            cursor.execute("""
-                UPDATE partie_surowca SET waga_aktualna_kg = %s, typ_surowca = %s
-                WHERE id = %s
-            """, (nowa_waga, nowy_typ, partia_w_celu['id']))
-        else:
-            # Stwórz nową partię
-            pochodzenie_opis = f"Transfer z Apollo (ID: {id_apollo}) w ramach operacji ID: {id_operacji}"
-            
-            # Pobierz nazwę celu do kodu partii
-            cursor.execute("SELECT nazwa_unikalna FROM sprzet WHERE id = %s", (id_celu,))
-            cel_info = cursor.fetchone()
-            
-            teraz = datetime.now()
-            unikalny_kod = f"{typ_surowca_zrodla.replace(' ', '_')}-{teraz.strftime('%Y%m%d%H%M')}-{cel_info['nazwa_unikalna']}"
+        data_transferu = datetime.now().strftime('%Y%m%d')
+        czas_transferu = datetime.now().strftime('%H%M%S')
 
+        if partia_w_celu:
+            if partia_w_celu['typ_surowca'] == typ_surowca_zrodla:
+                nowa_waga = float(partia_w_celu['waga_aktualna_kg']) + waga_kg
+                cursor.execute("UPDATE partie_surowca SET waga_aktualna_kg = %s WHERE id = %s", (nowa_waga, partia_w_celu['id']))
+            else:
+                # Archiwizuj starą partię z celu
+                cursor.execute("UPDATE partie_surowca SET id_sprzetu = NULL, status_partii = 'Archiwalna' WHERE id = %s", (partia_w_celu['id'],))
+                
+                # Oblicz nową wagę i stwórz opis
+                nowa_waga = float(partia_w_celu['waga_aktualna_kg']) + waga_kg
+                pochodzenie_opis = f"Mieszanina z partii ID {partia_w_celu['id']} i transferu z Apollo (Partia ID: {partia_w_apollo['id']})."
+                unikalny_kod = f"MIX-{data_transferu}_{czas_transferu}-{zrodlo_nazwa}-{cel_nazwa}"
+                
+                # Stwórz nową partię "Mieszanina"
+                cursor.execute("""
+                    INSERT INTO partie_surowca (unikalny_kod, nazwa_partii, typ_surowca, waga_aktualna_kg, waga_poczatkowa_kg, id_sprzetu, zrodlo_pochodzenia, pochodzenie_opis, status_partii, typ_transformacji)
+                    VALUES (%s, %s, 'Mieszanina', %s, %s, %s, 'apollo', %s, 'Surowy w reaktorze', 'MIESZANIE')
+                """, (unikalny_kod, unikalny_kod, nowa_waga, nowa_waga, id_celu, pochodzenie_opis))
+                nowa_partia_id = cursor.lastrowid
+
+                # Zapisz składniki w nowej tabeli
+                skladniki = [
+                    (nowa_partia_id, partia_w_celu['id'], partia_w_celu['waga_aktualna_kg']),
+                    (nowa_partia_id, partia_w_apollo['id'], waga_kg)
+                ]
+                cursor.executemany("""
+                    INSERT INTO partie_skladniki (id_partii_wynikowej, id_partii_skladowej, waga_skladowa_kg)
+                    VALUES (%s, %s, %s)
+                """, skladniki)
+        else:
+            # Tworzenie nowej partii w pustym urządzeniu
+            pochodzenie_opis = f"Roztankowanie z {zrodlo_nazwa} w ramach operacji ID: {id_operacji}"
+            unikalny_kod = f"{typ_surowca_zrodla.replace(' ', '_')}-{data_transferu}_{czas_transferu}-{zrodlo_nazwa}-{cel_nazwa}"
+            
             cursor.execute("""
-                INSERT INTO partie_surowca 
-                (unikalny_kod, nazwa_partii, typ_surowca, waga_aktualna_kg, waga_poczatkowa_kg, id_aktualnego_sprzetu, 
-                zrodlo_pochodzenia, pochodzenie_opis, status_partii, data_utworzenia)
-                VALUES (%s, %s, %s, %s, %s, %s, 'apollo', %s, 'Surowy w reaktorze', NOW())
+                INSERT INTO partie_surowca (unikalny_kod, nazwa_partii, typ_surowca, waga_aktualna_kg, waga_poczatkowa_kg, id_sprzetu, 
+                zrodlo_pochodzenia, pochodzenie_opis, status_partii, data_utworzenia, typ_transformacji)
+                VALUES (%s, %s, %s, %s, %s, %s, 'apollo', %s, 'Surowy w reaktorze', NOW(), 'TRANSFER')
             """, (unikalny_kod, unikalny_kod, typ_surowca_zrodla, waga_kg, waga_kg, id_celu, pochodzenie_opis))
+            nowa_partia_id = cursor.lastrowid
+            
+            # Powiąż nową partię z partią w Apollo
+            cursor.execute("""
+                INSERT INTO partie_skladniki (id_partii_wynikowej, id_partii_skladowej, waga_skladowa_kg)
+                VALUES (%s, %s, %s)
+            """, (nowa_partia_id, partia_w_apollo['id'], waga_kg))
+
+        # 5. Zaktualizuj wagę partii w Apollo
+        nowa_waga_apollo = float(partia_w_apollo['waga_aktualna_kg']) - waga_kg
+        cursor.execute("UPDATE partie_surowca SET waga_aktualna_kg = %s WHERE id = %s", (nowa_waga_apollo, partia_w_apollo['id']))
 
         conn.commit()
-
         return jsonify({'success': True, 'message': f'Operacja {id_operacji} zakończona.'})
 
     except (ValueError, KeyError) as e:
-        if conn and conn.is_connected():
-            conn.rollback()
+        if conn and conn.is_connected(): conn.rollback()
         return jsonify({'error': str(e)}), 400
     except mysql.connector.Error as err:
-        if conn and conn.is_connected():
-            conn.rollback()
+        if conn and conn.is_connected(): conn.rollback()
         return jsonify({'error': f'Błąd bazy danych: {err}'}), 500
     finally:
         if 'cursor' in locals() and cursor: cursor.close()
@@ -1011,7 +1050,7 @@ def anuluj_apollo_transfer():
             placeholders = ', '.join(['%s'] * len(zawory_do_zamkniecia))
             sql_zamknij_zawory = f"UPDATE zawory SET stan = 'ZAMKNIETY' WHERE nazwa_zaworu IN ({placeholders})"
             cursor.execute(sql_zamknij_zawory, zawory_do_zamkniecia)
-        
+
         # 3. Przywróć stan sprzętu (źródła i celu) do 'Gotowy'
         id_zrodla = operacja['id_sprzetu_zrodlowego']
         id_celu = operacja['id_sprzetu_docelowego']
