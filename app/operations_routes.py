@@ -1015,8 +1015,8 @@ def anuluj_apollo_transfer():
         # 3. Przywróć stan sprzętu (źródła i celu) do 'Gotowy'
         id_zrodla = operacja['id_sprzetu_zrodlowego']
         id_celu = operacja['id_sprzetu_docelowego']
-        cursor.execute("UPDATE sprzet SET stan_sprzetu = 'Gotowy' WHERE id IN (%s, %s)", (id_zrodla, id_celu))
-
+        cursor.execute("UPDATE sprzet SET stan_sprzetu = 'Gotowy' WHERE id = %s", (id_celu))
+        cursor.execute("UPDATE sprzet SET stan_sprzetu = 'Zatankowany' WHERE id = %s", (id_zrodla))
         conn.commit()
 
         return jsonify({'success': True, 'message': f'Operacja {id_operacji} została anulowana.'})
