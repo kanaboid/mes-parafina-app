@@ -54,15 +54,26 @@ document.addEventListener('DOMContentLoaded', () => {
         let buttons = '';
         if (apollo.aktywna_sesja) {
             buttons = `
-                <button class="btn btn-secondary btn-sm action-btn" data-action="history" data-id="${apollo.id_sprzetu}" data-name="${apollo.nazwa_apollo}" data-session-id="${apollo.id_sesji}">Historia transferów</button>
-                <button class="btn btn-dark btn-sm action-btn" data-action="show-loading-history" data-id="${apollo.id_sprzetu}" data-name="${apollo.nazwa_apollo}" data-session-id="${apollo.id_sesji}">Historia załadunku</button>
-                <button class="btn btn-info btn-sm action-btn" data-action="add-surowiec" data-id="${apollo.id_sprzetu}" data-name="${apollo.nazwa_apollo}">Dodaj surowiec</button>
-                <button class="btn btn-success btn-sm action-btn" data-action="start-transfer" data-id="${apollo.id_sprzetu}" data-name="${apollo.nazwa_apollo}">Rozpocznij transfer</button>
-                <button class="btn btn-danger btn-sm action-btn" data-action="end-session" data-id="${apollo.id_sprzetu}" data-name="${apollo.nazwa_apollo}">Zakończ sesję</button>
+                <div class="btn-group w-100" role="group" aria-label="Akcje dla Apollo">
+                    <button class="btn btn-success action-btn" data-action="start-transfer" data-id="${apollo.id_sprzetu}" data-name="${apollo.nazwa_apollo}">Transfer</button>
+                    <button class="btn btn-danger action-btn" data-action="end-session" data-id="${apollo.id_sprzetu}" data-name="${apollo.nazwa_apollo}">Zakończ</button>
+                    
+                    <div class="btn-group" role="group">
+                        <button type="button" class="btn btn-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                            Więcej
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><a class="dropdown-item action-btn" href="#" data-action="add-surowiec" data-id="${apollo.id_sprzetu}" data-name="${apollo.nazwa_apollo}">Dodaj surowiec</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item action-btn" href="#" data-action="history" data-id="${apollo.id_sprzetu}" data-name="${apollo.nazwa_apollo}" data-session-id="${apollo.id_sesji}">Historia transferów</a></li>
+                            <li><a class="dropdown-item action-btn" href="#" data-action="show-loading-history" data-id="${apollo.id_sprzetu}" data-name="${apollo.nazwa_apollo}" data-session-id="${apollo.id_sesji}">Historia załadunku</a></li>
+                        </ul>
+                    </div>
+                </div>
             `;
         } else {
             buttons = `
-                <button class="btn btn-primary btn-sm action-btn" data-action="start-session" data-id="${apollo.id_sprzetu}" data-name="${apollo.nazwa_apollo}">Rozpocznij nową sesję</button>
+                <button class="btn btn-primary w-100 action-btn" data-action="start-session" data-id="${apollo.id_sprzetu}" data-name="${apollo.nazwa_apollo}">Rozpocznij sesję</button>
             `;
         }
 
@@ -90,7 +101,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             `
                         }
                     </div>
-                    <div class="card-footer bg-transparent d-flex justify-content-end gap-2">
+                    <div class="card-footer bg-transparent">
                         ${buttons}
                     </div>
                 </div>
@@ -288,6 +299,7 @@ document.addEventListener('DOMContentLoaded', () => {
     apolloStatusContainer.addEventListener('click', e => {
         const button = e.target.closest('.action-btn');
         if (button) {
+            e.preventDefault(); // Zapobiega domyślnej akcji (np. przeładowaniu strony dla linków)
             const action = button.dataset.action;
             const id = button.dataset.id;
             const name = button.dataset.name;
