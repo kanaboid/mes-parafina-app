@@ -1,0 +1,38 @@
+---
+alwaysApply: true
+---
+
+## FRONTEND
+
+### Guidelines for ACCESSIBILITY
+
+#### MOBILE_ACCESSIBILITY
+
+- Ensure touch targets are at least 44 by 44 pixels for comfortable interaction on mobile devices
+- Implement proper viewport configuration to support pinch-to-zoom and prevent scaling issues
+- Design layouts that adapt to both portrait and landscape orientations without loss of content
+- Support both touch and keyboard navigation for hybrid devices with {{input_methods}}
+- Ensure interactive elements have sufficient spacing to prevent accidental activation
+- Test with mobile screen readers like VoiceOver (iOS) and TalkBack (Android)
+- Design forms that work efficiently with on-screen keyboards and autocomplete functionality
+- Implement alternatives to complex gestures that require fine motor control
+- Ensure content is accessible when device orientation is locked for users with fixed devices
+- Provide alternatives to motion-based interactions for users with vestibular disorders
+
+## FRONTEND
+
+### Guidelines for ACCESSIBILITY
+
+#### MOBILE_ACCESSIBILITY
+
+- Ensure touch targets are at least 44 by 44 pixels for comfortable interaction on mobile devices
+- Implement proper viewport configuration to support pinch-to-zoom and prevent scaling issues
+- Design layouts that adapt to both portrait and landscape orientations without loss of content
+- Support both touch and keyboard navigation for hybrid devices with {{input_methods}}
+- Ensure interactive elements have sufficient spacing to prevent accidental activation
+- Test with mobile screen readers like VoiceOver (iOS) and TalkBack (Android)
+- Design forms that work efficiently with on-screen keyboards and autocomplete functionality
+- Implement alternatives to complex gestures that require fine motor control
+- Ensure content is accessible when device orientation is locked for users with fixed devices
+- Provide alternatives to motion-based interactions for users with vestibular disorders
+

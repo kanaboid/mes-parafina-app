@@ -240,7 +240,7 @@ def rozpocznij_trase():
                 "cel": end_point,
                 "uzyte_segmenty": znaleziona_sciezka_nazwy
             }
-        }), 201 # 201 Created
+        }), 201
 
     except mysql.connector.Error as err:
         if conn:
@@ -1083,4 +1083,213 @@ def anuluj_apollo_transfer():
         return jsonify({'error': f'Błąd bazy danych: {err}'}), 500
     finally:
         if 'cursor' in locals() and cursor: cursor.close()
+        if 'write_cursor' in locals() and write_cursor: write_cursor.close()
         if conn and conn.is_connected(): conn.close() 
+
+@bp.route('/roztankuj-cysterne/start', methods=['POST'])
+def start_cysterna_transfer():
+    """
+    Rozpoczyna operację roztankowania cysterny.
+    Wymaga: id_cysterny, id_celu.
+    Akcje: Walidacja, pathfinding, blokada zasobów, utworzenie logu operacji.
+    """
+    data = request.get_json()
+    required_fields = ['id_cysterny', 'id_celu']
+    if not data or not all(k in data for k in required_fields):
+        return jsonify({'message': 'Brak wymaganych danych: id_cysterny, id_celu'}), 400
+
+    id_cysterny = data['id_cysterny']
+    id_celu = data['id_celu']
+    operator = data.get('operator', 'SYSTEM')
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        cursor.execute("SELECT id, nazwa_unikalna, typ_sprzetu, stan_sprzetu FROM sprzet WHERE id IN (%s, %s)", (id_cysterny, id_celu))
+        sprzety = {s['id']: s for s in cursor.fetchall()}
+        zrodlo = sprzety.get(int(id_cysterny))
+        cel = sprzety.get(int(id_celu))
+
+        if not zrodlo or zrodlo['typ_sprzetu'].lower() != 'cysterna':
+            return jsonify({'message': 'Nieprawidłowe źródło. Oczekiwano urządzenia typu "cysterna".'}), 400
+        if not cel or cel['typ_sprzetu'].lower() not in ['reaktor', 'beczka_brudna', 'zbiornik']:
+            return jsonify({'message': 'Nieprawidłowy cel. Oczekiwano reaktora, beczki brudnej lub zbiornika.'}), 400
+        if cel['stan_sprzetu'] != 'Pusty':
+            return jsonify({'message': f"Cel operacji {cel['nazwa_unikalna']} nie jest pusty (stan: {cel['stan_sprzetu']})."}), 409
+
+        pathfinder = get_pathfinder()
+        punkt_startowy = f"{zrodlo['nazwa_unikalna']}_OUT"
+        punkt_docelowy = f"{cel['nazwa_unikalna']}_IN"
+        
+        wszystkie_zawory = [edge_data['valve_name'] for _, _, edge_data in pathfinder.graph.edges(data=True) if 'valve_name' in edge_data]
+        trasa_segmentow_nazwy = pathfinder.find_path(punkt_startowy, punkt_docelowy, wszystkie_zawory)
+
+        if not trasa_segmentow_nazwy:
+            return jsonify({'message': f'Nie można znaleźć trasy z {punkt_startowy} do {punkt_docelowy}'}), 404
+
+        placeholders_konflikt = ', '.join(['%s'] * len(trasa_segmentow_nazwy))
+        sql_konflikt = f"SELECT s.nazwa_segmentu FROM log_uzyte_segmenty lus JOIN operacje_log ol ON lus.id_operacji_log = ol.id JOIN segmenty s ON lus.id_segmentu = s.id WHERE ol.status_operacji = 'aktywna' AND s.nazwa_segmentu IN ({placeholders_konflikt})"
+        cursor.execute(sql_konflikt, trasa_segmentow_nazwy)
+        konflikty = cursor.fetchall()
+        if konflikty:
+            nazwy_zajetych = [k['nazwa_segmentu'] for k in konflikty]
+            return jsonify({'message': 'Konflikt zasobów - niektóre segmenty są używane.', 'zajete_segmenty': nazwy_zajetych}), 409
+
+        write_cursor = conn.cursor()
+
+        zawory_do_otwarcia = set()
+        for segment_name in trasa_segmentow_nazwy:
+            for u, v, d in pathfinder.graph.edges(data=True):
+                if d.get('segment_name') == segment_name and 'valve_name' in d:
+                    zawory_do_otwarcia.add(d['valve_name'])
+                    break
+        if zawory_do_otwarcia:
+            placeholders_zawory = ', '.join(['%s'] * len(zawory_do_otwarcia))
+            sql_zawory = f"UPDATE zawory SET stan = 'OTWARTY' WHERE nazwa_zaworu IN ({placeholders_zawory})"
+            write_cursor.execute(sql_zawory, list(zawory_do_otwarcia))
+
+        typ_operacji = 'ROZTANKOWANIE_CYSTERNY'
+        opis_operacji = f"Transfer z {zrodlo['nazwa_unikalna']} do {cel['nazwa_unikalna']}"
+
+        sql_log = "INSERT INTO operacje_log (typ_operacji, id_sprzetu_zrodlowego, id_sprzetu_docelowego, status_operacji, czas_rozpoczecia, opis, punkt_startowy, punkt_docelowy, zmodyfikowane_przez) VALUES (%s, %s, %s, 'aktywna', NOW(), %s, %s, %s, %s)"
+        write_cursor.execute(sql_log, (typ_operacji, id_cysterny, id_celu, opis_operacji, punkt_startowy, punkt_docelowy, operator))
+        operacja_id = write_cursor.lastrowid
+
+        placeholders_segmenty = ', '.join(['%s'] * len(trasa_segmentow_nazwy))
+        sql_id_segmentow = f"SELECT id FROM segmenty WHERE nazwa_segmentu IN ({placeholders_segmenty})"
+        cursor.execute(sql_id_segmentow, trasa_segmentow_nazwy)
+        id_segmentow = [row['id'] for row in cursor.fetchall()]
+        sql_blokada = "INSERT INTO log_uzyte_segmenty (id_operacji_log, id_segmentu) VALUES (%s, %s)"
+        dane_do_blokady = [(operacja_id, id_seg) for id_seg in id_segmentow]
+        write_cursor.executemany(sql_blokada, dane_do_blokady)
+
+        write_cursor.execute("UPDATE sprzet SET stan_sprzetu = 'W transferze' WHERE id = %s", (id_cysterny,))
+        write_cursor.execute("UPDATE sprzet SET stan_sprzetu = 'W transferze' WHERE id = %s", (id_celu,))
+        
+        conn.commit()
+        return jsonify({'message': 'Roztankowanie cysterny rozpoczęte pomyślnie.', 'id_operacji': operacja_id}), 201
+
+    except mysql.connector.Error as err:
+        if conn: conn.rollback()
+        return jsonify({'message': f'Błąd bazy danych: {str(err)}'}), 500
+    finally:
+        if 'cursor' in locals() and cursor: cursor.close()
+        if 'write_cursor' in locals() and 'write_cursor' in locals() and write_cursor: write_cursor.close()
+        if conn and conn.is_connected(): conn.close()
+
+@bp.route('/roztankuj-cysterne/zakoncz', methods=['POST'])
+def end_cysterna_transfer():
+    """
+    Kończy operację roztankowania cysterny i zarządza partiami surowca.
+    Wymaga: id_operacji, waga_netto_kg, typ_surowca, nr_rejestracyjny, nr_dokumentu_dostawy, nazwa_dostawcy.
+    """
+    data = request.get_json()
+    required_fields = ['id_operacji', 'waga_netto_kg', 'typ_surowca', 'nr_rejestracyjny', 'nr_dokumentu_dostawy', 'nazwa_dostawcy']
+    if not data or not all(k in data for k in required_fields):
+        return jsonify({'message': 'Brak wszystkich wymaganych danych.'}), 400
+
+    try:
+        id_operacji = int(data['id_operacji'])
+        waga_kg = float(data['waga_netto_kg'])
+        typ_surowca_dostawy = data['typ_surowca']
+    except (ValueError, TypeError):
+        return jsonify({'message': 'Nieprawidłowy format danych.'}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        cursor.execute("SELECT * FROM operacje_log WHERE id = %s AND status_operacji = 'aktywna'", (id_operacji,))
+        operacja = cursor.fetchone()
+        if not operacja:
+            return jsonify({'message': 'Nie znaleziono aktywnej operacji o podanym ID.'}), 404
+
+        id_cysterny = operacja['id_sprzetu_zrodlowego']
+        id_celu = operacja['id_sprzetu_docelowego']
+        
+        # Aktualizacja logu operacji
+        opis_operacji = (f"Dostawca: {data['nazwa_dostawcy']}, "
+                         f"Pojazd: {data['nr_rejestracyjny']}, "
+                         f"Dokument: {data['nr_dokumentu_dostawy']}, "
+                         f"Surowiec: {typ_surowca_dostawy}, "
+                         f"Waga: {waga_kg} kg")
+        cursor.execute("UPDATE operacje_log SET status_operacji = 'zakonczona', czas_zakonczenia = NOW(), ilosc_kg = %s, opis = %s WHERE id = %s", (waga_kg, opis_operacji, id_operacji))
+
+        # Zwolnienie zasobów (zawory)
+        sql_znajdz_zawory = "SELECT DISTINCT z.nazwa_zaworu FROM zawory z JOIN segmenty s ON z.id = s.id_zaworu JOIN log_uzyte_segmenty lus ON s.id = lus.id_segmentu WHERE lus.id_operacji_log = %s"
+        cursor.execute(sql_znajdz_zawory, (id_operacji,))
+        zawory_do_zamkniecia = [row['nazwa_zaworu'] for row in cursor.fetchall()]
+        if zawory_do_zamkniecia:
+            placeholders = ', '.join(['%s'] * len(zawory_do_zamkniecia))
+            sql_zamknij_zawory = f"UPDATE zawory SET stan = 'ZAMKNIETY' WHERE nazwa_zaworu IN ({placeholders})"
+            cursor.execute(sql_zamknij_zawory, zawory_do_zamkniecia)
+        
+        # ZARZĄDZANIE PARTIAMI - analogicznie do /apollo-transfer/end
+        cursor.execute("SELECT * FROM partie_surowca WHERE id_sprzetu = %s LIMIT 1", (id_celu,))
+        partia_w_celu = cursor.fetchone()
+
+        # Stworzenie "wirtualnej" partii dla dostawy
+        unikalny_kod_dostawy = f"{typ_surowca_dostawy.replace(' ', '_')}-{datetime.now().strftime('%Y%m%d_%H%M%S')}-DOSTAWA"
+        cursor.execute("""
+            INSERT INTO partie_surowca (unikalny_kod, nazwa_partii, typ_surowca, waga_aktualna_kg, waga_poczatkowa_kg, id_sprzetu, zrodlo_pochodzenia, pochodzenie_opis, status_partii, data_utworzenia)
+            VALUES (%s, %s, %s, %s, %s, NULL, 'cysterna', %s, 'Archiwalna', NOW())
+        """, (unikalny_kod_dostawy, unikalny_kod_dostawy, typ_surowca_dostawy, waga_kg, waga_kg, opis_operacji))
+        id_partii_z_dostawy = cursor.lastrowid
+
+        if partia_w_celu:
+            # Mieszanie z istniejącą partią
+            # 1. Archiwizuj starą partię w celu
+            cursor.execute("UPDATE partie_surowca SET id_sprzetu = NULL, status_partii = 'Archiwalna' WHERE id = %s", (partia_w_celu['id'],))
+            
+            # 2. Utwórz nowy typ mieszaniny
+            typ_surowca_w_celu = partia_w_celu['typ_surowca']
+            skladniki_typow = set()
+            if typ_surowca_w_celu.startswith('MIX('):
+                istniejace_typy = typ_surowca_w_celu[4:-1].split(',')
+                skladniki_typow.update(t.strip() for t in istniejace_typy)
+            else:
+                skladniki_typow.add(typ_surowca_w_celu)
+            skladniki_typow.add(typ_surowca_dostawy)
+            nowy_typ_mieszaniny = f"MIX({', '.join(sorted(list(skladniki_typow)))})"
+            
+            # 3. Utwórz nową partię wynikową (mieszaninę)
+            nowa_waga = float(partia_w_celu['waga_aktualna_kg']) + waga_kg
+            unikalny_kod_mix = f"MIX-{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            cursor.execute("""
+                INSERT INTO partie_surowca (unikalny_kod, nazwa_partii, typ_surowca, waga_aktualna_kg, waga_poczatkowa_kg, id_sprzetu, status_partii, typ_transformacji)
+                VALUES (%s, %s, %s, %s, %s, %s, 'Surowy w reaktorze', 'MIESZANIE')
+            """, (unikalny_kod_mix, unikalny_kod_mix, nowy_typ_mieszaniny, nowa_waga, nowa_waga, id_celu))
+            id_nowej_partii = cursor.lastrowid
+
+            # 4. Zapisz składniki w `partie_skladniki`
+            skladniki = [
+                (id_nowej_partii, partia_w_celu['id'], partia_w_celu['waga_aktualna_kg']),
+                (id_nowej_partii, id_partii_z_dostawy, waga_kg)
+            ]
+            cursor.executemany("INSERT INTO partie_skladniki (id_partii_wynikowej, id_partii_skladowej, waga_skladowa_kg) VALUES (%s, %s, %s)", skladniki)
+        else:
+            # Cel jest pusty, więc po prostu "przenosimy" partię z dostawy do celu
+            cursor.execute("UPDATE partie_surowca SET id_sprzetu = %s, status_partii = 'Surowy w reaktorze' WHERE id = %s", (id_celu, id_partii_z_dostawy))
+
+        # Aktualizacja stanu sprzętu
+        cursor.execute("UPDATE sprzet SET stan_sprzetu = 'Pusty' WHERE id = %s", (id_cysterny,))
+        cursor.execute("UPDATE sprzet SET stan_sprzetu = 'Zatankowany' WHERE id = %s", (id_celu,))
+        
+        conn.commit()
+        return jsonify({'message': 'Operacja zakończona pomyślnie. Utworzono i przetworzono nową partię surowca.'}), 200
+
+    except mysql.connector.Error as err:
+        if conn: conn.rollback()
+        # Dodaj więcej szczegółów do logu błędu
+        traceback.print_exc()
+        return jsonify({'message': f'Błąd bazy danych: {str(err)}'}), 500
+    except Exception as e:
+        if conn: conn.rollback()
+        traceback.print_exc()
+        return jsonify({'message': f'Wystąpił nieoczekiwany błąd: {str(e)}'}), 500
+    finally:
+        if 'cursor' in locals() and cursor: cursor.close()
+        if conn and conn.is_connected(): conn.close()

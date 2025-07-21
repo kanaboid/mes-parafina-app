@@ -1,6 +1,6 @@
 # app/routes.py
 
-from flask import Blueprint, jsonify, request, current_app, render_template
+from flask import Blueprint, jsonify, request, current_app, render_template, g
 from datetime import datetime, timedelta
 from .sensors import SensorService  # Importujemy serwis czujników
 import mysql.connector
@@ -12,8 +12,9 @@ from mysql.connector.errors import OperationalError
 from decimal import Decimal
 
 def get_pathfinder():
-    """Pobiera instancję serwisu PathFinder z kontekstu aplikacji."""
-    return current_app.extensions['pathfinder']
+    if 'pathfinder' not in g:
+        g.pathfinder = PathFinder(get_db_connection())
+    return g.pathfinder
 
 def get_sensor_service():
     """Pobiera instancję serwisu SensorService z kontekstu aplikacji."""
@@ -62,9 +63,14 @@ def show_operacje_apollo():
     """Wyświetla stronę do zarządzania transferami z Apollo."""
     return render_template('operacje_apollo.html')
 
+@bp.route('/operacje-cysterny')
+def operacje_cysterny():
+    """Strona do zarządzania operacjami roztankowania cystern."""
+    return render_template('operacje_cysterny.html')
+
 @bp.route('/beczki')
 def beczki():
-    """Renderuje nową stronę do podglądu zawartości beczek i reaktorów."""
+    """Strona do zarządzania operacjami roztankowania cystern."""
     return render_template('beczki.html')
 # --- KONIEC NOWEJ FUNKCJI ---
 
