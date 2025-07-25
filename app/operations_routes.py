@@ -1101,6 +1101,7 @@ def start_cysterna_transfer():
     id_cysterny = data['id_cysterny']
     id_celu = data['id_celu']
     operator = data.get('operator', 'SYSTEM')
+    force = data.get('force', False)
 
     conn = None
     try:
@@ -1114,10 +1115,10 @@ def start_cysterna_transfer():
 
         if not zrodlo or zrodlo['typ_sprzetu'].lower() != 'cysterna':
             return jsonify({'message': 'Nieprawidłowe źródło. Oczekiwano urządzenia typu "cysterna".'}), 400
-        if not cel or cel['typ_sprzetu'].lower() not in ['reaktor', 'beczka_brudna', 'zbiornik']:
-            return jsonify({'message': 'Nieprawidłowy cel. Oczekiwano reaktora, beczki brudnej lub zbiornika.'}), 400
-        if cel['stan_sprzetu'] != 'Pusty':
-            return jsonify({'message': f"Cel operacji {cel['nazwa_unikalna']} nie jest pusty (stan: {cel['stan_sprzetu']})."}), 409
+        if not cel or cel['typ_sprzetu'].lower() not in ['reaktor', 'beczka_brudna', 'zbiornik', 'beczka_czysta']:
+            return jsonify({'message': 'Nieprawidłowy cel. Oczekiwano reaktora, beczki brudnej, beczki czystej lub zbiornika.'}), 400
+        if cel['stan_sprzetu'] != 'Pusty' and not force:
+            return jsonify({'message': f"Cel operacji {cel['nazwa_unikalna']} nie jest pusty (stan: {cel['stan_sprzetu']}).", 'can_force': True}, 409)
 
         pathfinder = get_pathfinder()
         punkt_startowy = f"{zrodlo['nazwa_unikalna']}_OUT"
@@ -1133,9 +1134,9 @@ def start_cysterna_transfer():
         sql_konflikt = f"SELECT s.nazwa_segmentu FROM log_uzyte_segmenty lus JOIN operacje_log ol ON lus.id_operacji_log = ol.id JOIN segmenty s ON lus.id_segmentu = s.id WHERE ol.status_operacji = 'aktywna' AND s.nazwa_segmentu IN ({placeholders_konflikt})"
         cursor.execute(sql_konflikt, trasa_segmentow_nazwy)
         konflikty = cursor.fetchall()
-        if konflikty:
+        if konflikty and not force:
             nazwy_zajetych = [k['nazwa_segmentu'] for k in konflikty]
-            return jsonify({'message': 'Konflikt zasobów - niektóre segmenty są używane.', 'zajete_segmenty': nazwy_zajetych}), 409
+            return jsonify({'message': 'Konflikt zasobów - niektóre segmenty są używane.', 'zajete_segmenty': nazwy_zajetych, 'can_force': True}, 409)
 
         write_cursor = conn.cursor()
 
@@ -1292,4 +1293,60 @@ def end_cysterna_transfer():
         return jsonify({'message': f'Wystąpił nieoczekiwany błąd: {str(e)}'}), 500
     finally:
         if 'cursor' in locals() and cursor: cursor.close()
+        if conn and conn.is_connected(): conn.close()
+
+@bp.route('/roztankuj-cysterne/anuluj', methods=['POST'])
+
+def anuluj_cysterna_transfer():
+    """
+    Anuluje aktywną operację roztankowania cysterny.
+    Wymaga: id_operacji.
+    """
+    data = request.get_json()
+    if not data or 'id_operacji' not in data:
+        return jsonify({'error': 'Brak wymaganego pola: id_operacji'}), 400
+
+    id_operacji = data['id_operacji']
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        cursor.execute("SELECT * FROM operacje_log WHERE id = %s AND status_operacji = 'aktywna'", (id_operacji,))
+        operacja = cursor.fetchone()
+        if not operacja:
+            return jsonify({'error': 'Nie znaleziono aktywnej operacji o podanym ID.'}), 404
+
+        write_cursor = conn.cursor()
+        write_cursor.execute("UPDATE operacje_log SET status_operacji = 'anulowana', czas_zakonczenia = NOW() WHERE id = %s", (id_operacji,))
+
+        # Zwolnij zasoby (zamknij zawory)
+        sql_znajdz_zawory = """
+            SELECT DISTINCT z.nazwa_zaworu FROM zawory z
+            JOIN segmenty s ON z.id = s.id_zaworu
+            JOIN log_uzyte_segmenty lus ON s.id = lus.id_segmentu
+            WHERE lus.id_operacji_log = %s
+        """
+        cursor.execute(sql_znajdz_zawory, (id_operacji,))
+        zawory_do_zamkniecia = [row['nazwa_zaworu'] for row in cursor.fetchall()]
+        if zawory_do_zamkniecia:
+            placeholders = ', '.join(['%s'] * len(zawory_do_zamkniecia))
+            sql_zamknij_zawory = f"UPDATE zawory SET stan = 'ZAMKNIETY' WHERE nazwa_zaworu IN ({placeholders})"
+            write_cursor.execute(sql_zamknij_zawory, zawory_do_zamkniecia)
+
+        # Przywróć stan sprzętu do 'Pusty'
+        id_zrodla = operacja['id_sprzetu_zrodlowego']
+        id_celu = operacja['id_sprzetu_docelowego']
+        write_cursor.execute("UPDATE sprzet SET stan_sprzetu = 'Pusty' WHERE id = %s", (id_zrodla,))
+        write_cursor.execute("UPDATE sprzet SET stan_sprzetu = 'Pusty' WHERE id = %s", (id_celu,))
+
+        conn.commit()
+        return jsonify({'success': True, 'message': f'Operacja {id_operacji} została anulowana.'})
+
+    except mysql.connector.Error as err:
+        if conn: conn.rollback()
+        return jsonify({'error': f'Błąd bazy danych: {err}'}), 500
+    finally:
+        if 'cursor' in locals() and cursor: cursor.close()
+        if 'write_cursor' in locals() and write_cursor: write_cursor.close()
         if conn and conn.is_connected(): conn.close()

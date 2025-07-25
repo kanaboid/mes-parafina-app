@@ -92,18 +92,37 @@ document.addEventListener('DOMContentLoaded', function () {
         startTransferCysternaName.textContent = name;
         
         try {
-            const sprzet = await fetchData('/api/sprzet');
-            const destinations = sprzet.filter(s => ['reaktor', 'zbiornik', 'beczka_brudna'].includes(s.typ_sprzetu.toLowerCase()) && s.stan_sprzetu.toLowerCase() === 'pusty');
+            const response = await fetch('/api/sprzet/dostepne-cele');
+            if (!response.ok) throw new Error('Błąd sieci podczas pobierania celów.');
+
+            const destinations = await response.json();
             
-            destinationRadiosContainer.innerHTML = destinations.map(d => `
-                <label class="list-group-item">
-                    <input class="form-check-input me-1" type="radio" name="destination" value="${d.id}" required>
-                    ${d.nazwa_unikalna} (${d.typ_sprzetu})
-                </label>
-            `).join('');
-            
-            if (destinations.length === 0) {
-                destinationRadiosContainer.innerHTML = '<p class="text-danger">Brak dostępnych, pustych zbiorników docelowych.</p>';
+            destinationRadiosContainer.innerHTML = ''; // Wyczyść kontener
+            if (destinations.length > 0) {
+                destinations.forEach((item, index) => {
+                    let labelContent = `
+                        <div class="d-flex w-100 justify-content-between">
+                            <h6 class="mb-1">${item.nazwa_unikalna} <span class="badge bg-info">${item.typ_sprzetu}</span></h6>
+                            <small>Stan: ${item.stan_sprzetu}</small>
+                        </div>
+                    `;
+                    if (item.stan_sprzetu !== 'Pusty' && item.typ_surowca) {
+                        labelContent += `<p class="mb-1 small">Zawartość: <strong>${item.typ_surowca}</strong> (${item.waga_aktualna_kg || 0} / ${item.pojemnosc_kg || 'N/A'} kg)</p>`;
+                    } else {
+                        labelContent += `<p class="mb-1 small">Pojemność: ${item.pojemnosc_kg || 'N/A'} kg</p>`;
+                    }
+
+                    const radioId = `dest-radio-${item.id}`;
+                    const radioHTML = `
+                        <label for="${radioId}" class="list-group-item list-group-item-action">
+                            <input class="form-check-input me-2" type="radio" name="destination" value="${item.id}" id="${radioId}" required>
+                            ${labelContent}
+                        </label>
+                    `;
+                    destinationRadiosContainer.innerHTML += radioHTML;
+                });
+            } else {
+                destinationRadiosContainer.innerHTML = '<p class="text-danger">Brak dostępnych celów transferu (reaktorów, zbiorników, beczek brudnych).</p>';
             }
 
             startTransferModal.show();
@@ -113,20 +132,70 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
+    // Dodaj modal potwierdzenia konfliktu
+    const confirmConflictModalHtml = `
+    <div class="modal fade" id="confirm-conflict-modal" tabindex="-1">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header bg-warning-subtle">
+            <h5 class="modal-title text-warning">Cel nie jest pusty</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <p id="conflict-modal-message">Wybrany cel nie jest pusty lub występuje konflikt zasobów.<br>Czy na pewno chcesz rozpocząć operację mimo to?</p>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Anuluj</button>
+            <button type="button" class="btn btn-warning" id="confirm-conflict-btn">Tak, kontynuuj</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', confirmConflictModalHtml);
+    const confirmConflictModal = new bootstrap.Modal(document.getElementById('confirm-conflict-modal'));
+    let pendingForcePayload = null;
+
     startTransferForm.addEventListener('submit', async function(e) {
         e.preventDefault();
         const cysternaId = startTransferCysternaId.value;
         const celId = this.elements['destination'].value;
-
+        const payload = { id_cysterny: cysternaId, id_celu: celId };
         try {
             const response = await fetch('/api/operations/roztankuj-cysterne/start', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id_cysterny: cysternaId, id_celu: celId })
+                body: JSON.stringify(payload)
             });
             const result = await response.json();
             if (response.ok) {
                 showToast('Operacja roztankowania rozpoczęta pomyślnie!', 'success');
+                startTransferModal.hide();
+                updateUI();
+            } else if (response.status === 409 && result.can_force) {
+                // Pokaż modal potwierdzenia
+                pendingForcePayload = { ...payload, force: true };
+                document.getElementById('conflict-modal-message').textContent = result.message || 'Cel nie jest pusty lub występuje konflikt zasobów. Czy kontynuować?';
+                confirmConflictModal.show();
+            } else {
+                throw new Error(result.message || 'Nieznany błąd');
+            }
+        } catch (error) {
+            showToast(`Błąd: ${error.message}`, 'error');
+        }
+    });
+
+    document.getElementById('confirm-conflict-btn').addEventListener('click', async function() {
+        if (!pendingForcePayload) return;
+        try {
+            const response = await fetch('/api/operations/roztankuj-cysterne/start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(pendingForcePayload)
+            });
+            const result = await response.json();
+            if (response.ok) {
+                showToast('Operacja roztankowania rozpoczęta mimo konfliktu.', 'success');
+                confirmConflictModal.hide();
                 startTransferModal.hide();
                 updateUI();
             } else {
@@ -134,6 +203,8 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         } catch (error) {
             showToast(`Błąd: ${error.message}`, 'error');
+        } finally {
+            pendingForcePayload = null;
         }
     });
 

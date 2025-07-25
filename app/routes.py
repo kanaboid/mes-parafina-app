@@ -1568,7 +1568,7 @@ def get_dostepne_cele():
                 p.typ_surowca
             FROM sprzet s
             LEFT JOIN partie_surowca p ON s.id = p.id_sprzetu
-            WHERE s.typ_sprzetu IN ('reaktor', 'beczka_brudna')
+            WHERE s.typ_sprzetu IN ('reaktor', 'beczka_brudna', 'beczka_czysta')
             ORDER BY s.typ_sprzetu, s.nazwa_unikalna
         """
         cursor.execute(query)
