@@ -382,6 +382,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     forms.startTransfer.addEventListener('submit', async e => {
         e.preventDefault();
+        const errorDiv = document.getElementById('start-transfer-error');
+        if (errorDiv) errorDiv.classList.add('d-none');
         const selectedDestination = document.querySelector('input[name="destination"]:checked');
         if (!selectedDestination) {
             showToast('Musisz wybrać cel transferu.', 'error');
@@ -424,14 +426,27 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify(payload)
             });
             const result = await res.json();
-            if (!res.ok) throw new Error(result.error || 'Wystąpił nieznany błąd.');
-            
+    
+            // Obsługa konfliktu 409
+            if (res.status === 409) {
+                let msg = result.message || 'Konflikt zasobów!';
+                if (result.zajete_segmenty) {
+                    msg += '<br><b>Zajęte segmenty:</b> ' + result.zajete_segmenty.join(', ');
+                }
+                showModalError(msg, modal);
+                return;
+            }
+    
+            if (!res.ok) {
+                throw new Error(result.error || result.message || 'Wystąpił nieznany błąd.');
+            }
+    
             showToast(successMessage);
             if (modal) modal.hide();
-            
-            if(refreshStatus) loadApolloStatus();
+    
+            if (refreshStatus) loadApolloStatus();
             loadActiveTransfers();
-
+    
         } catch (error) {
             console.error(`Błąd podczas wywołania ${url}:`, error);
             showToast(`Błąd: ${error.message}`, 'error');
@@ -465,7 +480,7 @@ document.addEventListener('DOMContentLoaded', () => {
         Toastify({
             text: prefix + message,
             duration: 3000,
-            newWindow: true,
+            newWindow: false,
             close: true,
             gravity: "top", 
             position: "right", 
@@ -476,7 +491,18 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }).showToast();
     }
-
+    function showModalError(message, modal) {
+        // Obsługa tylko dla start-transfer-modal, ale możesz rozbudować dla innych
+        if (modal && modal._element && modal._element.id === 'start-transfer-modal') {
+            const errorDiv = document.getElementById('start-transfer-error');
+            if (errorDiv) {
+                errorDiv.innerHTML = message;
+                errorDiv.classList.remove('d-none');
+            }
+        } else {
+            showToast(message, 'error');
+        }
+    }
     // --- Inicjalizacja ---
     loadApolloStatus();
     loadActiveTransfers();

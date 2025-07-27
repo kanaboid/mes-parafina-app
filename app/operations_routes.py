@@ -817,7 +817,7 @@ def start_apollo_transfer():
         konflikty = read_cursor.fetchall()
 
         if konflikty:
-            nazwy_zajetych = [k['nazwa_unikalna'] for k in konflikty]
+            nazwy_zajetych = [k['nazwa_segmentu'] for k in konflikty]
             return jsonify({'message': 'Konflikt zasobów - niektóre segmenty są używane przez inne operacje.','zajete_segmenty': nazwy_zajetych}), 409
 
         write_cursor = conn.cursor()
@@ -859,6 +859,7 @@ def start_apollo_transfer():
         return jsonify({'message': 'Transfer rozpoczęty pomyślnie.','id_operacji': operacja_id}), 201
 
     except mysql.connector.Error as err:
+        import traceback; traceback.print_exc()
         if conn and conn.is_connected(): conn.rollback()
         return jsonify({'message': f'Błąd bazy danych: {str(err)}'}), 500
     except Exception as e:
@@ -1090,8 +1091,7 @@ def anuluj_apollo_transfer():
 def start_cysterna_transfer():
     """
     Rozpoczyna operację roztankowania cysterny.
-    Wymaga: id_cysterny, id_celu.
-    Akcje: Walidacja, pathfinding, blokada zasobów, utworzenie logu operacji.
+    (Wersja zmodyfikowana, aby działać jak oryginalna 'start_apollo_transfer')
     """
     data = request.get_json()
     required_fields = ['id_cysterny', 'id_celu']
@@ -1101,6 +1101,7 @@ def start_cysterna_transfer():
     id_cysterny = data['id_cysterny']
     id_celu = data['id_celu']
     operator = data.get('operator', 'SYSTEM')
+    # ZMIANA 1: Przywrócono pobieranie flagi 'force' (chociaż w tej logice nie jest używana do stanu celu)
     force = data.get('force', False)
 
     conn = None
@@ -1113,12 +1114,16 @@ def start_cysterna_transfer():
         zrodlo = sprzety.get(int(id_cysterny))
         cel = sprzety.get(int(id_celu))
 
+        # Walidacja specyficzna dla Cysterny
         if not zrodlo or zrodlo['typ_sprzetu'].lower() != 'cysterna':
             return jsonify({'message': 'Nieprawidłowe źródło. Oczekiwano urządzenia typu "cysterna".'}), 400
         if not cel or cel['typ_sprzetu'].lower() not in ['reaktor', 'beczka_brudna', 'zbiornik', 'beczka_czysta']:
             return jsonify({'message': 'Nieprawidłowy cel. Oczekiwano reaktora, beczki brudnej, beczki czystej lub zbiornika.'}), 400
-        if cel['stan_sprzetu'] != 'Pusty' and not force:
-            return jsonify({'message': f"Cel operacji {cel['nazwa_unikalna']} nie jest pusty (stan: {cel['stan_sprzetu']}).", 'can_force': True}, 409)
+        
+        # ZMIANA 2: Zamiast blokować, tylko drukujemy ostrzeżenie (tak jak w oryginalnym start_apollo_transfer)
+        if cel['stan_sprzetu'] != 'Pusty':
+            print(f"OSTRZEŻENIE: Cel operacji {cel['nazwa_unikalna']} nie jest pusty (stan: {cel['stan_sprzetu']}). Operacja będzie kontynuowana.")
+            # Nie zwracamy błędu, pozwalamy na dalsze wykonanie kodu.
 
         pathfinder = get_pathfinder()
         punkt_startowy = f"{zrodlo['nazwa_unikalna']}_OUT"
@@ -1134,9 +1139,15 @@ def start_cysterna_transfer():
         sql_konflikt = f"SELECT s.nazwa_segmentu FROM log_uzyte_segmenty lus JOIN operacje_log ol ON lus.id_operacji_log = ol.id JOIN segmenty s ON lus.id_segmentu = s.id WHERE ol.status_operacji = 'aktywna' AND s.nazwa_segmentu IN ({placeholders_konflikt})"
         cursor.execute(sql_konflikt, trasa_segmentow_nazwy)
         konflikty = cursor.fetchall()
-        if konflikty and not force:
+        
+        # ZMIANA 3: Logika konfliktu, która była oryginalnie w start_apollo_transfer
+        # Uwaga: ta logika jest trochę dziwna, bo 'force' nie jest tutaj używane
+        if konflikty:
             nazwy_zajetych = [k['nazwa_segmentu'] for k in konflikty]
-            return jsonify({'message': 'Konflikt zasobów - niektóre segmenty są używane.', 'zajete_segmenty': nazwy_zajetych, 'can_force': True}, 409)
+            return jsonify({
+                'message': 'Konflikt zasobów - niektóre segmenty są używane.',
+                'zajete_segmenty': nazwy_zajetych
+            }), 409
 
         write_cursor = conn.cursor()
 
@@ -1175,9 +1186,13 @@ def start_cysterna_transfer():
     except mysql.connector.Error as err:
         if conn: conn.rollback()
         return jsonify({'message': f'Błąd bazy danych: {str(err)}'}), 500
+    except Exception as e:
+        if conn: conn.rollback()
+        traceback.print_exc()
+        return jsonify({'message': f'Błąd aplikacji: {str(e)}'}), 500
     finally:
         if 'cursor' in locals() and cursor: cursor.close()
-        if 'write_cursor' in locals() and 'write_cursor' in locals() and write_cursor: write_cursor.close()
+        if 'write_cursor' in locals() and write_cursor: write_cursor.close()
         if conn and conn.is_connected(): conn.close()
 
 @bp.route('/roztankuj-cysterne/zakoncz', methods=['POST'])

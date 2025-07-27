@@ -145,8 +145,8 @@ document.addEventListener('DOMContentLoaded', function () {
             <p id="conflict-modal-message">Wybrany cel nie jest pusty lub występuje konflikt zasobów.<br>Czy na pewno chcesz rozpocząć operację mimo to?</p>
           </div>
           <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Anuluj</button>
-            <button type="button" class="btn btn-warning" id="confirm-conflict-btn">Tak, kontynuuj</button>
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">OK</button>
+            
           </div>
         </div>
       </div>
@@ -171,12 +171,16 @@ document.addEventListener('DOMContentLoaded', function () {
                 showToast('Operacja roztankowania rozpoczęta pomyślnie!', 'success');
                 startTransferModal.hide();
                 updateUI();
-            } else if (response.status === 409 && result.can_force) {
+            } 
+            else if (response.status === 409) {
+                // Pokaż toast o konflikcie
+                showToast(result.message || 'Cel nie jest pusty lub występuje konflikt zasobów.', 'error');
                 // Pokaż modal potwierdzenia
                 pendingForcePayload = { ...payload, force: true };
                 document.getElementById('conflict-modal-message').textContent = result.message || 'Cel nie jest pusty lub występuje konflikt zasobów. Czy kontynuować?';
                 confirmConflictModal.show();
-            } else {
+            }
+            else {
                 throw new Error(result.message || 'Nieznany błąd');
             }
         } catch (error) {
@@ -184,29 +188,29 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 
-    document.getElementById('confirm-conflict-btn').addEventListener('click', async function() {
-        if (!pendingForcePayload) return;
-        try {
-            const response = await fetch('/api/operations/roztankuj-cysterne/start', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(pendingForcePayload)
-            });
-            const result = await response.json();
-            if (response.ok) {
-                showToast('Operacja roztankowania rozpoczęta mimo konfliktu.', 'success');
-                confirmConflictModal.hide();
-                startTransferModal.hide();
-                updateUI();
-            } else {
-                throw new Error(result.message || 'Nieznany błąd');
-            }
-        } catch (error) {
-            showToast(`Błąd: ${error.message}`, 'error');
-        } finally {
-            pendingForcePayload = null;
-        }
-    });
+    // document.getElementById('confirm-conflict-btn').addEventListener('click', async function() {
+    //     if (!pendingForcePayload) return;
+    //     try {
+    //         const response = await fetch('/api/operations/roztankuj-cysterne/start', {
+    //             method: 'POST',
+    //             headers: { 'Content-Type': 'application/json' },
+    //             body: JSON.stringify(pendingForcePayload)
+    //         });
+    //         const result = await response.json();
+    //         if (response.ok) {
+    //             showToast('Operacja roztankowania rozpoczęta mimo konfliktu.', 'success');
+    //             confirmConflictModal.hide();
+    //             startTransferModal.hide();
+    //             updateUI();
+    //         } else {
+    //             throw new Error(result.message || 'Nieznany błąd');
+    //         }
+    //     } catch (error) {
+    //         showToast(`Błąd: ${error.message}`, 'error');
+    //     } finally {
+    //         pendingForcePayload = null;
+    //     }
+    // });
 
     function handleEndTransferClick(id) {
         endOperationIdInput.value = id;
