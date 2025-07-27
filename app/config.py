@@ -31,5 +31,5 @@ class Config:
     # Dane do połączenia z bazą danych MySQL
     MYSQL_HOST = 'mysql.railway.internal'
     MYSQL_USER = 'root' # Zmień, jeśli masz innego użytkownika
-    MYSQL_PASSWORD = 'FhxOQsUsVBAHUyJUXVuyJafQStpxjhKV' # <-- WAŻNE: Wpisz swoje hasło
+    MYSQL_PASSWORD = os.environ.get('MySQL.MYSQL_ROOT_PASSWORD') # <-- WAŻNE: Wpisz swoje hasło
     MYSQL_DB = 'mes_parafina_db'
