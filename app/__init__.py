@@ -8,7 +8,10 @@ from .sensors import SensorService
 from flask_apscheduler import APScheduler
 from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime
+
+
 # Tworzymy pustą instancję, która zostanie zainicjowana w create_app
+
 pathfinder = PathFinder()
 monitoring = MonitoringService()  # Dodaj instancję
 sensor_service = SensorService()
