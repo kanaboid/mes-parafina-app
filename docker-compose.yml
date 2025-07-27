@@ -1,0 +1,34 @@
+# Wersja składni Docker Compose
+version: '3.8'
+
+# Definicja "usług", czyli naszych kontenerów
+services:
+  # Nazwa naszej usługi - np. "web" dla aplikacji webowej
+  web:
+    # Mówi Compose, żeby zbudował obraz z Dockerfile w bieżącym katalogu ('.')
+    build: .
+    # Nadaje kontenerowi stałą, czytelną nazwę
+    container_name: parafina-app-compose
+    # Mapowanie portów: port 8080 na Twoim komputerze -> port 5000 w kontenerze
+    ports:
+      - "8080:5000"
+    # Definicja zmiennych środowiskowych dla kontenera
+    environment:
+      # Wartości ze znakami ${...} zostaną automatycznie pobrane z pliku .env
+      - SECRET_KEY=${SECRET_KEY}
+      - MYSQLUSER=${MYSQLUSER}
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      # Ta zmienna jest kluczowa. Podajemy tu nazwę kontenera MySQL.
+      # Nie umieszczamy jej w .env, bo to część konfiguracji infrastruktury.
+      - MYSQLHOST=my-new-db
+    # Podłączenie usługi "web" do zewnętrznej sieci
+    networks:
+      - mes-parafina
+
+# Definicja sieci
+networks:
+  # Nazwa sieci, której używamy w sekcji "services"
+  mes-parafina:
+    # Ta kluczowa opcja mówi Docker Compose, że sieć o tej nazwie już istnieje
+    # i nie należy próbować jej tworzyć na nowo.
+    external: true
