@@ -186,3 +186,10 @@ Daj znać, jak poszło
 
 
 
+Decyduje sie na przyjecie formatu [TYP_STREFY]-[ID_ZASOBU]-RRMMDD-[NR].
+
+Dla mieszaniny w zbiorniku brudnym: B-B8b-231030-01
+Dla szarży w reaktorze: P-R1-231030-01 (P od "Produkcja")
+Dla mieszaniny w zbiorniku czystym: C-B5c-231030-01
+
+W systemie mam juz nazwy sprzetu jak B1b czy B10b i jest problem z alfabetycznym sortowaniem, jak podejsc do tematu?

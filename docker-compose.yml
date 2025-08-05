@@ -31,7 +31,8 @@ services:
       - MYSQL_DATABASE=mes_parafina_db
       - MYSQL_USER=${MYSQLUSER}
       # Uwaga: obraz MySQL używa MYSQL_PASSWORD do ustawienia hasła dla nowo tworzonego użytkownika
-      - MYSQL_PASSWORD=${MYSQL_PASSWORD_FOR_USER} 
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD_FOR_USER}
+      - TZ=Europe/Warsaw
     volumes:
       - mysql_data:/var/lib/mysql
     networks:
