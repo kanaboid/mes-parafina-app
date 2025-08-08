@@ -51,7 +51,6 @@ class Sprzet(db.Model):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     uwagi_serwisowe: Mapped[Optional[str]] = mapped_column(Text)
-    test2: Mapped[Optional[str]] = mapped_column(Text)
     nazwa_unikalna: Mapped[str] = mapped_column(VARCHAR(20), comment='Np. R1, FZ, B1b, B7c')
     typ_sprzetu: Mapped[Optional[str]] = mapped_column(ENUM('reaktor', 'filtr', 'beczka_brudna', 'beczka_czysta', 'apollo', 'magazyn', 'cysterna', 'mauzer'))
     pojemnosc_kg: Mapped[Optional[decimal.Decimal]] = mapped_column(DECIMAL(10, 2))

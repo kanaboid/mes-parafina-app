@@ -148,24 +148,40 @@ class TestApolloService(unittest.TestCase):
     def test_05_oblicz_stan_prosty_przypadek(self):
         """Testuje obliczanie stanu po krótkim czasie topnienia."""
         waga_startowa = 2000.0
-        ApolloService.rozpocznij_sesje_apollo(TEST_APOLLO_ID, 'TEST-SUROWIEC', waga_startowa)
+        
+        # ZMIANA: Używamy stałych czasów
+        czas_teraz = datetime(2025, 1, 1, 12, 0, 36)
+        czas_startu_sesji = datetime(2025, 1, 1, 12, 0, 0)
+        
+        ApolloService.rozpocznij_sesje_apollo(
+            TEST_APOLLO_ID, 'TEST-SUROWIEC', waga_startowa, event_time=czas_startu_sesji
+        )
+
         szybkosc_topnienia = ApolloService.SZYBKOSC_WYTAPIANIA_KG_H
-        oczekiwana_ilosc_wytopiona = (36 / 3600.0) * szybkosc_topnienia
-        czas_startu_symulowany = datetime.now() - timedelta(seconds=36)
-        self.cursor.execute("UPDATE apollo_sesje SET czas_rozpoczecia = %s WHERE id_sprzetu = %s", (czas_startu_symulowany, TEST_APOLLO_ID))
-        self.conn.commit()
-        stan = ApolloService.oblicz_aktualny_stan_apollo(TEST_APOLLO_ID)
+        oczekiwana_ilosc_wytopiona = (36 / 3600.0) * szybkosc_topnienia # 10.0 kg
+        
+        # ZMIANA: Przekazujemy `current_time`
+        stan = ApolloService.oblicz_aktualny_stan_apollo(TEST_APOLLO_ID, current_time=czas_teraz)
+        
         self.assertTrue(stan['aktywna_sesja'])
         self.assertAlmostEqual(stan['dostepne_kg'], oczekiwana_ilosc_wytopiona, delta=0.1)
 
     def test_06_oblicz_stan_z_limitem_surowca(self):
         """Testuje, czy ilość wytopiona nie przekroczy ilości dodanego surowca."""
         waga_startowa = 5.0
-        ApolloService.rozpocznij_sesje_apollo(TEST_APOLLO_ID, 'TEST-SUROWIEC', waga_startowa)
-        czas_startu_symulowany = datetime.now() - timedelta(hours=1)
-        self.cursor.execute("UPDATE apollo_sesje SET czas_rozpoczecia = %s WHERE id_sprzetu = %s", (czas_startu_symulowany, TEST_APOLLO_ID))
-        self.conn.commit()
-        stan = ApolloService.oblicz_aktualny_stan_apollo(TEST_APOLLO_ID)
+
+        # ZMIANA: Używamy stałych czasów
+        czas_teraz = datetime(2025, 1, 1, 13, 0, 0) # Godzina później
+        czas_startu_sesji = datetime(2025, 1, 1, 12, 0, 0)
+
+        ApolloService.rozpocznij_sesje_apollo(
+            TEST_APOLLO_ID, 'TEST-SUROWIEC', waga_startowa, event_time=czas_startu_sesji
+        )
+        
+        # ZMIANA: Przekazujemy `current_time`
+        stan = ApolloService.oblicz_aktualny_stan_apollo(TEST_APOLLO_ID, current_time=czas_teraz)
+        
+        # Oczekujemy, że wynik będzie ograniczony do wagi startowej
         self.assertAlmostEqual(stan['dostepne_kg'], waga_startowa, delta=0.1)
 
     def test_07_oblicz_stan_po_korekcie_recznej(self):
