@@ -8,6 +8,9 @@ from app import create_app
 from app.config import Config
 from app.apollo_service import ApolloService
 from app.db import get_db_connection
+from app.models import ApolloSesje, PartieSurowca, Sprzet, ApolloTracking, OperacjeLog
+from app import db
+from sqlalchemy import text
 
 class TestConfig(Config):
     TESTING = True
@@ -24,7 +27,7 @@ class TestConfig(Config):
 TEST_APOLLO_ID = 999
 TEST_APOLLO_NAZWA = 'AP999'
 
-class TestApolloService(unittest.TestCase):
+class TestApolloService(unittest.TestCase): 
     
     @classmethod
     def setUpClass(cls):
@@ -33,35 +36,28 @@ class TestApolloService(unittest.TestCase):
         """
         app = create_app(TestConfig)
         with app.app_context():
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            
-            # ZMIANA: Prawidłowa kolejność czyszczenia i wyłączenie sprawdzania kluczy obcych
+            # ZMIANA: Używamy `db.session` zamiast `get_db_connection`
             try:
-                # 1. Tymczasowo wyłącz sprawdzanie kluczy obcych
-                cursor.execute("SET FOREIGN_KEY_CHECKS=0")
+                # Wyłączamy sprawdzanie kluczy obcych
+                db.session.execute(text("SET FOREIGN_KEY_CHECKS=0"))
                 
-                # 2. Czyść tabele w poprawnej kolejności (od "dzieci" do "rodziców")
-                # Chociaż przy wyłączonych kluczach kolejność nie jest krytyczna,
-                # jest to dobra praktyka.
-                cursor.execute("TRUNCATE TABLE apollo_tracking")
-                cursor.execute("TRUNCATE TABLE partie_surowca")
-                cursor.execute("TRUNCATE TABLE apollo_sesje")
-                cursor.execute("DELETE FROM sprzet WHERE id = %s", (TEST_APOLLO_ID,))
+                # Używamy `TRUNCATE` dla szybszego czyszczenia
                 
-                # 3. Włącz ponownie sprawdzanie kluczy obcych
-                cursor.execute("SET FOREIGN_KEY_CHECKS=1")
+                db.session.execute(text("TRUNCATE TABLE operacje_log"))
+                db.session.execute(text("TRUNCATE TABLE apollo_tracking"))
+                db.session.execute(text("TRUNCATE TABLE partie_surowca"))
+                db.session.execute(text("TRUNCATE TABLE apollo_sesje"))
+                db.session.execute(text(f"DELETE FROM sprzet WHERE id = {TEST_APOLLO_ID}"))
+                
+                # Dodajemy testowy sprzęt
+                nowy_sprzet = Sprzet(id=TEST_APOLLO_ID, nazwa_unikalna=TEST_APOLLO_NAZWA, typ_sprzetu='apollo', stan_sprzetu='Gotowy')
+                db.session.add(nowy_sprzet)
 
-                # 4. Dodaj testowy sprzęt
-                cursor.execute("""
-                    INSERT INTO sprzet (id, nazwa_unikalna, typ_sprzetu, stan_sprzetu) 
-                    VALUES (%s, %s, 'apollo', 'Gotowy')
-                """, (TEST_APOLLO_ID, TEST_APOLLO_NAZWA))
-                
-                conn.commit()
+                db.session.commit()
             finally:
-                cursor.close()
-                conn.close()
+                # Zawsze włączamy klucze obce z powrotem
+                db.session.execute(text("SET FOREIGN_KEY_CHECKS=1"))
+                db.session.commit() # Upewnij się, że zmiana jest zapisana
 
     def setUp(self):
         """
@@ -227,6 +223,171 @@ class TestApolloService(unittest.TestCase):
         stan = ApolloService.oblicz_aktualny_stan_apollo(TEST_APOLLO_ID, current_time=czas_teraz)
 
         self.assertAlmostEqual(stan['dostepne_kg'], oczekiwany_stan, places=4)
+
+
+    def test_08_zakoncz_sesje_sukces(self):
+        """
+        Sprawdza scenariusz 'happy path': zakończenie sesji, 
+        która ma powiązaną partię surowca.
+        """
+        # --- Krok 1: Przygotowanie (Arrange) ---
+        # Używamy serwisu, aby stworzyć spójny stan początkowy (sesja + partia)
+        id_sesji = ApolloService.rozpocznij_sesje_apollo(TEST_APOLLO_ID, 'TEST-ZAKONCZENIE', 1000)
+        
+        # Znajdźmy ID partii, która właśnie powstała, aby ją później zweryfikować
+        partia_przed = db.session.execute(
+            db.select(PartieSurowca).filter_by(id_sprzetu=TEST_APOLLO_ID)
+        ).scalar_one()
+        self.assertEqual(partia_przed.status_partii, 'Surowy w reaktorze')
+
+        # --- Krok 2: Działanie (Act) ---
+        ApolloService.zakoncz_sesje_apollo(TEST_APOLLO_ID)
+
+        # --- Krok 3: Asercje (Assert) ---
+        # 3a. Sprawdź, czy sesja została poprawnie zamknięta
+        sesja_po = db.session.get(ApolloSesje, id_sesji)
+        self.assertIsNotNone(sesja_po)
+        self.assertEqual(sesja_po.status_sesji, 'zakonczona')
+        self.assertIsNotNone(sesja_po.czas_zakonczenia)
+
+        # 3b. Sprawdź, czy partia została zarchiwizowana
+        partia_po = db.session.get(PartieSurowca, partia_przed.id)
+        self.assertIsNotNone(partia_po)
+        self.assertEqual(partia_po.status_partii, 'Archiwalna')
+
+    def test_09_zakoncz_sesje_gdy_brak_aktywnej(self):
+        """
+        Sprawdza, czy próba zakończenia nieistniejącej sesji poprawnie rzuca błąd.
+        """
+        # Oczekujemy błędu ValueError, ponieważ nie ma aktywnej sesji
+        with self.assertRaises(ValueError) as context:
+            ApolloService.zakoncz_sesje_apollo(TEST_APOLLO_ID)
+        
+        # Sprawdź, czy komunikat błędu jest poprawny
+        self.assertIn("nie ma aktywnej sesji do zakończenia", str(context.exception))
+
+    def test_10_zakoncz_sesje_bez_powiazanej_partii(self):
+        """
+        Sprawdza, czy funkcja działa poprawnie, jeśli istnieje sesja,
+        ale (z jakiegoś powodu) nie ma powiązanej z nią partii surowca.
+        """
+        # --- Krok 1: Przygotowanie (Arrange) ---
+        # Ręcznie tworzymy tylko sesję, bez partii
+        czas_startu = datetime.now()
+        tylko_sesja = ApolloSesje(
+            id_sprzetu=TEST_APOLLO_ID,
+            typ_surowca='SESJA_BEZ_PARTII',
+            czas_rozpoczecia=czas_startu,
+            status_sesji='aktywna'
+        )
+        db.session.add(tylko_sesja)
+        db.session.commit()
+        id_sesji = tylko_sesja.id
+
+        # --- Krok 2: Działanie (Act) ---
+        # Ta operacja nie powinna rzucić żadnego błędu
+        try:
+            ApolloService.zakoncz_sesje_apollo(TEST_APOLLO_ID)
+        except Exception as e:
+            self.fail(f"zakoncz_sesje_apollo rzuciło nieoczekiwany wyjątek: {e}")
+
+        # --- Krok 3: Asercje (Assert) ---
+        # Sprawdź, czy sesja została zamknięta
+        sesja_po = db.session.get(ApolloSesje, id_sesji)
+        self.assertEqual(sesja_po.status_sesji, 'zakonczona')
+
+
+    def test_11_get_stan_apollo_brak_sesji(self):
+        """
+        Sprawdza, czy `get_stan_apollo` zwraca poprawne dane, gdy nie ma aktywnej sesji.
+        """
+        stan = ApolloService.get_stan_apollo(TEST_APOLLO_ID)
+
+        self.assertIsNotNone(stan)
+        self.assertEqual(stan['id_sprzetu'], TEST_APOLLO_ID)
+        self.assertFalse(stan['aktywna_sesja'])
+
+    def test_12_get_stan_apollo_aktywna_sesja_bez_transferow(self):
+        """
+        Sprawdza obliczenia `get_stan_apollo` dla prostej sesji (WERSJA ORM).
+        """
+        # --- Krok 1: Przygotowanie (Arrange) z SQLAlchemy ---
+        czas_teraz = datetime.now()
+        czas_startu_sesji = czas_teraz - timedelta(minutes=6)
+
+        sesja = ApolloSesje(
+            id_sprzetu=TEST_APOLLO_ID, typ_surowca='T-STAN',
+            status_sesji='aktywna', czas_rozpoczecia=czas_startu_sesji
+        )
+        db.session.add(sesja)
+        db.session.commit() # Commit, aby sesja była widoczna i miała ID
+
+        tracking = ApolloTracking(
+            id_sesji=sesja.id, typ_zdarzenia='DODANIE_SUROWCA',
+            waga_kg=500, czas_zdarzenia=czas_startu_sesji
+        )
+        db.session.add(tracking)
+
+        sprzet = db.session.get(Sprzet, TEST_APOLLO_ID)
+        sprzet.szybkosc_topnienia_kg_h = 1000.0
+        
+        db.session.commit()
+        print(f"\n[DEBUG TEST 12] Przygotowano sesję ID: {sesja.id} i tracking ID: {tracking.id}")
+
+        # --- Krok 2: Działanie (Act) ---
+        oczekiwana_dostepnosc = 100.0
+        stan = ApolloService.get_stan_apollo(TEST_APOLLO_ID)
+
+        # --- Krok 3: Asercje (Assert) ---
+        self.assertTrue(stan['aktywna_sesja'])
+        self.assertEqual(stan['id_sesji'], sesja.id)
+        self.assertAlmostEqual(stan['bilans_sesji_kg'], 500.0)
+        self.assertAlmostEqual(stan['dostepne_kg'], oczekiwana_dostepnosc, delta=1.0)
+
+    def test_13_get_stan_apollo_z_transferem(self):
+        """
+        Sprawdza obliczenia `get_stan_apollo` po transferze (WERSJA ORM).
+        """
+        # --- Krok 1: Przygotowanie (Arrange) z SQLAlchemy ---
+        czas_teraz = datetime.now()
+        czas_startu_sesji = czas_teraz - timedelta(minutes=30)
+        czas_zakonczenia_transferu = czas_teraz - timedelta(minutes=12)
+
+        sesja = ApolloSesje(
+            id_sprzetu=TEST_APOLLO_ID, typ_surowca='T-STAN-TR',
+            status_sesji='aktywna', czas_rozpoczecia=czas_startu_sesji
+        )
+        db.session.add(sesja)
+        db.session.commit()
+
+        tracking = ApolloTracking(
+            id_sesji=sesja.id, typ_zdarzenia='DODANIE_SUROWCA',
+            waga_kg=1000, czas_zdarzenia=czas_startu_sesji
+        )
+        operacja = OperacjeLog(
+            typ_operacji='TRANSFER_Z_APOLLO',
+            id_apollo_sesji=sesja.id,
+            status_operacji='zakonczona',
+            ilosc_kg=200,
+            czas_rozpoczecia=czas_zakonczenia_transferu,
+            czas_zakonczenia=czas_zakonczenia_transferu
+        )
+        db.session.add_all([tracking, operacja])
+
+        sprzet = db.session.get(Sprzet, TEST_APOLLO_ID)
+        sprzet.szybkosc_topnienia_kg_h = 1000.0
+        db.session.commit()
+        print(f"\n[DEBUG TEST 13] Przygotowano sesję ID: {sesja.id}, tracking ID: {tracking.id}, operacja ID: {operacja.id}")
+
+        # --- Krok 2: Działanie (Act) ---
+        oczekiwana_dostepnosc = 200.0
+        stan = ApolloService.get_stan_apollo(TEST_APOLLO_ID)
+
+        # --- Krok 3: Asercje (Assert) ---
+        self.assertTrue(stan['aktywna_sesja'])
+        self.assertAlmostEqual(stan['bilans_sesji_kg'], 800.0)
+        self.assertAlmostEqual(stan['dostepne_kg'], oczekiwana_dostepnosc, delta=1.0)
+
 
 
 if __name__ == '__main__':
