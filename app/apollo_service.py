@@ -3,64 +3,62 @@
 from datetime import datetime, timedelta, timezone
 from .db import get_db_connection
 import mysql.connector
+from .models import Sprzet
 
 class ApolloService:
-    # Zakładamy stałą szybkość wytapiania w kg na godzinę
     SZYBKOSC_WYTAPIANIA_KG_H = 1000.0
 
     @staticmethod
-    def rozpocznij_sesje_apollo(id_sprzetu, typ_surowca, waga_kg, operator=None):
-        """Rozpoczyna nową sesję wytapiania i tworzy partię surowca w Apollo."""
+    def rozpocznij_sesje_apollo(id_sprzetu, typ_surowca, waga_kg, operator=None, event_time=None):
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         
+        czas_startu = event_time if event_time is not None else datetime.now()
+
         try:
-            # Sprawdź, czy nie ma już aktywnej sesji
-            cursor.execute("""
-                SELECT id FROM apollo_sesje 
-                WHERE id_sprzetu = %s AND status_sesji = 'aktywna'
-            """, (id_sprzetu,))
+            cursor.execute("SELECT id FROM apollo_sesje WHERE id_sprzetu = %s AND status_sesji = 'aktywna'", (id_sprzetu,))
             if cursor.fetchone():
                 raise ValueError(f"Apollo o ID {id_sprzetu} ma już aktywną sesję.")
 
-            # Transakcja jest rozpoczynana automatycznie przez pierwsze zapytanie
-            # przy autocommit=False, więc nie ma potrzeby wywoływać start_transaction()
-            
-            # 1. Stwórz nową sesję
-            czas_startu = datetime.now()
-            cursor.execute("""
-                INSERT INTO apollo_sesje 
-                (id_sprzetu, typ_surowca, czas_rozpoczecia, rozpoczeta_przez, status_sesji) 
-                VALUES (%s, %s, %s, %s, 'aktywna')
-            """, (id_sprzetu, typ_surowca, czas_startu, operator))
+            cursor.execute(
+                "INSERT INTO apollo_sesje (id_sprzetu, typ_surowca, czas_rozpoczecia, rozpoczeta_przez, status_sesji) VALUES (%s, %s, %s, %s, 'aktywna')",
+                (id_sprzetu, typ_surowca, czas_startu, operator)
+            )
             id_sesji = cursor.lastrowid
             
-            # 2. Dodaj pierwsze zdarzenie - załadunek początkowy
-            cursor.execute("""
-                INSERT INTO apollo_tracking
-                (id_sesji, typ_zdarzenia, waga_kg, czas_zdarzenia, operator)
-                VALUES (%s, 'DODANIE_SUROWCA', %s, %s, %s)
-            """, (id_sesji, waga_kg, czas_startu, operator))
+            cursor.execute(
+                "INSERT INTO apollo_tracking (id_sesji, typ_zdarzenia, waga_kg, czas_zdarzenia, operator) VALUES (%s, 'DODANIE_SUROWCA', %s, %s, %s)",
+                (id_sesji, waga_kg, czas_startu, operator)
+            )
             
-            # 3. Stwórz nową partię surowca dla Apollo
-            cursor.execute("SELECT nazwa_unikalna FROM sprzet WHERE id = %s", (id_sprzetu,))
-            sprzet_info = cursor.fetchone()
-            nazwa_sprzetu = sprzet_info['nazwa_unikalna'] if sprzet_info else f"ID{id_sprzetu}"
+            # ----------------------------------------------------
+            #  REFAKTORYZOWANY FRAGMENT
+            # ----------------------------------------------------
             
-            teraz = datetime.now()
-            timestamp_str = teraz.strftime('%Y%m%d-%H%M%S')
+            # --- WERSJA PRZED (zostawiamy w komentarzu dla porównania) ---
+            # cursor.execute("SELECT nazwa_unikalna FROM sprzet WHERE id = %s", (id_sprzetu,))
+            # sprzet_info = cursor.fetchone()
+            # nazwa_sprzetu = sprzet_info['nazwa_unikalna'] if sprzet_info else f"ID{id_sprzetu}"
+
+            # --- WERSJA PO (z SQLAlchemy) ---
+            sprzet = Sprzet.query.get(id_sprzetu)
+            nazwa_sprzetu = sprzet.nazwa_unikalna if sprzet else f"ID{id_sprzetu}"
+
+            # ----------------------------------------------------
+            #  KONIEC REFAKTORYZACJI
+            # ----------------------------------------------------
+            
+            timestamp_str = czas_startu.strftime('%Y%m%d-%H%M%S')
             unikalny_kod_partii = f"{nazwa_sprzetu}-{timestamp_str}"
             nazwa_partii = f"Partia w {nazwa_sprzetu} ({typ_surowca}) - {timestamp_str}"
             
-            cursor.execute("""
-                INSERT INTO partie_surowca
-                (unikalny_kod, nazwa_partii, typ_surowca, waga_poczatkowa_kg, waga_aktualna_kg, id_sprzetu, zrodlo_pochodzenia, status_partii, typ_transformacji)
-                VALUES (%s, %s, %s, %s, %s, %s, 'apollo', 'Surowy w reaktorze', 'NOWA')
-            """, (unikalny_kod_partii, nazwa_partii, typ_surowca, waga_kg, waga_kg, id_sprzetu))
+            cursor.execute(
+                "INSERT INTO partie_surowca (unikalny_kod, nazwa_partii, typ_surowca, waga_poczatkowa_kg, waga_aktualna_kg, id_sprzetu, zrodlo_pochodzenia, status_partii, typ_transformacji) VALUES (%s, %s, %s, %s, %s, %s, 'apollo', 'Surowy w reaktorze', 'NOWA')",
+                (unikalny_kod_partii, nazwa_partii, typ_surowca, waga_kg, waga_kg, id_sprzetu)
+            )
 
             conn.commit()
             return id_sesji
-            
         except mysql.connector.Error as err:
             conn.rollback()
             raise Exception(f"Błąd bazy danych przy rozpoczynaniu sesji: {err}")
@@ -69,61 +67,44 @@ class ApolloService:
             conn.close()
 
     @staticmethod
-    def dodaj_surowiec_do_apollo(id_sprzetu, waga_kg, operator=None):
-        """Dodaje stały surowiec do aktywnej sesji i aktualizuje wagę partii w Apollo."""
+    def dodaj_surowiec_do_apollo(id_sprzetu, waga_kg, operator=None, event_time=None):
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         
+        czas_zdarzenia = event_time if event_time is not None else datetime.now()
+
         try:
-            # Znajdź aktywną sesję
-            cursor.execute("""
-                SELECT id FROM apollo_sesje 
-                WHERE id_sprzetu = %s AND status_sesji = 'aktywna'
-            """, (id_sprzetu,))
+            cursor.execute("SELECT id FROM apollo_sesje WHERE id_sprzetu = %s AND status_sesji = 'aktywna'", (id_sprzetu,))
             sesja = cursor.fetchone()
             if not sesja:
                 raise ValueError(f"Apollo o ID {id_sprzetu} nie ma aktywnej sesji.")
-            
             id_sesji = sesja['id']
             
-            # Dodaj zdarzenie
-            cursor.execute("""
-                INSERT INTO apollo_tracking
-                (id_sesji, typ_zdarzenia, waga_kg, czas_zdarzenia, operator)
-                VALUES (%s, 'DODANIE_SUROWCA', %s, %s, %s)
-            """, (id_sesji, waga_kg, datetime.now(), operator))
+            cursor.execute(
+                "INSERT INTO apollo_tracking (id_sesji, typ_zdarzenia, waga_kg, czas_zdarzenia, operator) VALUES (%s, 'DODANIE_SUROWCA', %s, %s, %s)",
+                (id_sesji, waga_kg, czas_zdarzenia, operator)
+            )
             
-            # Zaktualizuj wagę partii w Apollo
-            cursor.execute("""
-                UPDATE partie_surowca
-                SET waga_aktualna_kg = waga_aktualna_kg + %s
-                WHERE id_sprzetu = %s
-            """, (waga_kg, id_sprzetu))
+            cursor.execute("UPDATE partie_surowca SET waga_aktualna_kg = waga_aktualna_kg + %s WHERE id_sprzetu = %s", (waga_kg, id_sprzetu))
             
             if cursor.rowcount == 0:
-                # Jeśli z jakiegoś powodu partia nie istnieje, stwórz ją
-                # (zabezpieczenie dla starszych danych lub nieprzewidzianych sytuacji)
+                # To jest gałąź awaryjna, zostawiamy w niej `datetime.now()`
                 cursor.execute("SELECT typ_surowca FROM apollo_sesje WHERE id = %s", (id_sesji,))
                 sesja_info = cursor.fetchone()
                 typ_surowca = sesja_info['typ_surowca'] if sesja_info else 'Nieznany'
-
                 cursor.execute("SELECT nazwa_unikalna FROM sprzet WHERE id = %s", (id_sprzetu,))
                 sprzet_info = cursor.fetchone()
                 nazwa_sprzetu = sprzet_info['nazwa_unikalna'] if sprzet_info else f"ID{id_sprzetu}"
-
                 teraz = datetime.now()
                 timestamp_str = teraz.strftime('%Y%m%d-%H%M%S')
                 unikalny_kod_partii = f"{nazwa_sprzetu}-{timestamp_str}-AUTOCREATED"
                 nazwa_partii = f"Partia w {nazwa_sprzetu} ({typ_surowca}) - {timestamp_str}"
-                
-                cursor.execute("""
-                    INSERT INTO partie_surowca
-                    (unikalny_kod, nazwa_partii, typ_surowca, waga_poczatkowa_kg, waga_aktualna_kg, id_sprzetu, zrodlo_pochodzenia, status_partii, typ_transformacji)
-                    VALUES (%s, %s, %s, %s, %s, %s, 'apollo', 'Surowy w reaktorze', 'NOWA')
-                """, (unikalny_kod_partii, nazwa_partii, typ_surowca, waga_kg, waga_kg, id_sprzetu))
+                cursor.execute(
+                    "INSERT INTO partie_surowca (unikalny_kod, nazwa_partii, typ_surowca, waga_poczatkowa_kg, waga_aktualna_kg, id_sprzetu, zrodlo_pochodzenia, status_partii, typ_transformacji) VALUES (%s, %s, %s, %s, %s, %s, 'apollo', 'Surowy w reaktorze', 'NOWA')",
+                    (unikalny_kod_partii, nazwa_partii, typ_surowca, waga_kg, waga_kg, id_sprzetu)
+                )
 
             conn.commit()
-            
         except mysql.connector.Error as err:
             conn.rollback()
             raise Exception(f"Błąd bazy danych przy dodawaniu surowca: {err}")
@@ -132,75 +113,44 @@ class ApolloService:
             conn.close()
 
     @staticmethod
-    def oblicz_aktualny_stan_apollo(id_sprzetu):
-        """Oblicza przewidywany aktualny stan płynnego surowca w Apollo."""
+    def oblicz_aktualny_stan_apollo(id_sprzetu, current_time=None):
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
+
+        czas_teraz = current_time if current_time is not None else datetime.now()
         
         try:
-            # Znajdź aktywną sesję
-            cursor.execute("""
-                SELECT * FROM apollo_sesje 
-                WHERE id_sprzetu = %s AND status_sesji = 'aktywna'
-            """, (id_sprzetu,))
+            cursor.execute("SELECT * FROM apollo_sesje WHERE id_sprzetu = %s AND status_sesji = 'aktywna'", (id_sprzetu,))
             sesja = cursor.fetchone()
             
             if not sesja:
-                return {
-                    'aktywna_sesja': False,
-                    'id_sesji': None,
-                    'typ_surowca': None,
-                    'dostepne_kg': 0,
-                    'czas_rozpoczecia': None
-                }
+                return {'aktywna_sesja': False, 'id_sesji': None, 'typ_surowca': None, 'dostepne_kg': 0, 'czas_rozpoczecia': None}
 
             id_sesji = sesja['id']
-            
-            # Pobierz wszystkie zdarzenia dla tej sesji
-            cursor.execute("""
-                SELECT * FROM apollo_tracking 
-                WHERE id_sesji = %s 
-                ORDER BY czas_zdarzenia ASC
-            """, (id_sesji,))
+            cursor.execute("SELECT * FROM apollo_tracking WHERE id_sesji = %s ORDER BY czas_zdarzenia ASC", (id_sesji,))
             zdarzenia = cursor.fetchall()
 
-            # --- Nowa, bardziej precyzyjna logika obliczeń ---
-            
-            # Znajdź ostatnią korektę, jeśli istnieje
             korekty = [z for z in zdarzenia if z['typ_zdarzenia'] == 'KOREKTA_RECZNA']
             
-            # Ustaw punkt startowy obliczeń
             if korekty:
                 ostatnia_korekta = korekty[-1]
                 punkt_startowy_czas = ostatnia_korekta['czas_zdarzenia']
                 ilosc_na_starcie = float(ostatnia_korekta['waga_kg'])
             else:
                 punkt_startowy_czas = sesja['czas_rozpoczecia']
-                ilosc_na_starcie = 0.0 # Zaczynamy z zerem płynu, wszystko jest stałe
+                ilosc_na_starcie = 0.0
 
-            # Filtruj zdarzenia, które nastąpiły po naszym punkcie startowym
             zdarzenia_po_starcie = [z for z in zdarzenia if z['czas_zdarzenia'] > punkt_startowy_czas]
-
-            # Oblicz sumy dodanego i przetransferowanego surowca OD punktu startowego
             przetransferowano_po_starcie = sum(float(z['waga_kg']) for z in zdarzenia_po_starcie if z['typ_zdarzenia'] == 'TRANSFER_WYJSCIOWY')
 
-            # Oblicz łączną ilość surowca dodanego w całej sesji (lub od ostatniej korekty)
-            # To jest nasz limit tego, co mogło się stopić
             if korekty:
-                # Po korekcie, limit topnienia bazuje na tym co dodano po niej
                 limit_topnienia = sum(float(z['waga_kg']) for z in zdarzenia_po_starcie if z['typ_zdarzenia'] == 'DODANIE_SUROWCA')
             else:
-                # Przed korektą, limit topnienia bazuje na wszystkim co dodano w sesji
                 limit_topnienia = sum(float(z['waga_kg']) for z in zdarzenia if z['typ_zdarzenia'] == 'DODANIE_SUROWCA')
 
-            # Oblicz, ile surowca mogło się stopić od punktu startowego
-            czas_topienia_sekundy = (datetime.now() - punkt_startowy_czas).total_seconds()
+            czas_topienia_sekundy = (czas_teraz - punkt_startowy_czas).total_seconds()
             wytopiono_w_czasie = (czas_topienia_sekundy / 3600.0) * ApolloService.SZYBKOSC_WYTAPIANIA_KG_H
-            
-            # Ilość stopiona nie może przekroczyć limitu dostępnego surowca stałego
             realnie_wytopiono = min(wytopiono_w_czasie, limit_topnienia)
-
-            # Finalne obliczenie dostępnej ilości
             dostepne_kg = ilosc_na_starcie + realnie_wytopiono - przetransferowano_po_starcie
             dostepne_kg = max(0, dostepne_kg)
 
@@ -211,7 +161,6 @@ class ApolloService:
                 'dostepne_kg': round(dostepne_kg, 2),
                 'czas_rozpoczecia': sesja['czas_rozpoczecia'].isoformat()
             }
-            
         except mysql.connector.Error as err:
             raise Exception(f"Błąd bazy danych przy obliczaniu stanu: {err}")
         finally:
@@ -219,32 +168,21 @@ class ApolloService:
             conn.close()
 
     @staticmethod
-    def koryguj_stan_apollo(id_sprzetu, rzeczywista_waga_kg, operator=None, uwagi=None):
-        """Dodaje ręczną korektę stanu płynnego surowca."""
+    def koryguj_stan_apollo(id_sprzetu, rzeczywista_waga_kg, operator=None, uwagi=None, event_time=None):
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
-
+        czas_zdarzenia = event_time if event_time is not None else datetime.now()
         try:
-            # Znajdź aktywną sesję
-            cursor.execute("""
-                SELECT id FROM apollo_sesje 
-                WHERE id_sprzetu = %s AND status_sesji = 'aktywna'
-            """, (id_sprzetu,))
+            cursor.execute("SELECT id FROM apollo_sesje WHERE id_sprzetu = %s AND status_sesji = 'aktywna'", (id_sprzetu,))
             sesja = cursor.fetchone()
             if not sesja:
                 raise ValueError(f"Apollo o ID {id_sprzetu} nie ma aktywnej sesji.")
-            
             id_sesji = sesja['id']
-
-            # Dodaj zdarzenie korekty
-            cursor.execute("""
-                INSERT INTO apollo_tracking
-                (id_sesji, typ_zdarzenia, waga_kg, czas_zdarzenia, operator, uwagi)
-                VALUES (%s, 'KOREKTA_RECZNA', %s, %s, %s, %s)
-            """, (id_sesji, rzeczywista_waga_kg, datetime.now(), operator, uwagi))
-            
+            cursor.execute(
+                "INSERT INTO apollo_tracking (id_sesji, typ_zdarzenia, waga_kg, czas_zdarzenia, operator, uwagi) VALUES (%s, 'KOREKTA_RECZNA', %s, %s, %s, %s)",
+                (id_sesji, rzeczywista_waga_kg, czas_zdarzenia, operator, uwagi)
+            )
             conn.commit()
-
         except mysql.connector.Error as err:
             if conn.is_connected():
                 conn.rollback()
