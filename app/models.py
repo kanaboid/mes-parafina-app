@@ -72,6 +72,7 @@ class Sprzet(db.Model):
     porty_sprzetu: Mapped[List['PortySprzetu']] = relationship('PortySprzetu', back_populates='sprzet')
     operacje_docelowe: Mapped[List['OperacjeLog']] = relationship(foreign_keys='OperacjeLog.id_sprzetu_docelowego', back_populates='sprzet_docelowy')
     operacje_zrodlowe: Mapped[List['OperacjeLog']] = relationship(foreign_keys='OperacjeLog.id_sprzetu_zrodlowego', back_populates='sprzet_zrodlowy')
+    active_mix: Mapped[Optional['TankMixes']] = relationship(back_populates='tank')
 def __repr__(self):
         # Ta metoda pomaga w debugowaniu, ładnie wyświetlając obiekt
         return f"<Sprzet id={self.id} nazwa='{self.nazwa_unikalna}'>"
@@ -551,3 +552,28 @@ class Batches(db.Model):
     current_quantity: Mapped[Optional[decimal.Decimal]] = mapped_column(DECIMAL(10, 2), nullable=False)
     creation_date: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=func.now())
     status: Mapped[str] = mapped_column(ENUM('ACTIVE', 'DEPLETED', 'ARCHIVED'), default='ACTIVE')
+
+class TankMixes(db.Model):
+    __tablename__ = 'tank_mixes'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    unique_code: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
+    tank_id: Mapped[int] = mapped_column(ForeignKey('sprzet.id'), nullable=False)
+    creation_date: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    status: Mapped[str] = mapped_column(ENUM('ACTIVE', 'ARCHIVED'), default='ACTIVE')
+
+    # Relacja do sprzętu (zbiornika)
+    tank: Mapped['Sprzet'] = relationship(back_populates='active_mix')
+    # Relacja do składników
+    components: Mapped[List['MixComponents']] = relationship(back_populates='mix')
+
+class MixComponents(db.Model):
+    __tablename__ = 'mix_components'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    mix_id: Mapped[int] = mapped_column(ForeignKey('tank_mixes.id'), nullable=False)
+    batch_id: Mapped[int] = mapped_column(ForeignKey('batches.id'), nullable=False)
+    quantity_in_mix: Mapped[Optional[decimal.Decimal]] = mapped_column(DECIMAL(10, 2), nullable=False)
+    date_added: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    # Relacje
+    mix: Mapped['TankMixes'] = relationship(back_populates='components')
+    batch: Mapped['Batches'] = relationship() # Prosta relacja jednokierunkowa
