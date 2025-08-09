@@ -6,7 +6,7 @@ from typing import Optional, List
 from sqlalchemy.dialects.mysql import ENUM
 from sqlalchemy import (
     DECIMAL, DateTime, ForeignKeyConstraint, Index, Integer, JSON, String,
-    Table, Text, TIMESTAMP, text, VARCHAR, ForeignKey
+    Table, Text, TIMESTAMP, text, VARCHAR, ForeignKey, func
 )
 from sqlalchemy.dialects.mysql import ENUM, TINYINT
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -70,8 +70,8 @@ class Sprzet(db.Model):
     operator_temperatures: Mapped[List['OperatorTemperatures']] = relationship('OperatorTemperatures', back_populates='sprzet')
     partie_surowca: Mapped[List['PartieSurowca']] = relationship('PartieSurowca', back_populates='sprzet')
     porty_sprzetu: Mapped[List['PortySprzetu']] = relationship('PortySprzetu', back_populates='sprzet')
-    operacje_log: Mapped[List['OperacjeLog']] = relationship('OperacjeLog', foreign_keys='[OperacjeLog.id_sprzetu_docelowego]', back_populates='sprzet')
-    operacje_log_: Mapped[List['OperacjeLog']] = relationship('OperacjeLog', foreign_keys='[OperacjeLog.id_sprzetu_zrodlowego]', back_populates='sprzet_')
+    operacje_docelowe: Mapped[List['OperacjeLog']] = relationship(foreign_keys='OperacjeLog.id_sprzetu_docelowego', back_populates='sprzet_docelowy')
+    operacje_zrodlowe: Mapped[List['OperacjeLog']] = relationship(foreign_keys='OperacjeLog.id_sprzetu_zrodlowego', back_populates='sprzet_zrodlowy')
 def __repr__(self):
         # Ta metoda pomaga w debugowaniu, ładnie wyświetlając obiekt
         return f"<Sprzet id={self.id} nazwa='{self.nazwa_unikalna}'>"
@@ -323,8 +323,8 @@ class OperacjeLog(db.Model):
 
     apollo_sesje: Mapped[Optional['ApolloSesje']] = relationship('ApolloSesje', back_populates='operacje_log')
     partie_surowca: Mapped[Optional['PartieSurowca']] = relationship('PartieSurowca', back_populates='operacje_log')
-    sprzet: Mapped[Optional['Sprzet']] = relationship('Sprzet', foreign_keys=[id_sprzetu_docelowego], back_populates='operacje_log')
-    sprzet_: Mapped[Optional['Sprzet']] = relationship('Sprzet', foreign_keys=[id_sprzetu_zrodlowego], back_populates='operacje_log_')
+    sprzet_docelowy: Mapped[Optional['Sprzet']] = relationship(foreign_keys=[id_sprzetu_docelowego], back_populates='operacje_docelowe')
+    sprzet_zrodlowy: Mapped[Optional['Sprzet']] = relationship(foreign_keys=[id_sprzetu_zrodlowego], back_populates='operacje_zrodlowe')
     segmenty: Mapped[List['Segmenty']] = relationship('Segmenty', secondary='log_uzyte_segmenty', back_populates='operacje_log')
     apollo_tracking: Mapped[List['ApolloTracking']] = relationship('ApolloTracking', back_populates='operacje_log')
     partie_historia: Mapped[List['PartieHistoria']] = relationship('PartieHistoria', back_populates='operacje_log')
@@ -540,3 +540,14 @@ class ProbkiOcena(db.Model):
     partie_surowca: Mapped['PartieSurowca'] = relationship('PartieSurowca', back_populates='probki_ocena')
 
     
+class Batches(db.Model):
+    __tablename__ = 'batches'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    unique_code: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
+    material_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    source_type: Mapped[str] = mapped_column(ENUM('CYS', 'APOLLO'), nullable=False)
+    source_name: Mapped[str] = mapped_column(String(50), nullable=False)
+    initial_quantity: Mapped[Optional[decimal.Decimal]] = mapped_column(DECIMAL(10, 2), nullable=False)
+    current_quantity: Mapped[Optional[decimal.Decimal]] = mapped_column(DECIMAL(10, 2), nullable=False)
+    creation_date: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=func.now())
+    status: Mapped[str] = mapped_column(ENUM('ACTIVE', 'DEPLETED', 'ARCHIVED'), default='ACTIVE')
