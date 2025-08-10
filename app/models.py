@@ -3,7 +3,7 @@ from . import db # Importujemy obiekt `db` z __init__.py
 import decimal
 import datetime
 from typing import Optional, List
-from sqlalchemy.dialects.mysql import ENUM
+
 from sqlalchemy import (
     DECIMAL, DateTime, ForeignKeyConstraint, Index, Integer, JSON, String,
     Table, Text, TIMESTAMP, text, VARCHAR, ForeignKey, func
@@ -73,7 +73,7 @@ class Sprzet(db.Model):
     operacje_docelowe: Mapped[List['OperacjeLog']] = relationship(foreign_keys='OperacjeLog.id_sprzetu_docelowego', back_populates='sprzet_docelowy')
     operacje_zrodlowe: Mapped[List['OperacjeLog']] = relationship(foreign_keys='OperacjeLog.id_sprzetu_zrodlowego', back_populates='sprzet_zrodlowy')
     active_mix: Mapped[Optional['TankMixes']] = relationship(back_populates='tank')
-def __repr__(self):
+    def __repr__(self):
         # Ta metoda pomaga w debugowaniu, ładnie wyświetlając obiekt
         return f"<Sprzet id={self.id} nazwa='{self.nazwa_unikalna}'>"
 

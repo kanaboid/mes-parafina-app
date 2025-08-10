@@ -1,4 +1,0 @@
-flask-apscheduler==1.12.3
-pymodbus==3.5.4
-opcua==0.98.13
-python-snap7==1.3

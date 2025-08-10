@@ -71,10 +71,12 @@ def create_app(config_class=Config): # ZMIANA: Dodajemy opcjonalny argument
     from .cykle_api import cykle_bp
     from .topology_routes import topology_bp
     from .operations_routes import bp as operations_bp
+    from .batch_routes import batch_bp
     app.register_blueprint(routes.bp)
     app.register_blueprint(cykle_bp)
     app.register_blueprint(topology_bp)
     app.register_blueprint(operations_bp)
+    app.register_blueprint(batch_bp)
 
     @app.route('/hello')
     def hello():

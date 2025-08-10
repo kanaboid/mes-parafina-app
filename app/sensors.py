@@ -16,8 +16,7 @@ class SensorService:
     def init_app(self, app):
         self.app = app
         # Don't load temperatures here - will do it in context
-        self.app = app
-        # Register a function to run before first request
+        
             
 
     

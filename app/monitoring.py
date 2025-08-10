@@ -83,6 +83,6 @@ class MonitoringService:
     def _resolve_alarm(self, cursor, alarm_id):
         """Prywatna metoda do zamykania istniejącego alarmu."""
         sql = """UPDATE alarmy 
-                 SET status_alarmu = 'ZAKOŃCZONY', czas_zakonczenia = %s 
+                 SET status_alarmu = 'ZAKONCZONY', czas_zakonczenia = %s 
                  WHERE id = %s"""
         cursor.execute(sql, (datetime.now(), alarm_id))
