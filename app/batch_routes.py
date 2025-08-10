@@ -111,3 +111,89 @@ def transfer_between_dirty_tanks():
         # Serwis sam robi rollback, ale na wszelki wypadek
         db.session.rollback()
         return jsonify({'status': 'error', 'message': f'Błąd serwera: {e}'}), 500
+
+@batch_bp.route('/receive/from-apollo', methods=['POST'])
+def receive_from_apollo():
+    """
+    Endpoint do rejestracji nowej Partii Pierwotnej z wytopu w Apollo.
+    """
+    data = request.get_json()
+    
+    required_fields = ['material_type', 'source_name', 'quantity_kg']
+    if not data or not all(field in data for field in required_fields):
+        return jsonify({'status': 'error', 'message': 'Brak wymaganych pól: material_type, source_name, quantity_kg'}), 400
+
+    try:
+        quantity = Decimal(data['quantity_kg'])
+        operator = data.get('operator', 'API_USER')
+
+        # Wywołanie tej samej metody serwisu, ale z innym `source_type`
+        result = BatchManagementService.create_raw_material_batch(
+            material_type=data['material_type'],
+            source_type='APOLLO', # Na stałe, bo to endpoint dla Apollo
+            source_name=data['source_name'],
+            quantity=quantity,
+            operator=operator
+        )
+
+        return jsonify({'status': 'success', 'data': result}), 201
+
+    except (ValueError, TypeError) as e:
+        return jsonify({'status': 'error', 'message': f'Nieprawidłowe dane: {e}'}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': f'Błąd serwera: {e}'}), 500
+
+@batch_bp.route('/tanks/<int:tank_id>/status', methods=['GET'])
+def get_tank_status(tank_id):
+    """
+    Zwraca szczegółowy status i skład mieszaniny dla danego zbiornika.
+    """
+    try:
+        # 1. Znajdź zbiornik
+        tank = db.session.get(Sprzet, tank_id)
+        if not tank:
+            return jsonify({'status': 'error', 'message': f'Zbiornik o ID {tank_id} nie został znaleziony.'}), 404
+
+        # 2. Sprawdź, czy w zbiorniku jest aktywna mieszanina
+        active_mix = tank.active_mix
+        if not active_mix:
+            return jsonify({
+                'status': 'success',
+                'tank_name': tank.nazwa_unikalna,
+                'is_empty': True,
+                'data': {
+                    'total_weight': '0.00',
+                    'components': []
+                }
+            }), 200
+
+        # 3. Jeśli jest mieszanina, pobierz jej skład za pomocą naszego serwisu
+        composition = BatchManagementService.get_mix_composition(mix_id=active_mix.id)
+        
+        # 4. Sformatuj dane do JSON (Decimal nie jest domyślnie serializowalny)
+        formatted_components = []
+        for comp in composition['components']:
+            formatted_components.append({
+                'batch_id': comp['batch_id'],
+                'batch_code': comp['batch_code'],
+                'material_type': comp['material_type'],
+                'quantity_in_mix': str(comp['quantity_in_mix']), # Konwersja na string
+                'percentage': f"{comp['percentage']:.2f}" # Formatowanie do 2 miejsc po przecinku
+            })
+
+        return jsonify({
+            'status': 'success',
+            'tank_name': tank.nazwa_unikalna,
+            'is_empty': False,
+            'data': {
+                'mix_id': active_mix.id,
+                'mix_code': active_mix.unique_code,
+                'total_weight': str(composition['total_weight']), # Konwersja na string
+                'components': formatted_components
+            }
+        }), 200
+
+    except Exception as e:
+        # Nie robimy rollback, bo to operacja tylko do odczytu
+        return jsonify({'status': 'error', 'message': f'Błąd serwera: {e}'}), 500

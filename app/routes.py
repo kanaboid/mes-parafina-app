@@ -34,6 +34,13 @@ def index():
     return render_template('index.html')
 
 # --- DODAJ TĘ NOWĄ FUNKCJĘ ---
+
+@bp.route('/batch-tester')
+def batch_tester_page():
+    """Serwuje stronę do testowania nowego systemu partii."""
+    return render_template('batch_tester.html')
+
+
 @bp.route('/alarms')
 def show_alarms():
     """Wyświetla stronę z historią wszystkich alarmów."""

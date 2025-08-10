@@ -1,5 +1,5 @@
 from . import db
-from .models import Batches, Sprzet, TankMixes, MixComponents
+from .models import * #TODO: zmienić na importy z models.py, tylko te, które są potrzebne
 from datetime import datetime
 from sqlalchemy import func, select
 from decimal import Decimal
@@ -159,6 +159,41 @@ class BatchManagementService:
             
             # ZMIANA: `withdraw...` już robi `commit`, więc tutaj go nie potrzebujemy
             # db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            raise e
+
+    @staticmethod
+    def correct_batch_quantity(batch_id, new_quantity, operator, reason):
+        """
+        Dokonuje ręcznej korekty ilości partii i tworzy wpis w dzienniku zdarzeń.
+        """
+        try:
+            batch_to_correct = db.session.get(Batches, batch_id)
+            if not batch_to_correct:
+                raise ValueError(f"Partia o ID {batch_id} nie istnieje.")
+            
+            original_quantity = batch_to_correct.current_quantity
+            
+            # Stwórz wpis w dzienniku zdarzeń
+            audit_log = AuditTrail(
+                user_id=operator,
+                entity_type='Batches',
+                entity_id=batch_id,
+                operation_type='CORRECTION',
+                field_name='current_quantity',
+                old_value=str(original_quantity),
+                new_value=str(new_quantity),
+                reason=reason
+            )
+            
+            # Zaktualizuj ilość w partii
+            batch_to_correct.current_quantity = new_quantity
+            
+            db.session.add(audit_log)
+            db.session.commit()
+            
+            return {'success': True, 'audit_log_id': audit_log.id}
         except Exception as e:
             db.session.rollback()
             raise e

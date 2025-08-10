@@ -28,15 +28,15 @@ DB_HOST = os.environ.get('MYSQLHOST', 'localhost')
 
 
 if os.environ.get('ALEMBIC_TEST_MODE') == 'true':
-    print("--- Running Alembic in TEST mode (via environment variable) ---")
+    #print("--- Running Alembic in TEST mode (via environment variable) ---")
     database_uri = f"mysql+mysqlconnector://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/mes_parafina_db_test"
 else:
-    print("--- Running Alembic in DEV mode ---")
+    #print("--- Running Alembic in DEV mode ---")
     database_uri = f"mysql+mysqlconnector://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/mes_parafina_db"
 
 # Ustawiamy URI i drukujemy go, aby mieć 100% pewności
 config.set_main_option('sqlalchemy.url', database_uri)
-print(f"--- Alembic will connect to: {database_uri} ---")
+#print(f"--- Alembic will connect to: {database_uri} ---")
 
 # --- KONIEC LOGIKI ---
 

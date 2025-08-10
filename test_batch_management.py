@@ -1,11 +1,11 @@
 # test_batch_management.py
 import unittest
-from datetime import datetime
+from datetime import datetime as dt
 from decimal import Decimal
 
 from app import create_app, db
 from app.config import TestConfig
-from app.models import Batches, TankMixes, MixComponents, Sprzet
+from app.models import *
 from sqlalchemy import select, text
 
 # Zakładamy, że ten plik będzie istniał
@@ -62,7 +62,7 @@ class TestBatchManagementService(unittest.TestCase):
         self.assertEqual(batch_in_db.status, 'ACTIVE')
         
         # 3. Sprawdź, czy unikalny kod został wygenerowany w oczekiwanym formacie
-        today_str = datetime.now().strftime('%y%m%d')
+        today_str = dt.now().strftime('%y%m%d')
         expected_prefix = f"S-{source_name}-{material_type}-{today_str}"
         self.assertTrue(result['unique_code'].startswith(expected_prefix))
 
@@ -282,3 +282,68 @@ class TestBatchManagementService(unittest.TestCase):
         # 6. Sprawdź, czy stare składniki pozostały nienaruszone
         old_component1_data = next(c for c in composition_after['components'] if c['batch_id'] == batch1.id)
         self.assertAlmostEqual(old_component1_data['quantity_in_mix'], Decimal('120.00'))
+
+    def test_08_correct_batch_quantity_updates_value_and_creates_audit_log(self):
+        """
+        Sprawdza, czy korekta ilości poprawnie zmienia wagę partii
+        i tworzy szczegółowy wpis w dzienniku zdarzeń (AuditTrail).
+        """
+        # --- Przygotowanie (Arrange) ---
+        # 1. Stwórz partię z początkową ilością 1000 kg
+        batch = Batches(
+            unique_code='S1', material_type='T10', source_type='CYS', source_name='C1',
+            initial_quantity=1000, current_quantity=1000
+        )
+        db.session.add(batch)
+        db.session.commit()
+
+        # 2. Zdefiniuj parametry korekty
+        original_quantity = batch.current_quantity
+        new_quantity = Decimal('950.55')
+        operator = 'SUPERVISOR'
+        reason = 'Korekta po inwentaryzacji'
+
+        # --- Działanie (Act) ---
+        result = BatchManagementService.correct_batch_quantity(
+            batch_id=batch.id,
+            new_quantity=new_quantity,
+            operator=operator,
+            reason=reason
+        )
+
+        # --- Asercje (Assert) ---
+        self.assertTrue(result['success'])
+        
+        # 1. Sprawdź, czy ilość w partii została zaktualizowana
+        db.session.refresh(batch)
+        self.assertAlmostEqual(batch.current_quantity, new_quantity)
+        
+        # 2. Sprawdź, czy w AuditTrail powstał dokładnie jeden, poprawny wpis
+        audit_log_query = select(AuditTrail).where(
+            AuditTrail.entity_type == 'Batches',
+            AuditTrail.entity_id == batch.id
+        )
+        audit_logs = db.session.execute(audit_log_query).scalars().all()
+        
+        self.assertEqual(len(audit_logs), 1)
+        
+        audit_log = audit_logs[0]
+        self.assertEqual(audit_log.user_id, operator)
+        self.assertEqual(audit_log.operation_type, 'CORRECTION')
+        self.assertEqual(audit_log.field_name, 'current_quantity')
+        self.assertEqual(audit_log.old_value, str(original_quantity))
+        self.assertEqual(audit_log.new_value, str(new_quantity))
+        self.assertEqual(audit_log.reason, reason)
+
+    def test_09_correct_batch_quantity_for_nonexistent_batch_fails(self):
+        """
+        Sprawdza, czy próba korekty nieistniejącej partii rzuca błąd.
+        """
+        with self.assertRaises(ValueError) as context:
+            BatchManagementService.correct_batch_quantity(
+                batch_id=999, # Nieistniejące ID
+                new_quantity=Decimal('100'),
+                operator='TEST',
+                reason='Test'
+            )
+        self.assertIn("Partia o ID 999 nie istnieje", str(context.exception))

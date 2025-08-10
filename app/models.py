@@ -577,3 +577,20 @@ class MixComponents(db.Model):
     # Relacje
     mix: Mapped['TankMixes'] = relationship(back_populates='components')
     batch: Mapped['Batches'] = relationship() # Prosta relacja jednokierunkowa
+
+class AuditTrail(db.Model):
+    __tablename__ = 'audit_trail'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    user_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    
+    entity_type: Mapped[str] = mapped_column(String(50), nullable=False, comment='Np. Batches, TankMixes')
+    entity_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    
+    field_name: Mapped[Optional[str]] = mapped_column(String(50))
+    old_value: Mapped[Optional[str]] = mapped_column(Text)
+    new_value: Mapped[Optional[str]] = mapped_column(Text)
+    
+    operation_type: Mapped[str] = mapped_column(String(50), nullable=False, comment='Np. CREATE, UPDATE, DELETE, CORRECTION')
+    reason: Mapped[Optional[str]] = mapped_column(Text)
+

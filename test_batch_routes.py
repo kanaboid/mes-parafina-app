@@ -166,3 +166,102 @@ class TestBatchRoutes(unittest.TestCase):
         # Oczekiwane: 300 * (1000/1500) = 200kg partii S1
         comp1_in_mix2_data = next(c for c in composition2_after['components'] if c['batch_id'] == batch1.id)
         self.assertAlmostEqual(comp1_in_mix2_data['quantity_in_mix'], Decimal('200.00'))
+
+
+    def test_04_receive_from_apollo_success(self):
+        """
+        Sprawdza, czy POST /api/batches/receive/from-apollo poprawnie
+        tworzy nową Partię Pierwotną z wytapiarki Apollo.
+        """
+        # --- Przygotowanie (Arrange) ---
+        payload = {
+            "material_type": "44",
+            "source_name": "AP01", # Nazwa wytapiarki
+            "quantity_kg": "550.75"
+        }
+
+        # --- Działanie (Act) ---
+        response = self.client.post(
+            '/api/batches/receive/from-apollo',
+            data=json.dumps(payload),
+            content_type='application/json'
+        )
+        
+        # --- Asercje (Assert) ---
+        # 1. Sprawdź odpowiedź API
+        self.assertEqual(response.status_code, 201)
+        data = response.get_json()
+        self.assertEqual(data['status'], 'success')
+        self.assertIn('batch_id', data['data'])
+
+        # 2. Sprawdź stan bazy danych
+        batch_id = data['data']['batch_id']
+        batch_in_db = db.session.get(Batches, batch_id)
+        self.assertIsNotNone(batch_in_db)
+        self.assertEqual(batch_in_db.material_type, "44")
+        
+        # Kluczowa asercja: sprawdź, czy źródło to 'APOLLO'
+        self.assertEqual(batch_in_db.source_type, "APOLLO")
+        self.assertEqual(batch_in_db.source_name, "AP01")
+        
+        self.assertAlmostEqual(batch_in_db.initial_quantity, Decimal("550.75"))
+
+    def test_05_get_tank_status_for_occupied_tank(self):
+        """
+        Sprawdza, czy GET /api/tanks/<id>/status poprawnie zwraca
+        skład dla zajętego zbiornika.
+        """
+        # --- Przygotowanie (Arrange) ---
+        # Zbiornik z mieszaniną 2 składników (750kg + 250kg = 1000kg)
+        batch1 = Batches(unique_code='S1', material_type='T10', source_type='CYS', source_name='C1', initial_quantity=750, current_quantity=0)
+        batch2 = Batches(unique_code='S2', material_type='44', source_type='APOLLO', source_name='AP1', initial_quantity=250, current_quantity=0)
+        tank = Sprzet(id=201, nazwa_unikalna='B01b')
+        mix = TankMixes(unique_code='M1', tank=tank)
+        db.session.add_all([batch1, batch2, tank])
+        db.session.commit()
+        comp1 = MixComponents(mix_id=mix.id, batch_id=batch1.id, quantity_in_mix=Decimal('750.00'))
+        comp2 = MixComponents(mix_id=mix.id, batch_id=batch2.id, quantity_in_mix=Decimal('250.00'))
+        db.session.add_all([comp1, comp2])
+        db.session.commit()
+
+        # --- Działanie (Act) ---
+        response = self.client.get(f'/api/batches/tanks/{tank.id}/status')
+
+        # --- Asercje (Assert) ---
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        
+        self.assertEqual(data['status'], 'success')
+        self.assertFalse(data['is_empty'])
+        self.assertEqual(data['tank_name'], 'B01b')
+        
+        # Sprawdź dane mieszaniny
+        mix_data = data['data']
+        self.assertEqual(mix_data['total_weight'], '1000.00')
+        self.assertEqual(len(mix_data['components']), 2)
+        
+        # Sprawdź dane jednego ze składników
+        comp1_data = next(c for c in mix_data['components'] if c['batch_id'] == batch1.id)
+        self.assertEqual(comp1_data['quantity_in_mix'], '750.00')
+        self.assertEqual(comp1_data['percentage'], '75.00')
+
+    def test_06_get_tank_status_for_empty_tank(self):
+        """
+        Sprawdza, czy GET /api/tanks/<id>/status poprawnie zwraca
+        informację o pustym zbiorniku.
+        """
+        # --- Przygotowanie (Arrange) ---
+        tank = Sprzet(id=201, nazwa_unikalna='B01b')
+        db.session.add(tank)
+        db.session.commit()
+
+        # --- Działanie (Act) ---
+        response = self.client.get(f'/api/batches/tanks/{tank.id}/status')
+
+        # --- Asercje (Assert) ---
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+
+        self.assertEqual(data['status'], 'success')
+        self.assertTrue(data['is_empty'])
+        self.assertEqual(len(data['data']['components']), 0)

@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tester Systemu Partii</title>
+    <style>
+        body { font-family: sans-serif; margin: 2em; background-color: #f4f4f9; }
+        .container { max-width: 1200px; margin: auto; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 2em; }
+        .card { background: white; padding: 1.5em; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1, h2 { color: #333; }
+        input, select, button { width: 100%; padding: 0.8em; margin-bottom: 1em; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        button { background-color: #007bff; color: white; border: none; cursor: pointer; font-weight: bold; }
+        button:hover { background-color: #0056b3; }
+        table { width: 100%; border-collapse: collapse; margin-top: 1em; }
+        th, td { text-align: left; padding: 0.8em; border-bottom: 1px solid #ddd; }
+        th { background-color: #f2f2f2; }
+        pre { background-color: #eee; padding: 1em; border-radius: 4px; white-space: pre-wrap; word-wrap: break-word; }
+        .status-ok { color: green; }
+        .status-error { color: red; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Tester Systemu Zarządzania Partiami</h1>
+
+        <div class="grid">
+            <!-- === KARTA: TWORZENIE PARTII === -->
+            <div class="card">
+                <h2>1. Utwórz Partię Pierwotną</h2>
+                <form id="form-create-batch">
+                    <label for="source_type">Źródło:</label>
+                    <select id="source_type" name="source_type">
+                        <option value="CYS">Cysterna</option>
+                        <option value="APOLLO">Apollo</option>
+                    </select>
+
+                    <label for="source_name">Nazwa źródła (np. CYS-01, AP02):</label>
+                    <input type="text" id="source_name" name="source_name" required value="CYS-01">
+                    
+                    <label for="material_type">Typ materiału (np. T10, 44):</label>
+                    <input type="text" id="material_type" name="material_type" required value="T10">
+
+                    <label for="quantity">Ilość [kg]:</label>
+                    <input type="number" id="quantity" name="quantity" step="0.01" required value="10000">
+
+                    <button type="submit">Utwórz Partię</button>
+                </form>
+            </div>
+
+            <!-- === KARTA: TRANSFERY === -->
+            <div class="card">
+                <h2>2. Wykonaj Operację</h2>
+                <form id="form-transfer">
+                    <label for="op_type">Typ Operacji:</label>
+                    <select id="op_type">
+                        <option value="to_tank">Tankuj Partię do Zbiornika</option>
+                        <option value="tank_to_tank">Przelej Między Zbiornikami</option>
+                    </select>
+
+                    <div id="transfer-fields">
+                        <label for="batch_id_transfer">ID Partii do zatankowania:</label>
+                        <input type="number" id="batch_id_transfer" name="batch_id_transfer">
+
+                        <label for="tank_id_dest">ID Zbiornika docelowego:</label>
+                        <input type="number" id="tank_id_dest" name="tank_id_dest" required>
+                    </div>
+
+                    <div id="tank-to-tank-fields" style="display:none;">
+                        <label for="tank_id_source">ID Zbiornika źródłowego:</label>
+                        <input type="number" id="tank_id_source" name="tank_id_source">
+
+                        <label for="tank_id_dest_ttt">ID Zbiornika docelowego:</label>
+                        <input type="number" id="tank_id_dest_ttt" name="tank_id_dest_ttt">
+                        
+                        <label for="quantity_transfer">Ilość do przelania [kg]:</label>
+                        <input type="number" id="quantity_transfer" name="quantity_transfer" step="0.01">
+                    </div>
+
+                    <button type="submit">Wykonaj</button>
+                </form>
+            </div>
+
+            <!-- === KARTA: STAN ZBIORNIKA === -->
+            <div class="card">
+                <h2>3. Sprawdź Stan Zbiornika</h2>
+                <form id="form-check-status">
+                    <label for="tank_id_status">ID Zbiornika:</label>
+                    <input type="number" id="tank_id_status" name="tank_id_status" required value="201">
+                    <button type="submit">Sprawdź</button>
+                </form>
+
+                <div id="status-display">
+                    <h3 id="tank-name-display"></h3>
+                    <p><strong>Całkowita masa:</strong> <span id="total-weight-display"></span> kg</p>
+                    <table id="components-table">
+                        <thead><tr><th>ID Partii</th><th>Kod Partii</th><th>Typ</th><th>Ilość [kg]</th><th>Udział [%]</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- === KONSOLA ODPOWIEDZI === -->
+        <div class="card">
+            <h2>Odpowiedź z API</h2>
+            <pre id="api-response">Czekam na operację...</pre>
+        </div>
+    </div>
+
+    <!-- Import jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        // Nasz kod JavaScript
+        $(document).ready(function() {
+    const apiResponseEl = $('#api-response');
+
+    function showResponse(response, isError = false) {
+        const statusClass = isError ? 'status-error' : 'status-ok';
+        apiResponseEl.html(`<span class="${statusClass}">${response.status.toUpperCase()}</span>: ${response.message || JSON.stringify(response.data, null, 2)}`);
+    }
+
+    // Obsługa przełączania formularza transferu
+    // Obsługa przełączania formularza transferu z dynamicznym `required`
+    $('#op_type').on('change', function() {
+                const isToTank = $(this).val() === 'to_tank';
+
+                if (isToTank) {
+                    $('#transfer-fields').show();
+                    $('#tank-to-tank-fields').hide();
+                    // Ustaw `required` dla widocznych pól i usuń z ukrytych
+                    $('#tank_id_dest').prop('required', true);
+                    $('#tank_id_source, #tank_id_dest_ttt, #quantity_transfer').prop('required', false);
+                } else {
+                    $('#transfer-fields').hide();
+                    $('#tank-to-tank-fields').show();
+                    // Odwróć logikę `required`
+                    $('#tank_id_dest').prop('required', false);
+                    $('#tank_id_source, #tank_id_dest_ttt, #quantity_transfer').prop('required', true);
+                }
+            }).trigger('change'); // Uruchom raz na starcie, aby ustawić poprawny stan
+
+    // 1. Tworzenie Partii
+    $('#form-create-batch').on('submit', function(e) {
+        e.preventDefault();
+        const sourceType = $('#source_type').val();
+        const url = (sourceType === 'CYS') ? '/api/batches/receive/from-tanker' : '/api/batches/receive/from-apollo';
+        
+        const payload = {
+            source_name: $('#source_name').val(),
+            material_type: $('#material_type').val(),
+            quantity_kg: $('#quantity').val()
+        };
+
+        $.ajax({
+            url: url,
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(payload),
+            success: function(response) {
+                showResponse(response);
+                // Uzupełnij pole ID Partii w formularzu transferu
+                if (response.data && response.data.batch_id) {
+                    $('#batch_id_transfer').val(response.data.batch_id);
+                }
+            },
+            error: function(xhr) {
+                showResponse(xhr.responseJSON, true);
+            }
+        });
+    });
+
+    // 2. Operacje (Transfery)
+    $('#form-transfer').on('submit', function(e) {
+        e.preventDefault();
+        const opType = $('#op_type').val();
+        let url, payload;
+
+        if (opType === 'to_tank') {
+            url = '/api/batches/transfer/to-dirty-tank';
+            payload = {
+                batch_id: parseInt($('#batch_id_transfer').val()),
+                tank_id: parseInt($('#tank_id_dest').val())
+            };
+        } else { // tank_to_tank
+            url = '/api/batches/transfer/tank-to-tank';
+            payload = {
+                source_tank_id: parseInt($('#tank_id_source').val()),
+                destination_tank_id: parseInt($('#tank_id_dest_ttt').val()),
+                quantity_kg: $('#quantity_transfer').val()
+            };
+        }
+
+        $.ajax({
+            url: url,
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(payload),
+            success: function(response) { showResponse(response); },
+            error: function(xhr) { showResponse(xhr.responseJSON, true); }
+        });
+    });
+
+    // 3. Sprawdzanie Stanu
+    $('#form-check-status').on('submit', function(e) {
+        e.preventDefault();
+        const tankId = $('#tank_id_status').val();
+        if (!tankId) return;
+
+        $.ajax({
+            url: `/api/batches/tanks/${tankId}/status`,
+            type: 'GET',
+            success: function(response) {
+                showResponse(response);
+                const tableBody = $('#components-table tbody');
+                tableBody.empty();
+
+                $('#tank-name-display').text(response.tank_name || `Zbiornik #${tankId}`);
+                
+                if (response.is_empty) {
+                    $('#total-weight-display').text('0.00');
+                    tableBody.append('<tr><td colspan="5">Zbiornik jest pusty.</td></tr>');
+                } else {
+                    $('#total-weight-display').text(response.data.total_weight);
+                    response.data.components.forEach(comp => {
+                        const row = `<tr>
+                            <td>${comp.batch_id}</td>
+                            <td>${comp.batch_code}</td>
+                            <td>${comp.material_type}</td>
+                            <td>${comp.quantity_in_mix}</td>
+                            <td>${comp.percentage}</td>
+                        </tr>`;
+                        tableBody.append(row);
+                    });
+                }
+            },
+            error: function(xhr) {
+                showResponse(xhr.responseJSON, true);
+                $('#components-table tbody').empty();
+                $('#tank-name-display').text('');
+                $('#total-weight-display').text('Błąd');
+            }
+        });
+    });
+});
+    </script>
+</body>
+</html>
