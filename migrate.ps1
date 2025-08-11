@@ -1,9 +1,9 @@
 # migrate.ps1
-# Wersja finalna, używająca zmiennych środowiskowych do przełączania trybu.
+# Wersja finalna, używająca zmiennych środowiskowych i zawierająca komendę stamp-test.
 
 param (
     [Parameter(Mandatory=$true, Position=0)]
-    [ValidateSet("generate", "upgrade", "downgrade", "history", "current")]
+    [ValidateSet("generate", "upgrade", "downgrade", "history", "current", "stamp-test")]
     [string]$Command,
 
     [Parameter(Position=1)]
@@ -38,11 +38,9 @@ if ($Command -eq "generate") {
     Write-Output ""
     Write-Output "--- Aktualizacja bazy TESTOWEJ do najnowszej wersji... ---"
     try {
-        # Ustaw zmienną środowiskową TYLKO na czas trwania tej komendy
         $env:ALEMBIC_TEST_MODE = "true"
         alembic upgrade head
     } finally {
-        # Upewnij się, że zmienna jest zawsze czyszczona, nawet w przypadku błędu
         $env:ALEMBIC_TEST_MODE = $null
     }
     Check-Last-Success
@@ -78,7 +76,17 @@ if ($Command -eq "generate") {
     } finally {
         $env:ALEMBIC_TEST_MODE = $null
     }
+} elseif ($Command -eq "stamp-test") {
+    Write-Output "--- Stemplowanie bazy TESTOWEJ do najnowszej wersji (head)... ---"
+    try {
+        $env:ALEMBIC_TEST_MODE = "true"
+        alembic stamp head
+    } finally {
+        $env:ALEMBIC_TEST_MODE = $null
+    }
+    Check-Last-Success
 }
+
 
 Write-Output ""
 Write-Output "--- Skrypt zakonczyl dzialanie ---"
