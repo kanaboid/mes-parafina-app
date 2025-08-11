@@ -572,7 +572,9 @@ class MixComponents(db.Model):
     mix_id: Mapped[int] = mapped_column(ForeignKey('tank_mixes.id'), nullable=False)
     batch_id: Mapped[int] = mapped_column(ForeignKey('batches.id'), nullable=False)
     quantity_in_mix: Mapped[Optional[decimal.Decimal]] = mapped_column(DECIMAL(10, 2), nullable=False)
-    date_added: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    date_added: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=func.now())
+    
+
 
     # Relacje
     mix: Mapped['TankMixes'] = relationship(back_populates='components')

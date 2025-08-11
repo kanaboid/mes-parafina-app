@@ -35,21 +35,27 @@ class BatchManagementService:
         
     @staticmethod
     def tank_into_dirty_tank(batch_id, tank_id, operator):
+        """
+        Tankuje CAŁĄ Partię Pierwotną do zbiornika. Jej masa jest teraz śledzona
+        w MixComponents, a `current_quantity` w Batches jest zerowane.
+        """
         try:
             tank = db.session.get(Sprzet, tank_id)
             batch = db.session.get(Batches, batch_id)
             if not tank or not batch: raise ValueError("Zbiornik lub partia nie istnieje.")
-            
-            active_mix = tank.active_mix
+
+            # Znajdź lub stwórz aktywną mieszaninę
+            active_mix_query = select(TankMixes).where(TankMixes.tank_id == tank_id, TankMixes.status == 'ACTIVE')
+            active_mix = db.session.execute(active_mix_query).scalar_one_or_none()
             if not active_mix:
                 mix_code = BatchManagementService._generate_mix_code(tank.nazwa_unikalna)
-                active_mix = TankMixes(unique_code=mix_code, tank=tank)
+                active_mix = TankMixes(unique_code=mix_code, tank_id=tank_id)
                 db.session.add(active_mix)
 
             quantity_to_add = batch.current_quantity
             if quantity_to_add <= 0: raise ValueError("Nie można dodać partii o zerowej ilości.")
 
-            # Sprawdź, czy ta partia już jest składnikiem
+            # Znajdź istniejący składnik lub stwórz nowy
             existing_component = next((c for c in active_mix.components if c.batch_id == batch_id), None)
             if existing_component:
                 existing_component.quantity_in_mix += quantity_to_add
@@ -57,7 +63,8 @@ class BatchManagementService:
                 new_component = MixComponents(batch_id=batch_id, quantity_in_mix=quantity_to_add)
                 active_mix.components.append(new_component)
             
-            batch.current_quantity = 0
+            batch.current_quantity = 0 # Przenosimy całą masę do śledzenia w mieszaninie
+            
             db.session.commit()
             return {'mix_id': active_mix.id}
         except Exception as e:
@@ -65,6 +72,7 @@ class BatchManagementService:
 
     @staticmethod
     def get_mix_composition(mix_id):
+        """Zwraca skład na podstawie wag zapisanych w MixComponents."""
         mix = db.session.get(TankMixes, mix_id)
         if not mix: return {'total_weight': Decimal('0.00'), 'components': []}
         
@@ -119,49 +127,51 @@ class BatchManagementService:
             raise e
 
     @staticmethod
-    def _receive_in_mix(tank_id, transfer_details):
-        dest_tank = db.session.get(Sprzet, tank_id)
-        if not dest_tank: raise ValueError("Zbiornik docelowy nie istnieje.")
-
-        dest_mix = dest_tank.active_mix
-        if not dest_mix:
-            mix_code = BatchManagementService._generate_mix_code(dest_tank.nazwa_unikalna)
-            dest_mix = TankMixes(unique_code=mix_code, tank=dest_tank)
-            db.session.add(dest_mix)
-        
-        components_in_dest = {c.batch_id: c for c in dest_mix.components}
-        for detail in transfer_details:
-            batch_id = detail['batch_id']
-            quantity = detail['quantity']
-            if batch_id in components_in_dest:
-                components_in_dest[batch_id].quantity_in_mix += quantity
-            else:
-                new_component = MixComponents(batch_id=batch_id, quantity_in_mix=quantity)
-                dest_mix.components.append(new_component)
-
-    @staticmethod
     def transfer_between_dirty_tanks(source_tank_id, destination_tank_id, quantity_to_transfer, operator):
         """Orkiestruje transfer między dwoma zbiornikami brudnymi."""
         try:
-            # Krok 1: Rozchód ze zbiornika źródłowego
-            # ZMIANA: Wywołujemy nową, publiczną metodę, a nie starą, prywatną
-            withdrawal_details = BatchManagementService.withdraw_from_dirty_tank(
-                tank_id=source_tank_id,
-                quantity_to_withdraw=quantity_to_transfer,
-                operator=operator # Przekazujemy operatora dalej
-            )
+            # --- Rozchód ---
+            source_tank = db.session.get(Sprzet, source_tank_id)
+            if not source_tank: raise ValueError("Zbiornik źródłowy nie istnieje.")
+            source_mix_query = select(TankMixes).where(TankMixes.tank_id == source_tank_id, TankMixes.status == 'ACTIVE')
+            source_mix = db.session.execute(source_mix_query).scalar_one_or_none()
+            if not source_mix: raise ValueError("Zbiornik źródłowy jest pusty.")
+
+            composition = BatchManagementService.get_mix_composition(source_mix.id)
+            total_weight = composition['total_weight']
+            if quantity_to_transfer > total_weight: raise ValueError("Próba pobrania większej ilości niż dostępna.")
+
+            withdrawal_details = []
+            for component_in_source in source_mix.components:
+                if component_in_source.quantity_in_mix > 0:
+                    proportion = component_in_source.quantity_in_mix / total_weight
+                    amount_to_deduct = quantity_to_transfer * proportion
+                    component_in_source.quantity_in_mix -= amount_to_deduct
+                    withdrawal_details.append({'batch_id': component_in_source.batch_id, 'quantity': amount_to_deduct})
+
+            # --- Przyjęcie ---
+            dest_tank = db.session.get(Sprzet, destination_tank_id)
+            if not dest_tank: raise ValueError("Zbiornik docelowy nie istnieje.")
             
-            # Krok 2: Przyjęcie w zbiorniku docelowym
-            BatchManagementService._receive_in_mix(
-                tank_id=destination_tank_id,
-                transfer_details=withdrawal_details
-            )
+            dest_mix_query = select(TankMixes).where(TankMixes.tank_id == destination_tank_id, TankMixes.status == 'ACTIVE')
+            dest_mix = db.session.execute(dest_mix_query).scalar_one_or_none()
+            if not dest_mix:
+                mix_code = BatchManagementService._generate_mix_code(dest_tank.nazwa_unikalna)
+                dest_mix = TankMixes(unique_code=mix_code, tank_id=dest_tank.id)
+                db.session.add(dest_mix)
             
-            # ZMIANA: `withdraw...` już robi `commit`, więc tutaj go nie potrzebujemy
-            # db.session.commit()
+            components_in_dest = {c.batch_id: c for c in dest_mix.components}
+            for detail in withdrawal_details:
+                if detail['quantity'] > 0:
+                    if detail['batch_id'] in components_in_dest:
+                        components_in_dest[detail['batch_id']].quantity_in_mix += detail['quantity']
+                    else:
+                        new_component = MixComponents(batch_id=detail['batch_id'], quantity_in_mix=detail['quantity'])
+                        dest_mix.components.append(new_component)
+            
+            db.session.commit()
         except Exception as e:
-            db.session.rollback()
-            raise e
+            db.session.rollback(); raise e
 
     @staticmethod
     def correct_batch_quantity(batch_id, new_quantity, operator, reason):

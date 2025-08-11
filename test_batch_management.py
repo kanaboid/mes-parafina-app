@@ -190,37 +190,54 @@ class TestBatchManagementService(unittest.TestCase):
         self.assertAlmostEqual(comp2_after.quantity_in_mix, Decimal('400.00')) # 500 - 100
 
     def test_06_transfer_between_dirty_tanks_updates_component_quantities(self):
-        """Sprawdza kompletny transfer."""
-        batch1 = Batches(unique_code='S1', material_type='T10', source_type='CYS', source_name='C1', initial_quantity=1000, current_quantity=1000)
-        batch2 = Batches(unique_code='S2', material_type='44', source_type='APOLLO', source_name='AP1', initial_quantity=500, current_quantity=500)
+        """
+        Sprawdza, czy transfer poprawnie przenosi proporcjonalne ilości
+        między wpisami w MixComponents obu mieszanin.
+        """
+        # --- Przygotowanie (Arrange) ---
+        # POPRAWKA: Uzupełniamy obiekty Batches o wszystkie wymagane pola
+        batch1 = Batches(
+            unique_code='S1', material_type='T10', source_type='CYS', source_name='C1', 
+            initial_quantity=1000, current_quantity=1000
+        )
+        batch2 = Batches(
+            unique_code='S2', material_type='44', source_type='APOLLO', source_name='AP1', 
+            initial_quantity=500, current_quantity=500
+        )
+        
         tank1 = Sprzet(id=201, nazwa_unikalna='B01b')
         tank2 = Sprzet(id=202, nazwa_unikalna='B02b')
-        mix1 = TankMixes(unique_code='M1', tank=tank1)
-        db.session.add_all([batch1, batch2, tank1, tank2, mix1])
+        db.session.add_all([batch1, batch2, tank1, tank2])
         db.session.commit()
         
-        # POPRAWKA: Dodajemy `quantity_in_mix`
-        comp1 = MixComponents(mix_id=mix1.id, batch_id=batch1.id, quantity_in_mix=Decimal('1000.00'))
-        comp2 = MixComponents(mix_id=mix1.id, batch_id=batch2.id, quantity_in_mix=Decimal('500.00'))
-        db.session.add_all([comp1, comp2])
-        db.session.commit()
+        # Zatankuj obie partie do tank1
+        BatchManagementService.tank_into_dirty_tank(batch1.id, tank1.id, 'TEST')
+        BatchManagementService.tank_into_dirty_tank(batch2.id, tank1.id, 'TEST')
+        # W mix1 w tank1 jest teraz 1000kg T10 i 500kg 44
 
+        # --- Działanie (Act) ---
         BatchManagementService.transfer_between_dirty_tanks(
             source_tank_id=tank1.id,
             destination_tank_id=tank2.id,
             quantity_to_transfer=Decimal('300.00'),
             operator='USER_TEST'
         )
-        
-        mix1_comp1 = db.session.get(MixComponents, comp1.id)
-        mix1_comp2 = db.session.get(MixComponents, comp2.id)
-        self.assertAlmostEqual(mix1_comp1.quantity_in_mix, Decimal('800.00'))
-        self.assertAlmostEqual(mix1_comp2.quantity_in_mix, Decimal('400.00'))
 
-        tank2_after = db.session.get(Sprzet, tank2.id)
-        self.assertIsNotNone(tank2_after.active_mix)
-        mix2_comp1 = db.session.execute(select(MixComponents).filter_by(mix_id=tank2_after.active_mix.id, batch_id=batch1.id)).scalar_one()
-        mix2_comp2 = db.session.execute(select(MixComponents).filter_by(mix_id=tank2_after.active_mix.id, batch_id=batch2.id)).scalar_one()
+        # --- Asercje (Assert) ---
+        source_mix_q = select(TankMixes).where(TankMixes.tank_id == tank1.id)
+        source_mix = db.session.execute(source_mix_q).scalar_one()
+        dest_mix_q = select(TankMixes).where(TankMixes.tank_id == tank2.id)
+        dest_mix = db.session.execute(dest_mix_q).scalar_one()
+
+        # Sprawdź stan zbiornika źródłowego
+        mix1_comp1 = db.session.execute(select(MixComponents).filter_by(mix_id=source_mix.id, batch_id=batch1.id)).scalar_one()
+        mix1_comp2 = db.session.execute(select(MixComponents).filter_by(mix_id=source_mix.id, batch_id=batch2.id)).scalar_one()
+        self.assertAlmostEqual(mix1_comp1.quantity_in_mix, Decimal('800.00')) # 1000 - 200
+        self.assertAlmostEqual(mix1_comp2.quantity_in_mix, Decimal('400.00')) # 500 - 100
+
+        # Sprawdź stan zbiornika docelowego
+        mix2_comp1 = db.session.execute(select(MixComponents).filter_by(mix_id=dest_mix.id, batch_id=batch1.id)).scalar_one()
+        mix2_comp2 = db.session.execute(select(MixComponents).filter_by(mix_id=dest_mix.id, batch_id=batch2.id)).scalar_one()
         self.assertAlmostEqual(mix2_comp1.quantity_in_mix, Decimal('200.00'))
         self.assertAlmostEqual(mix2_comp2.quantity_in_mix, Decimal('100.00'))
 
