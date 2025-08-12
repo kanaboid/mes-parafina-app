@@ -150,25 +150,19 @@ def get_tank_status(tank_id):
     Zwraca szczegółowy status i skład mieszaniny dla danego zbiornika.
     """
     try:
-        # 1. Znajdź zbiornik
         tank = db.session.get(Sprzet, tank_id)
         if not tank:
             return jsonify({'status': 'error', 'message': f'Zbiornik o ID {tank_id} nie został znaleziony.'}), 404
 
-        # 2. Sprawdź, czy w zbiorniku jest aktywna mieszanina
-        active_mix = tank.active_mix
+        # ZMIANA: Jawnie wyszukujemy mieszaninę na podstawie `active_mix_id`
+        active_mix = db.session.get(TankMixes, tank.active_mix_id) if tank.active_mix_id else None
+        
         if not active_mix:
             return jsonify({
-                'status': 'success',
-                'tank_name': tank.nazwa_unikalna,
-                'is_empty': True,
-                'data': {
-                    'total_weight': '0.00',
-                    'components': []
-                }
+                'status': 'success', 'tank_name': tank.nazwa_unikalna, 'is_empty': True,
+                'data': {'total_weight': '0.00', 'components': []}
             }), 200
 
-        # 3. Jeśli jest mieszanina, pobierz jej skład za pomocą naszego serwisu
         composition = BatchManagementService.get_mix_composition(mix_id=active_mix.id)
         
         # 4. Sformatuj dane do JSON (Decimal nie jest domyślnie serializowalny)

@@ -119,17 +119,14 @@ class TestBatchRoutes(unittest.TestCase):
         batch1 = Batches(unique_code='S1', material_type='T10', source_type='CYS', source_name='C1', initial_quantity=1000, current_quantity=0)
         batch2 = Batches(unique_code='S2', material_type='44', source_type='APOLLO', source_name='AP1', initial_quantity=500, current_quantity=0)
         tank1 = Sprzet(id=201, nazwa_unikalna='B01b')
-        mix1 = TankMixes(unique_code='M1', tank=tank1)
-        db.session.add_all([batch1, batch2, tank1])
+        mix1 = TankMixes(unique_code='M1', tank_id=tank1.id)
+        db.session.add_all([batch1, batch2, tank1, mix1])
         db.session.commit()
+        tank1.active_mix_id = mix1.id # Jawne przypisanie
         comp1 = MixComponents(mix_id=mix1.id, batch_id=batch1.id, quantity_in_mix=Decimal('1000.00'))
         comp2 = MixComponents(mix_id=mix1.id, batch_id=batch2.id, quantity_in_mix=Decimal('500.00'))
-        db.session.add_all([comp1, comp2])
-        db.session.commit()
-
-        # 2. Pusty zbiornik docelowy
         tank2 = Sprzet(id=202, nazwa_unikalna='B02b')
-        db.session.add(tank2)
+        db.session.add_all([comp1, comp2, tank2])
         db.session.commit()
 
         # 3. Dane żądania
@@ -154,11 +151,11 @@ class TestBatchRoutes(unittest.TestCase):
         # 2. Sprawdź stan zbiornika źródłowego (musi mieć 1200kg)
         composition1_after = BatchManagementService.get_mix_composition(mix_id=mix1.id)
         self.assertAlmostEqual(composition1_after['total_weight'], Decimal('1200.00'))
-
-        # 3. Sprawdź stan zbiornika docelowego (musi mieć 300kg i 2 składniki)
+        
+        # ZMIANA: Sprawdzamy `active_mix_id`, a nie `active_mix`
         tank2_after = db.session.get(Sprzet, tank2.id)
-        self.assertIsNotNone(tank2_after.active_mix)
-        composition2_after = BatchManagementService.get_mix_composition(mix_id=tank2_after.active_mix.id)
+        self.assertIsNotNone(tank2_after.active_mix_id)
+        composition2_after = BatchManagementService.get_mix_composition(mix_id=tank2_after.active_mix_id)
         self.assertAlmostEqual(composition2_after['total_weight'], Decimal('300.00'))
         self.assertEqual(len(composition2_after['components']), 2)
 
@@ -219,6 +216,7 @@ class TestBatchRoutes(unittest.TestCase):
         mix = TankMixes(unique_code='M1', tank=tank)
         db.session.add_all([batch1, batch2, tank])
         db.session.commit()
+        tank.active_mix_id = mix.id
         comp1 = MixComponents(mix_id=mix.id, batch_id=batch1.id, quantity_in_mix=Decimal('750.00'))
         comp2 = MixComponents(mix_id=mix.id, batch_id=batch2.id, quantity_in_mix=Decimal('250.00'))
         db.session.add_all([comp1, comp2])

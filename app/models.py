@@ -48,7 +48,9 @@ class Sprzet(db.Model):
         Index('nazwa_unikalna', 'nazwa_unikalna', unique=True),
         {'comment': 'Lista całego sprzętu produkcyjnego i magazynowego'}
     )
-
+    # Kolumny
+    
+    
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     uwagi_serwisowe: Mapped[Optional[str]] = mapped_column(Text)
     nazwa_unikalna: Mapped[str] = mapped_column(VARCHAR(20), comment='Np. R1, FZ, B1b, B7c')
@@ -64,7 +66,10 @@ class Sprzet(db.Model):
     id_partii_surowca: Mapped[Optional[int]] = mapped_column(Integer)
     temperatura_docelowa: Mapped[Optional[decimal.Decimal]] = mapped_column(DECIMAL(5, 2), comment='Temperatura zadana przez operatora')
     szybkosc_topnienia_kg_h: Mapped[Optional[decimal.Decimal]] = mapped_column(DECIMAL(10, 2), server_default=text("'1000.00'"), comment='Szacowana szybkość topnienia surowca w kg na godzinę')
+    active_mix_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
 
+    # Relacje
+    
     apollo_sesje: Mapped[List['ApolloSesje']] = relationship('ApolloSesje', back_populates='sprzet')
     historia_pomiarow: Mapped[List['HistoriaPomiarow']] = relationship('HistoriaPomiarow', back_populates='sprzet')
     operator_temperatures: Mapped[List['OperatorTemperatures']] = relationship('OperatorTemperatures', back_populates='sprzet')
@@ -72,7 +77,17 @@ class Sprzet(db.Model):
     porty_sprzetu: Mapped[List['PortySprzetu']] = relationship('PortySprzetu', back_populates='sprzet')
     operacje_docelowe: Mapped[List['OperacjeLog']] = relationship(foreign_keys='OperacjeLog.id_sprzetu_docelowego', back_populates='sprzet_docelowy')
     operacje_zrodlowe: Mapped[List['OperacjeLog']] = relationship(foreign_keys='OperacjeLog.id_sprzetu_zrodlowego', back_populates='sprzet_zrodlowy')
-    active_mix: Mapped[Optional['TankMixes']] = relationship(back_populates='tank')
+    #active_mix: Mapped[Optional['TankMixes']] = relationship(back_populates='tank')
+    mixes: Mapped[List["TankMixes"]] = relationship(
+        back_populates="tank",
+        foreign_keys="TankMixes.tank_id"
+    )
+    active_mix: Mapped[Optional["TankMixes"]] = relationship(
+        primaryjoin="foreign(Sprzet.active_mix_id) == TankMixes.id",
+        uselist=False,
+        post_update=True # Ważne dla cyklicznych zależności
+    )
+
     def __repr__(self):
         # Ta metoda pomaga w debugowaniu, ładnie wyświetlając obiekt
         return f"<Sprzet id={self.id} nazwa='{self.nazwa_unikalna}'>"
@@ -562,7 +577,10 @@ class TankMixes(db.Model):
     status: Mapped[str] = mapped_column(ENUM('ACTIVE', 'ARCHIVED'), default='ACTIVE')
 
     # Relacja do sprzętu (zbiornika)
-    tank: Mapped['Sprzet'] = relationship(back_populates='active_mix')
+    tank: Mapped["Sprzet"] = relationship(
+        back_populates="mixes",
+        foreign_keys=[tank_id]
+    )
     # Relacja do składników
     components: Mapped[List['MixComponents']] = relationship(back_populates='mix')
 
