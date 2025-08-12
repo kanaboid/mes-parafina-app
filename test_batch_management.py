@@ -427,3 +427,98 @@ class TestBatchManagementService(unittest.TestCase):
         new_mix = db.session.get(TankMixes, new_mix_id)
         self.assertEqual(new_mix.status, 'ACTIVE')
         self.assertEqual(len(new_mix.components), 1)
+
+    def test_12_composition_with_depleted_component_is_correct(self):
+        """
+        Sprawdza, czy skład jest poprawnie obliczany, gdy jeden ze składników
+        mieszaniny ma zerową ilość.
+        """
+        # --- Przygotowanie (Arrange) ---
+        # Scenariusz: Mieszanina z trzema składnikami, ale jeden jest pusty.
+        # Aktywny skład: 500kg (S1) + 250kg (S3). Razem 750kg.
+        batch1 = Batches(unique_code='S1', material_type='T10', source_type='CYS', source_name='C1', initial_quantity=1000, current_quantity=500)
+        batch2_empty = Batches(unique_code='S2-EMPTY', material_type='44', source_type='APOLLO', source_name='AP1', initial_quantity=200, current_quantity=0)
+        batch3 = Batches(unique_code='S3', material_type='38-2/L', source_type='APOLLO', source_name='AP2', initial_quantity=250, current_quantity=250)
+        
+        tank = Sprzet(id=201, nazwa_unikalna='B01b')
+        mix = TankMixes(unique_code='M1', tank_id=tank.id)
+        db.session.add_all([batch1, batch2_empty, batch3, tank, mix])
+        db.session.commit()
+        
+        # Tworzymy składniki, jeden z nich ma zerową ilość
+        comp1 = MixComponents(mix_id=mix.id, batch_id=batch1.id, quantity_in_mix=Decimal('500.00'))
+        comp2_empty = MixComponents(mix_id=mix.id, batch_id=batch2_empty.id, quantity_in_mix=Decimal('0.00'))
+        comp3 = MixComponents(mix_id=mix.id, batch_id=batch3.id, quantity_in_mix=Decimal('250.00'))
+        db.session.add_all([comp1, comp2_empty, comp3])
+        db.session.commit()
+
+        # --- Działanie (Act) ---
+        composition = BatchManagementService.get_mix_composition(mix_id=mix.id)
+
+        # --- Asercje (Assert) ---
+        # 1. Sprawdź, czy całkowita waga jest sumą tylko aktywnych składników
+        self.assertAlmostEqual(composition['total_weight'], Decimal('750.00'))
+        
+        # 2. Sprawdź, czy w zwróconej kompozycji są tylko DWA składniki
+        self.assertEqual(len(composition['components']), 2)
+        
+        # 3. Sprawdź, czy procenty są obliczone na podstawie poprawnej sumy (750)
+        # Oczekiwane proporcje: S1 = 500/750 (~66.67%), S3 = 250/750 (~33.33%)
+        comp1_data = next(c for c in composition['components'] if c['batch_id'] == batch1.id)
+        comp3_data = next(c for c in composition['components'] if c['batch_id'] == batch3.id)
+        
+        self.assertAlmostEqual(comp1_data['percentage'], Decimal('66.6666'), places=2)
+        self.assertAlmostEqual(comp3_data['percentage'], Decimal('33.3333'), places=2)
+
+
+    def test_13_operations_use_corrected_quantity(self):
+        """
+        Sprawdza, czy operacje (np. tankowanie) używają ilości partii
+        po ręcznej korekcie, a nie oryginalnej.
+        """
+        # --- Przygotowanie (Arrange) ---
+        # 1. Stwórz partię pierwotną z początkową ilością 1000 kg
+        batch = Batches(
+            unique_code='S1-CORRECT', material_type='T10', source_type='CYS', source_name='C1',
+            initial_quantity=1000, current_quantity=1000
+        )
+        tank = Sprzet(id=201, nazwa_unikalna='B01b')
+        db.session.add_all([batch, tank])
+        db.session.commit()
+
+        # 2. Wykonaj ręczną korektę ilości w dół do 950 kg
+        corrected_quantity = Decimal('950.00')
+        BatchManagementService.correct_batch_quantity(
+            batch_id=batch.id,
+            new_quantity=corrected_quantity,
+            operator='SUPERVISOR',
+            reason='Inwentaryzacja'
+        )
+
+        # Asercja pośrednia - upewnij się, że korekta zadziałała
+        db.session.refresh(batch)
+        self.assertAlmostEqual(batch.current_quantity, corrected_quantity)
+
+        # --- Działanie (Act) ---
+        # Zatankuj tę skorygowaną partię do zbiornika
+        BatchManagementService.tank_into_dirty_tank(
+            batch_id=batch.id,
+            tank_id=tank.id,
+            operator='USER_TEST'
+        )
+
+        # --- Asercje (Assert) ---
+        # 1. Sprawdź, czy `current_quantity` partii pierwotnej jest teraz 0
+        db.session.refresh(batch)
+        self.assertEqual(batch.current_quantity, 0)
+        
+        # 2. Sprawdź skład mieszaniny w zbiorniku
+        mix = db.session.execute(
+            select(TankMixes).where(TankMixes.tank_id == tank.id, TankMixes.status == 'ACTIVE')
+        ).scalar_one()
+        composition = BatchManagementService.get_mix_composition(mix_id=mix.id)
+        
+        # Kluczowa asercja: masa w mieszaninie musi być równa skorygowanej ilości
+        self.assertAlmostEqual(composition['total_weight'], corrected_quantity)
+        self.assertEqual(len(composition['components']), 1)
+        self.assertAlmostEqual(composition['components'][0]['quantity_in_mix'], corrected_quantity)
