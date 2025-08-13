@@ -1,5 +1,5 @@
 # app/batch_management_service.py
-from . import db
+from .extensions import db
 from .models import Batches, Sprzet, TankMixes, MixComponents, AuditTrail
 from datetime import datetime
 from sqlalchemy import func, select

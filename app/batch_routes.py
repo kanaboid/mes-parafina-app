@@ -3,7 +3,7 @@
 from flask import Blueprint, jsonify, request
 from decimal import Decimal
 
-from . import db
+from .extensions import db
 from .models import *
 from .batch_management_service import BatchManagementService
 

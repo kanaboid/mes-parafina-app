@@ -7,7 +7,7 @@ from .pathfinder_service import PathFinder
 from .apollo_service import ApolloService
 import traceback
 
-from . import db
+from .extensions import db
 from .models import * #Sprzet, PartieSurowca, PortySprzetu, Segmenty, Zawory, OperacjeLog, t_log_uzyte_segmenty
 
 # Utworzenie nowego Blueprintu dla operacji

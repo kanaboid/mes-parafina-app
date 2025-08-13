@@ -1,8 +1,10 @@
 # app/pathfinder_service.py
-
+from .extensions import db
 import networkx as nx
-from .db import get_db_connection  # Importujemy funkcję do połączenia z bazą danych
-import mysql.connector # Added for mysql.connector.Error
+#from .db import get_db_connection  # Importujemy funkcję do połączenia z bazą danych
+#import mysql.connector # Added for mysql.connector.Error
+from .models import *
+
 
 class PathFinder:
     def __init__(self, app=None):
@@ -21,51 +23,46 @@ class PathFinder:
         with app.app_context():
             self._load_topology()
 
-    def _get_db_connection(self):
-        """Prywatna metoda do łączenia się z bazą, używająca konfiguracji z aplikacji."""
-        return get_db_connection()
+    # def _get_db_connection(self):
+    #     """Prywatna metoda do łączenia się z bazą, używająca konfiguracji z aplikacji."""
+    #     return get_db_connection()
 
     def _load_topology(self):
-        """Wczytuje mapę instalacji z bazy danych."""
-        print("INFO: Rozpoczynanie ładowania topologii...")
-        conn = self._get_db_connection()
-        # ... reszta tej metody pozostaje bez zmian ...
-        cursor = conn.cursor(dictionary=True)
-        # ...
-        cursor.execute("SELECT nazwa_portu FROM porty_sprzetu")
-        for row in cursor.fetchall():
-            self.graph.add_node(row['nazwa_portu'])
-
-        cursor.execute("SELECT nazwa_wezla FROM wezly_rurociagu")
-        for row in cursor.fetchall():
-            self.graph.add_node(row['nazwa_wezla'])
-
-        query = """
-            SELECT 
-                s.nazwa_segmentu, 
-                z.nazwa_zaworu,
-                COALESCE(p_start.nazwa_portu, w_start.nazwa_wezla) AS punkt_startowy,
-                COALESCE(p_koniec.nazwa_portu, w_koniec.nazwa_wezla) AS punkt_koncowy
-            FROM segmenty s
-            JOIN zawory z ON s.id_zaworu = z.id
-            LEFT JOIN porty_sprzetu p_start ON s.id_portu_startowego = p_start.id
-            LEFT JOIN wezly_rurociagu w_start ON s.id_wezla_startowego = w_start.id
-            LEFT JOIN porty_sprzetu p_koniec ON s.id_portu_koncowego = p_koniec.id
-            LEFT JOIN wezly_rurociagu w_koniec ON s.id_wezla_koncowego = w_koniec.id
-        """
-        cursor.execute(query)
-        for row in cursor.fetchall():
-            self.graph.add_edge(
-                row['punkt_startowy'], 
-                row['punkt_koncowy'], 
-                segment_name=row['nazwa_segmentu'],
-                valve_name=row['nazwa_zaworu']
-            )
+        """Wczytuje mapę instalacji z bazy danych przy użyciu SQLAlchemy ORM."""
+        print("INFO: Rozpoczynanie ładowania topologii (wersja ORM)...")
         
-        cursor.close()
-        conn.close()
+        # Czyszczenie grafu przed ponownym załadowaniem
+        self.graph.clear()
 
-        print("INFO: Topologia instalacji załadowana, graf zbudowany.")
+        # Pobieranie portów
+        porty_q = db.select(PortySprzetu.nazwa_portu)
+        porty = db.session.execute(porty_q).scalars().all()
+        for nazwa_portu in porty:
+            self.graph.add_node(nazwa_portu)
+
+        # Pobieranie węzłów
+        wezly_q = db.select(WezlyRurociagu.nazwa_wezla)
+        wezly = db.session.execute(wezly_q).scalars().all()
+        for nazwa_wezla in wezly:
+            self.graph.add_node(nazwa_wezla)
+
+        # Pobieranie segmentów z relacjami
+        segmenty_q = db.select(Segmenty)
+        segmenty = db.session.execute(segmenty_q).scalars().all()
+        
+        for segment in segmenty:
+            punkt_startowy = segment.porty_sprzetu_.nazwa_portu if segment.porty_sprzetu_ else segment.wezly_rurociagu_.nazwa_wezla
+            punkt_koncowy = segment.porty_sprzetu.nazwa_portu if segment.porty_sprzetu else segment.wezly_rurociagu.nazwa_wezla
+            
+            if punkt_startowy and punkt_koncowy:
+                self.graph.add_edge(
+                    punkt_startowy, 
+                    punkt_koncowy, 
+                    segment_name=segment.nazwa_segmentu,
+                    valve_name=segment.zawory.nazwa_zaworu
+                )
+        
+        print("INFO: Topologia instalacji załadowana (ORM), graf zbudowany.")
 
 
     def find_path(self, start_node, end_node, open_valves=None):
@@ -118,76 +115,56 @@ class PathFinder:
             return None
     
     def _get_open_valves(self):
-        """Pobiera listę otwartych zaworów z bazy danych"""
+        """Pobiera listę otwartych zaworów z bazy danych (wersja ORM)."""
         try:
-            conn = self._get_db_connection()
-            cursor = conn.cursor(dictionary=True)
+            # Używamy sesji i modelu Zawory do zbudowania zapytania
+            query = db.select(Zawory.nazwa_zaworu).where(Zawory.stan == 'OTWARTY')
+            open_valves = db.session.execute(query).scalars().all()
             
-            # Sprawdź otwarte zawory (stan = 'OTWARTY')
-            cursor.execute("SELECT nazwa_zaworu FROM zawory WHERE stan = 'OTWARTY'")
-            open_valves = [row['nazwa_zaworu'] for row in cursor.fetchall()]
-            
-            # Jeśli nie ma otwartych zaworów, zwróć wszystkie jako otwarte (dla testów)
+            # Logika awaryjna pozostaje bez zmian, ale również używa ORM
             if not open_valves:
                 print("WARNING: Brak otwartych zaworów w bazie. Używam wszystkich zaworów dla testów PathFinder.")
-                cursor.execute("SELECT nazwa_zaworu FROM zawory")
-                open_valves = [row['nazwa_zaworu'] for row in cursor.fetchall()]
-            
-            cursor.close()
-            conn.close()
-            
+                query_all = db.select(Zawory.nazwa_zaworu)
+                open_valves = db.session.execute(query_all).scalars().all()
+                
             return open_valves
         except Exception as e:
-            print(f"Błąd podczas pobierania stanów zaworów: {e}")
-            # W przypadku błędu, zwróć wszystkie zawory jako otwarte
+            print(f"Błąd podczas pobierania stanów zaworów (ORM): {e}")
+            # W przypadku błędu, zachowanie awaryjne również używa ORM
             try:
-                conn = self._get_db_connection()
-                cursor = conn.cursor(dictionary=True)
-                cursor.execute("SELECT nazwa_zaworu FROM zawory")
-                all_valves = [row['nazwa_zaworu'] for row in cursor.fetchall()]
-                cursor.close()
-                conn.close()
-                return all_valves
+                query_all = db.select(Zawory.nazwa_zaworu)
+                return db.session.execute(query_all).scalars().all()
             except Exception as ex:
-                print(f"Błąd podczas pobierania wszystkich zaworów: {ex}")
+                print(f"Błąd podczas pobierania wszystkich zaworów (ORM): {ex}")
                 return []
 
     @staticmethod
     def release_path(zawory_names=None, segment_names=None):
-        """Zwalnia zasoby po zakończeniu operacji - zamyka zawory."""
+        """Zwalnia zasoby po zakończeniu operacji - zamyka zawory (wersja ORM)."""
         if not zawory_names:
             print("INFO: Brak zaworów do zwolnienia w release_path.")
             return
 
-        conn = None
         try:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-
-            # Zamykanie zaworów
             if isinstance(zawory_names, str):
                 zawory_names = zawory_names.split(',')
-            
+
             if zawory_names:
-                placeholders = ', '.join(['%s'] * len(zawory_names))
-                sql = f"UPDATE zawory SET stan = 'ZAMKNIETY' WHERE nazwa_zaworu IN ({placeholders})"
-                cursor.execute(sql, zawory_names)
-
-            # W przyszłości można dodać logikę zwalniania segmentów, jeśli będzie potrzebna
+                # Tworzymy zapytanie UPDATE za pomocą składni ORM
+                stmt = db.update(Zawory).where(
+                    Zawory.nazwa_zaworu.in_(zawory_names)
+                ).values(stan='ZAMKNIETY')
+                
+                # Wykonujemy zapytanie i commitujemy transakcję
+                db.session.execute(stmt)
+                db.session.commit()
             
-            conn.commit()
-            print(f"INFO: Pomyślnie zamknięto zawory: {zawory_names}")
+            print(f"INFO: Pomyślnie zamknięto zawory (ORM): {zawory_names}")
 
-        except mysql.connector.Error as err:
-            if conn:
-                conn.rollback()
-            print(f"Błąd bazy danych podczas zwalniania ścieżki: {err}")
-            # Rzucenie wyjątku, aby operacja nadrzędna mogła go obsłużyć
+        except Exception as e:
+            db.session.rollback()
+            print(f"Błąd bazy danych podczas zwalniania ścieżki (ORM): {e}")
             raise
-        finally:
-            if conn and conn.is_connected():
-                cursor.close()
-                conn.close()
 
 # USUWAMY globalną instancję. Będziemy ją tworzyć w __init__.py
 # pathfinder_instance = PathFinder()

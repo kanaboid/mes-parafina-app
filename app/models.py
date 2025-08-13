@@ -1,5 +1,5 @@
 # app/models.py
-from . import db # Importujemy obiekt `db` z __init__.py
+from .extensions import db
 import decimal
 import datetime
 from typing import Optional, List

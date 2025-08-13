@@ -8,8 +8,8 @@ from .sensors import SensorService
 from flask_apscheduler import APScheduler
 from datetime import datetime
 from flask_sqlalchemy import SQLAlchemy
+from .extensions import db
 
-db = SQLAlchemy()
 
 # ... instancje pathfinder, monitoring, sensor_service, scheduler ...
 pathfinder = PathFinder()
