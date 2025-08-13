@@ -35,3 +35,10 @@ class TestConfig(Config):
         f"mysql+mysqlconnector://{MYSQL_USER}:{MYSQL_PASSWORD}@"
         f"{MYSQL_HOST}/{MYSQL_DB}"
     )
+
+class DevConfigForTesting(Config):
+    """
+    Specjalna konfiguracja do testów, które muszą być uruchomione
+    na deweloperskiej bazie danych (z pełnymi danymi).
+    """
+    TESTING = True

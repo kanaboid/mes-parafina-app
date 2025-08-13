@@ -1,8 +1,8 @@
 # app/apollo_service.py
 
 from datetime import datetime, timedelta, timezone
-from .db import get_db_connection
-import mysql.connector
+#from .db import get_db_connection
+#import mysql.connector
 from .extensions import db  # Importujemy obiekt `db` z __init__.py
 from .models import Sprzet, ApolloSesje, ApolloTracking, PartieSurowca, OperacjeLog
 from decimal import Decimal
