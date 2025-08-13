@@ -50,22 +50,22 @@ class TestApolloBatchIntegration(unittest.TestCase):
         4. Poprawnie aktualizuje ApolloTracking.
         """
         # --- Przygotowanie (Arrange) ---
-        # 1. Konfigurujemy mock, aby zwracał prognozowaną wartość 100 kg
-        prognozowana_ilosc = 100.0
-        mock_oblicz_stan.return_value = {'dostepne_kg': prognozowana_ilosc, 'id_sesji': 1, 'typ_surowca': 'T-SPECIAL'}
+        prognozowana_ilosc = Decimal('100.00')
+        mock_oblicz_stan.return_value = {
+            'dostepne_kg': prognozowana_ilosc,
+            'id_sesji': 1,
+            'typ_surowca': 'T-SPECIAL'
+        }
 
-        # 2. Stwórz aktywną sesję w Apollo
         czas_startu = datetime.now() - timedelta(hours=1)
         sesja = ApolloSesje(id=1, id_sprzetu=TEST_APOLLO_ID, typ_surowca='T-SPECIAL', status_sesji='aktywna', czas_rozpoczecia=czas_startu)
         db.session.add(sesja)
         db.session.commit()
 
-        # 3. Definiujemy rzeczywistą ilość, która została przelana
         rzeczywista_ilosc = Decimal('125.50')
         operator = 'TEST_USER'
         
         # --- Działanie (Act) ---
-        # Wywołujemy metodę, która jeszcze nie istnieje
         result = BatchManagementService.create_batch_from_apollo_transfer(
             apollo_id=TEST_APOLLO_ID,
             destination_tank_id=TEST_TANK_ID,
@@ -74,5 +74,36 @@ class TestApolloBatchIntegration(unittest.TestCase):
         )
         
         # --- Asercje (Assert) ---
-        # Na razie tylko jedna asercja, aby sprawdzić, czy metoda cokolwiek zwróciła
-        self.assertIsNotNone(result)
+        
+        # Asercja 1: Sprawdź zwrócone dane i informację o korekcie
+        self.assertTrue(result['adjusted'])
+        self.assertAlmostEqual(result['discrepancy'], Decimal('25.50'))
+
+        # Asercja 2: Sprawdź, czy powstała nowa partia (`Batches`) i ma poprawną wagę
+        new_batch = db.session.get(Batches, result['batch_id'])
+        self.assertIsNotNone(new_batch)
+        self.assertEqual(new_batch.source_type, 'APOLLO')
+        self.assertEqual(new_batch.source_name, TEST_APOLLO_NAZWA)
+        self.assertEqual(new_batch.material_type, 'T-SPECIAL')
+        self.assertAlmostEqual(new_batch.initial_quantity, rzeczywista_ilosc)
+        self.assertAlmostEqual(new_batch.current_quantity, Decimal('0.00')) # Powinna być od razu wyzerowana po tankowaniu
+
+        # Asercja 3: Sprawdź, czy ta partia została zatankowana do zbiornika
+        mix = db.session.get(TankMixes, result['mix_id'])
+        self.assertIsNotNone(mix)
+        self.assertEqual(len(mix.components), 1)
+        self.assertAlmostEqual(mix.components[0].quantity_in_mix, rzeczywista_ilosc)
+
+        # Asercja 4: Sprawdź, czy w AuditTrail jest odpowiedni wpis o korekcie
+        audit_log = db.session.execute(select(AuditTrail)).scalar_one()
+        self.assertEqual(audit_log.entity_type, 'ApolloSesje')
+        self.assertEqual(audit_log.entity_id, sesja.id)
+        self.assertEqual(audit_log.operation_type, 'BALANCE_CORRECTION')
+        self.assertEqual(audit_log.old_value, str(prognozowana_ilosc))
+        self.assertEqual(audit_log.new_value, str(rzeczywista_ilosc))
+        
+        # Asercja 5: Sprawdź, czy w ApolloTracking jest wpis o transferze
+        tracking_log = db.session.execute(select(ApolloTracking)).scalar_one()
+        self.assertEqual(tracking_log.id_sesji, sesja.id)
+        self.assertEqual(tracking_log.typ_zdarzenia, 'TRANSFER_WYJSCIOWY')
+        self.assertAlmostEqual(tracking_log.waga_kg, rzeczywista_ilosc)

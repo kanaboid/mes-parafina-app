@@ -160,5 +160,58 @@ class TestApolloService(unittest.TestCase):
         self.assertAlmostEqual(stan['bilans_sesji_kg'], 800.0)
         self.assertAlmostEqual(stan['dostepne_kg'], 200.0, delta=1.0)
 
+    def test_14_oblicz_stan_po_czesciowym_transferze_i_doladowaniu(self):
+        """
+        Sprawdza poprawność obliczeń w scenariuszu:
+        1. Start sesji.
+        2. Częściowy transfer (mniej niż się stopiło).
+        3. Dodanie nowego surowca.
+        4. Finalny odczyt stanu.
+        System powinien poprawnie obliczyć, że część płynnego surowca
+        pozostała po transferze i kontynuować topienie nowego wsadu.
+        """
+        # --- Przygotowanie (Arrange) ---
+        # Używamy konkretnych, łatwych do weryfikacji punktów w czasie
+        czas_startu_sesji = datetime(2025, 8, 1, 12, 0, 0)
+        czas_transferu = datetime(2025, 8, 1, 12, 30, 0)
+        czas_dodania_surowca = datetime(2025, 8, 1, 13, 0, 0)
+        czas_finalnego_odczytu = datetime(2025, 8, 1, 13, 15, 0)
+
+        # 1. Rozpocznij sesję z 500 kg surowca o 12:00
+        sesja_id = ApolloService.rozpocznij_sesje_apollo(
+            TEST_APOLLO_ID, 'TEST-CZESCIOWY', 500.0, event_time=czas_startu_sesji
+        )
+        sesja = db.session.get(ApolloSesje, sesja_id)
+
+        # 2. Dokonaj transferu 200 kg o 12:30
+        # W tym momencie stopiło się 0.5h * 1000kg/h = 500 kg. Dostępne jest 500 kg.
+        # Po transferze powinno zostać 300 kg płynnego surowca.
+        operacja = OperacjeLog(
+            typ_operacji='TRANSFER', id_apollo_sesji=sesja.id, status_operacji='zakonczona',
+            ilosc_kg=200.0, czas_rozpoczecia=czas_transferu, czas_zakonczenia=czas_transferu
+        )
+        # UWAGA: Nowa logika będzie wymagała wpisu w ApolloTracking, dodajmy go od razu
+        tracking_transfer = ApolloTracking(
+            id_sesji=sesja.id, typ_zdarzenia='TRANSFER_WYJSCIOWY', waga_kg=200.0,
+            czas_zdarzenia=czas_transferu
+        )
+
+        # 3. Dodaj 400 kg surowca o 13:00
+        ApolloService.dodaj_surowiec_do_apollo(TEST_APOLLO_ID, 400.0, event_time=czas_dodania_surowca)
+        
+        db.session.add_all([operacja, tracking_transfer])
+        db.session.commit()
+        
+        # --- Działanie (Act) ---
+        # Odczytaj stan o 13:15
+        # Oczekiwana logika:
+        # - O 13:00 w Apollo było 300 kg płynu i 400 kg granulatu.
+        # - Przez 15 minut (0.25h) stopiło się 0.25 * 1000 = 250 kg granulatu.
+        # - Finalny stan: 300 kg (stary płyn) + 250 kg (nowy płyn) = 550 kg płynu.
+        stan = ApolloService.oblicz_aktualny_stan_apollo(TEST_APOLLO_ID, current_time=czas_finalnego_odczytu)
+        
+        # --- Asercja (Assert) ---
+        self.assertAlmostEqual(stan['dostepne_kg'], 550.0, places=2)
+
 if __name__ == '__main__':
     unittest.main()

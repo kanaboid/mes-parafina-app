@@ -1,10 +1,11 @@
 # app/batch_management_service.py
 from .extensions import db
-from .models import Batches, Sprzet, TankMixes, MixComponents, AuditTrail
+from .models import Batches, Sprzet, TankMixes, MixComponents, AuditTrail, ApolloSesje, ApolloTracking
 from datetime import datetime
 from sqlalchemy import func, select
 from sqlalchemy.orm import joinedload
 from decimal import Decimal
+from .apollo_service import ApolloService
 
 class BatchManagementService:
     
@@ -191,3 +192,86 @@ class BatchManagementService:
             return {'success': True, 'audit_log_id': audit_log.id}
         except Exception as e:
             db.session.rollback(); raise e
+
+    @staticmethod
+    def create_batch_from_apollo_transfer(apollo_id, destination_tank_id, actual_quantity_transferred, operator):
+        """
+        Orkiestruje transfer z Apollo do zbiornika, tworzy partię pierwotną,
+        tankuje ją i obsługuje rozbieżności między prognozą a rzeczywistością.
+        """
+        try:
+            # 1. Pobierz dane kontekstowe
+            apollo_equipment = db.session.get(Sprzet, apollo_id)
+            if not apollo_equipment or apollo_equipment.typ_sprzetu != 'apollo':
+                raise ValueError(f"Sprzęt o ID {apollo_id} nie jest wytapiarką Apollo.")
+
+            # Wywołaj prawdziwą metodę serwisu Apollo, którą w teście mockujemy
+            apollo_state = ApolloService.oblicz_aktualny_stan_apollo(apollo_id)
+            prognozowana_ilosc = Decimal(apollo_state.get('dostepne_kg', 0))
+            id_sesji = apollo_state.get('id_sesji')
+            typ_surowca = apollo_state.get('typ_surowca')
+
+            if not id_sesji:
+                raise ValueError(f"Apollo o ID {apollo_id} nie ma aktywnej sesji.")
+
+            # 2. Obsługa rozbieżności
+            was_adjusted = False
+            discrepancy = Decimal('0.00')
+            if actual_quantity_transferred > prognozowana_ilosc:
+                was_adjusted = True
+                discrepancy = actual_quantity_transferred - prognozowana_ilosc
+                
+                audit_log = AuditTrail(
+                    user_id=operator,
+                    entity_type='ApolloSesje',
+                    entity_id=id_sesji,
+                    operation_type='BALANCE_CORRECTION',
+                    field_name='available_quantity_forecast',
+                    old_value=str(prognozowana_ilosc),
+                    new_value=str(actual_quantity_transferred),
+                    reason="Automatyczna korekta bilansu Apollo na podstawie rzeczywistego transferu."
+                )
+                db.session.add(audit_log)
+            
+            # 3. Wykonanie transferu
+            # 3a. Zaktualizuj stan w Apollo
+            tracking_log = ApolloTracking(
+                id_sesji=id_sesji,
+                typ_zdarzenia='TRANSFER_WYJSCIOWY',
+                waga_kg=actual_quantity_transferred,
+                czas_zdarzenia=datetime.now(),
+                operator=operator
+            )
+            db.session.add(tracking_log)
+
+            # 3b. Stwórz Partię Pierwotną
+            batch_result = BatchManagementService.create_raw_material_batch(
+                material_type=typ_surowca,
+                source_type='APOLLO',
+                source_name=apollo_equipment.nazwa_unikalna,
+                quantity=actual_quantity_transferred,
+                operator=operator
+            )
+            batch_id = batch_result['batch_id']
+
+            # 3c. Zatankuj do zbiornika
+            tanking_result = BatchManagementService.tank_into_dirty_tank(
+                batch_id=batch_id,
+                tank_id=destination_tank_id,
+                operator=operator
+            )
+            mix_id = tanking_result['mix_id']
+
+            # 4. Zatwierdź transakcję i zwróć wynik
+            db.session.commit()
+            
+            return {
+                'batch_id': batch_id,
+                'mix_id': mix_id,
+                'adjusted': was_adjusted,
+                'discrepancy': discrepancy
+            }
+        
+        except Exception as e:
+            db.session.rollback()
+            raise e
