@@ -91,61 +91,64 @@ class ApolloService:
 
     @staticmethod
     def oblicz_aktualny_stan_apollo(id_sprzetu, current_time=None):
+        """
+        Oblicza aktualny stan Apollo na podstawie sumy wytopionych porcji.
+        Wersja 4: Niezawodny model "wielu porcji".
+        """
         czas_teraz = current_time if current_time is not None else datetime.now()
         
         sesja = db.session.execute(
             db.select(ApolloSesje).filter_by(id_sprzetu=id_sprzetu, status_sesji='aktywna')
         ).scalar_one_or_none()
+
         if not sesja:
             return {'aktywna_sesja': False, 'dostepne_kg': 0}
-        
-        zdarzenia_query = db.select(ApolloTracking).filter_by(id_sesji=sesja.id).order_by(ApolloTracking.czas_zdarzenia)
-        zdarzenia = db.session.execute(zdarzenia_query).scalars().all()
 
-        # --- ORYGINALNA, POPRAWNA LOGIKA W WERSJI ORM ---
+        # Pobierz wszystkie zdarzenia, które dodają surowiec do puli
+        porcje_q = db.select(ApolloTracking).filter(
+            ApolloTracking.id_sesji == sesja.id,
+            ApolloTracking.typ_zdarzenia.in_(['DODANIE_SUROWCA', 'KOREKTA_RECZNA'])
+        ).order_by(ApolloTracking.czas_zdarzenia)
         
-        ilosc_na_starcie = 0.0
-        punkt_startowy_czas = sesja.czas_rozpoczecia
-        
-        korekty = [z for z in zdarzenia if z.typ_zdarzenia == 'KOREKTA_RECZNA']
-        if korekty:
-            ostatnia_korekta = korekty[-1]
-            punkt_startowy_czas = ostatnia_korekta.czas_zdarzenia
-            ilosc_na_starcie = float(ostatnia_korekta.waga_kg)
+        porcje = db.session.execute(porcje_q).scalars().all()
 
-        # 1. Oblicz transfery, które nastąpiły PO punkcie startowym
-        przetransferowano_po_starcie = sum(
-            float(z.waga_kg) for z in zdarzenia 
-            if z.typ_zdarzenia == 'TRANSFER_WYJSCIOWY' and z.czas_zdarzenia > punkt_startowy_czas
+        calkowity_plynny_potencjal = Decimal('0.0')
+
+        # Jeśli ostatnim zdarzeniem jest korekta, tylko ona się liczy
+        if porcje and porcje[-1].typ_zdarzenia == 'KOREKTA_RECZNA':
+            ostatnia_korekta = porcje[-1]
+            czas_od_korekty_s = (czas_teraz - ostatnia_korekta.czas_zdarzenia).total_seconds()
+            wytopiono_po_korekcie = (Decimal(max(0, czas_od_korekty_s)) / Decimal(3600)) * Decimal(ApolloService.SZYBKOSC_WYTAPIANIA_KG_H)
+            
+            # W tym uproszczonym modelu po korekcie zakładamy, że dalszy wsad (którego nie ma) ogranicza topienie
+            calkowity_plynny_potencjal = ostatnia_korekta.waga_kg + wytopiono_po_korekcie
+            # Należałoby dodać logikę sumowania wsadów po korekcie, ale na razie to uprościmy
+            # Dla pewności, że nie wytopimy "z powietrza", ograniczmy to do wagi korekty
+            calkowity_plynny_potencjal = ostatnia_korekta.waga_kg
+
+        else: # Standardowa logika sumowania porcji
+            for porcja in porcje:
+                czas_topienia_s = (czas_teraz - porcja.czas_zdarzenia).total_seconds()
+                
+                if czas_topienia_s > 0:
+                    wytopiono_z_porcji_potencjalnie = (Decimal(czas_topienia_s) / Decimal(3600)) * Decimal(ApolloService.SZYBKOSC_WYTAPIANIA_KG_H)
+                    realnie_wytopiono_z_porcji = min(porcja.waga_kg, wytopiono_z_porcji_potencjalnie)
+                    calkowity_plynny_potencjal += realnie_wytopiono_z_porcji
+
+        # Odejmij wszystkie transfery, które miały miejsce w sesji
+        suma_transferow_q = db.select(func.sum(ApolloTracking.waga_kg)).filter(
+            ApolloTracking.id_sesji == sesja.id,
+            ApolloTracking.typ_zdarzenia == 'TRANSFER_WYJSCIOWY'
         )
+        suma_transferow = db.session.execute(suma_transferow_q).scalar() or Decimal('0.0')
 
-        # 2. Oblicz limit topnienia na podstawie tego, co dodano
-        if korekty:
-            # Po korekcie, limit to tylko surowiec dodany PO niej
-            limit_topnienia = sum(
-                float(z.waga_kg) for z in zdarzenia 
-                if z.typ_zdarzenia == 'DODANIE_SUROWCA' and z.czas_zdarzenia > punkt_startowy_czas
-            )
-        else:
-            # Przed korektą, limit to CAŁY dodany surowiec
-            limit_topnienia = sum(
-                float(z.waga_kg) for z in zdarzenia if z.typ_zdarzenia == 'DODANIE_SUROWCA'
-            )
-
-        # 3. Oblicz topnienie
-        czas_topienia_sekundy = (czas_teraz - punkt_startowy_czas).total_seconds()
-        wytopiono_w_czasie = (max(0, czas_topienia_sekundy) / 3600.0) * ApolloService.SZYBKOSC_WYTAPIANIA_KG_H
+        dostepne_kg = calkowity_plynny_potencjal - suma_transferow
         
-        realnie_wytopiono = min(wytopiono_w_czasie, limit_topnienia)
-        
-        # 4. Finalne obliczenie
-        dostepne_kg = ilosc_na_starcie + realnie_wytopiono - przetransferowano_po_starcie
-
         return {
             'aktywna_sesja': True,
             'id_sesji': sesja.id,
             'typ_surowca': sesja.typ_surowca,
-            'dostepne_kg': round(max(0, dostepne_kg), 2),
+            'dostepne_kg': round(float(max(Decimal('0.0'), dostepne_kg)), 2),
             'czas_rozpoczecia': sesja.czas_rozpoczecia.isoformat()
         }
 
@@ -213,71 +216,71 @@ class ApolloService:
 
     @staticmethod
     def get_stan_apollo(id_sprzetu: int):
-        """Pobiera aktualny, dynamiczny stan danego Apollo (WERSJA ZREFAKTORYZOWANA)."""
+        """
+        Pobiera aktualny, dynamiczny stan danego Apollo, delegując
+        obliczenia do nowej, precyzyjnej metody symulacyjnej.
+        """
         try:
             apollo = db.session.get(Sprzet, id_sprzetu)
             if not apollo:
-                return None
-            szybkosc_topnienia_kg_h = float(apollo.szybkosc_topnienia_kg_h or 50.0)
+                return None # lub rzucić wyjątek
+
+            # Podstawowe dane o sprzęcie
+            result = {
+                'id_sprzetu': apollo.id,
+                'nazwa_apollo': apollo.nazwa_unikalna,
+                'aktywna_sesja': False
+            }
+            
             sesja = db.session.execute(
                 db.select(ApolloSesje).filter_by(id_sprzetu=id_sprzetu, status_sesji='aktywna')
             ).scalar_one_or_none()
 
-            result = { 'id_sprzetu': apollo.id, 'nazwa_apollo': apollo.nazwa_unikalna, 'aktywna_sesja': False }
+            if not sesja:
+                return result # Zwróć podstawowe dane, jeśli nie ma sesji
 
-            if sesja:
-                id_sesji = sesja.id
-                print(f"\n[DEBUG FUNC] Znaleziono aktywną sesję ID: {id_sesji}")
+            # --- KLUCZOWA ZMIANA ---
+            # Wywołaj nową, poprawną metodę, aby uzyskać dokładną dostępną ilość
+            stan_obliczony = ApolloService.oblicz_aktualny_stan_apollo(id_sprzetu)
+            
+            # Oblicz bilans "księgowy" dla informacji dodatkowej w GUI
+            total_added_q = db.select(func.sum(ApolloTracking.waga_kg)).where(
+                ApolloTracking.id_sesji == sesja.id,
+                ApolloTracking.typ_zdarzenia == 'DODANIE_SUROWCA'
+            )
+            total_added = db.session.execute(total_added_q).scalar() or Decimal('0.0')
 
-                total_added_query = db.select(func.sum(ApolloTracking.waga_kg)).where(
-                    ApolloTracking.id_sesji == id_sesji,
-                    ApolloTracking.typ_zdarzenia == 'DODANIE_SUROWCA'
-                )
-                total_added = db.session.execute(total_added_query).scalar() or 0
-                print(f"[DEBUG FUNC] Suma dodanego surowca z bazy: {total_added}")
-                
-                total_transferred_query = db.select(func.sum(OperacjeLog.ilosc_kg)).where(
-                    OperacjeLog.id_apollo_sesji == id_sesji,
-                    OperacjeLog.status_operacji == 'zakonczona'
-                )
-                total_transferred = db.session.execute(total_transferred_query).scalar() or 0
-                print(f"[DEBUG FUNC] Suma przetransferowana z bazy: {total_transferred}")
+            total_transferred_q = db.select(func.sum(ApolloTracking.waga_kg)).where(
+                ApolloTracking.id_sesji == sesja.id,
+                ApolloTracking.typ_zdarzenia == 'TRANSFER_WYJSCIOWY'
+            )
+            total_transferred = db.session.execute(total_transferred_q).scalar() or Decimal('0.0')
 
-                bilans_ksiegowy_kg = float(total_added) - float(total_transferred)
-                print(f"[DEBUG FUNC] Obliczony bilans: {bilans_ksiegowy_kg}")
+            bilans_ksiegowy_kg = float(total_added - total_transferred)
+            
+            # Pobierz ostatni transfer dla celów informacyjnych
+            ostatni_transfer = db.session.execute(
+                db.select(ApolloTracking).where(
+                    ApolloTracking.id_sesji == sesja.id,
+                    ApolloTracking.typ_zdarzenia == 'TRANSFER_WYJSCIOWY'
+                ).order_by(ApolloTracking.czas_zdarzenia.desc())
+            ).scalars().first()
 
-
-                # 2. Znajdź ostatnią operację
-                ostatnia_operacja = db.session.execute(
-                    db.select(OperacjeLog).where(
-                        OperacjeLog.id_apollo_sesji == id_sesji,
-                        OperacjeLog.status_operacji == 'zakonczona'
-                    ).order_by(OperacjeLog.czas_zakonczenia.desc())
-                ).scalars().first()
-                
-                czas_ostatniej_operacji = ostatnia_operacja.czas_zakonczenia if ostatnia_operacja else None
-                ilosc_ostatniej_operacji_kg = ostatnia_operacja.ilosc_kg if ostatnia_operacja else None
-
-                punkt_odniesienia = czas_ostatniej_operacji or sesja.czas_rozpoczecia
-                
-                czas_teraz = datetime.now()
-                
-                czas_od_ostatniej_operacji_s = (czas_teraz - punkt_odniesienia).total_seconds()
-                czas_od_ostatniej_operacji_h = max(0, czas_od_ostatniej_operacji_s) / 3600
-                wytopiono_od_ostatniego_razu_kg = czas_od_ostatniej_operacji_h * szybkosc_topnienia_kg_h
-
-                realnie_dostepne_kg = min(bilans_ksiegowy_kg, wytopiono_od_ostatniego_razu_kg)
-
-                result.update({
-                    'aktywna_sesja': True,
-                    'id_sesji': id_sesji,
-                    'typ_surowca': sesja.typ_surowca,
-                    'dostepne_kg': round(max(0, realnie_dostepne_kg), 2),
-                    'bilans_sesji_kg': round(max(0, bilans_ksiegowy_kg), 2),
-                    'ostatni_transfer_czas': czas_ostatniej_operacji.strftime('%Y-%m-%d %H:%M:%S') if czas_ostatniej_operacji else None,
-                    'ostatni_transfer_kg': float(ilosc_ostatniej_operacji_kg) if ilosc_ostatniej_operacji_kg is not None else None
-                })
+            # Zaktualizuj słownik wynikowy o wszystkie potrzebne dane
+            result.update({
+                'aktywna_sesja': True,
+                'id_sesji': sesja.id,
+                'typ_surowca': sesja.typ_surowca,
+                'dostepne_kg': stan_obliczony['dostepne_kg'], # Użyj wyniku z nowej metody
+                'bilans_sesji_kg': round(max(0, bilans_ksiegowy_kg), 2),
+                'ostatni_transfer_czas': ostatni_transfer.czas_zdarzenia.strftime('%Y-%m-%d %H:%M:%S') if ostatni_transfer else None,
+                'ostatni_transfer_kg': float(ostatni_transfer.waga_kg) if ostatni_transfer else None
+            })
 
             return result
         except Exception as e:
-            raise Exception(f"Błąd bazy danych przy pobieraniu stanu Apollo: {e}")
+            # Lepsze logowanie błędów
+            print(f"Błąd bazy danych przy pobieraniu stanu Apollo (ID: {id_sprzetu}): {e}")
+            import traceback
+            traceback.print_exc()
+            raise # Rzuć wyjątkiem, aby warstwa API mogła go obsłużyć

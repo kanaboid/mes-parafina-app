@@ -6,6 +6,8 @@ from .db import get_db_connection
 from .pathfinder_service import PathFinder
 from .apollo_service import ApolloService
 import traceback
+from decimal import Decimal
+from .batch_management_service import BatchManagementService
 
 from .extensions import db
 from .models import * #Sprzet, PartieSurowca, PortySprzetu, Segmenty, Zawory, OperacjeLog, t_log_uzyte_segmenty
@@ -368,160 +370,97 @@ def start_apollo_transfer():
 
 @bp.route('/apollo-transfer/end', methods=['POST'])
 def end_apollo_transfer():
-    """Kończy operację transferu z Apollo, zwalnia zasoby i zarządza partiami surowca."""
+    """
+    Kończy operację transferu z Apollo (WERSJA ORM z pełną integracją BatchService).
+    Loguje transfer w Apollo, tworzy partię pierwotną i tankuje ją do celu.
+    """
     data = request.get_json()
-    
-    conn = None
     try:
         id_operacji = int(data['id_operacji'])
-        waga_kg = float(data['waga_kg'])
+        waga_kg = Decimal(data['waga_kg'])
         operator = data.get('operator', 'SYSTEM')
 
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
+        operacja = db.session.get(OperacjeLog, id_operacji)
+        if not operacja or operacja.status_operacji != 'aktywna':
+            raise ValueError('Nie znaleziono aktywnej operacji o podanym ID.')
 
-        # Pobierz dane operacji
-        cursor.execute("SELECT id_sprzetu_zrodlowego, id_sprzetu_docelowego FROM operacje_log WHERE id = %s", (id_operacji,))
-        operacja = cursor.fetchone()
-        if not operacja: raise ValueError('Nie znaleziono operacji o podanym ID.')
+        id_apollo = operacja.id_sprzetu_zrodlowego
+        id_celu = operacja.id_sprzetu_docelowego
         
-        id_apollo = operacja['id_sprzetu_zrodlowego']
-        id_celu = operacja['id_sprzetu_docelowego']
+        sesja = db.session.execute(
+            db.select(ApolloSesje).filter_by(id_sprzetu=id_apollo, status_sesji='aktywna')
+        ).scalar_one_or_none()
+        if not sesja:
+            raise ValueError('Nie znaleziono aktywnej sesji dla danego Apollo.')
+
+        # --- KROK 1: Aktualizacja stanu Apollo ---
+        tracking_transfer = ApolloTracking(
+            id_sesji=sesja.id, typ_zdarzenia='TRANSFER_WYJSCIOWY', waga_kg=waga_kg,
+            czas_zdarzenia=dt.now(), id_operacji_log=operacja.id, operator=operator
+        )
+        db.session.add(tracking_transfer)
+
+        # --- KROK 2: Stworzenie partii pierwotnej i zatankowanie jej do celu ---
+        apollo_sprzet = db.session.get(Sprzet, id_apollo)
         
-        # Znajdź sesję Apollo i typ surowca
-        cursor.execute("SELECT id, typ_surowca FROM apollo_sesje WHERE id_sprzetu = %s AND status_sesji = 'aktywna'", (id_apollo,))
-        sesja = cursor.fetchone()
-        if not sesja: raise ValueError('Nie znaleziono aktywnej sesji dla danego Apollo.')
-        typ_surowca_zrodla = sesja['typ_surowca']
-
-        # Pobierz nazwy sprzętu do generowania kodu partii
-        cursor.execute("SELECT nazwa_unikalna FROM sprzet WHERE id = %s", (id_apollo,))
-        zrodlo_info = cursor.fetchone()
-        cursor.execute("SELECT nazwa_unikalna FROM sprzet WHERE id = %s", (id_celu,))
-        cel_info = cursor.fetchone()
-        zrodlo_nazwa = zrodlo_info['nazwa_unikalna'] if zrodlo_info else f"ID{id_apollo}"
-        cel_nazwa = cel_info['nazwa_unikalna'] if cel_info else f"ID{id_celu}"
-
-        # DODATKOWY KROK: Znajdź partię źródłową w Apollo
-        cursor.execute("SELECT * FROM partie_surowca WHERE id_sprzetu = %s LIMIT 1", (id_apollo,))
-        partia_w_apollo = cursor.fetchone()
-        if not partia_w_apollo:
-            # To nie powinno się zdarzyć po zmianach w ApolloService, ale dodajemy zabezpieczenie
-            raise ValueError(f"Nie znaleziono partii surowca dla Apollo o ID {id_apollo}.")
-
-        # 1. Zakończ operację w logu
-        cursor.execute("""
-            UPDATE operacje_log SET status_operacji = 'zakonczona', czas_zakonczenia = NOW(), ilosc_kg = %s, zmodyfikowane_przez = %s, id_apollo_sesji = %s
-            WHERE id = %s
-        """, (waga_kg, operator, sesja['id'], id_operacji))
-
-        # 2. ZWOLNIJ ZASOBY (przywrócona, poprawna logika)
-        sql_znajdz_zawory = """
-            SELECT DISTINCT z.nazwa_zaworu FROM zawory z
-            JOIN segmenty s ON z.id = s.id_zaworu
-            JOIN log_uzyte_segmenty lus ON s.id = lus.id_segmentu
-            WHERE lus.id_operacji_log = %s
-        """
-        cursor.execute(sql_znajdz_zawory, (id_operacji,))
-        zawory_do_zamkniecia = [row['nazwa_zaworu'] for row in cursor.fetchall()]
-
-        if zawory_do_zamkniecia:
-            placeholders = ', '.join(['%s'] * len(zawory_do_zamkniecia))
-            sql_zamknij_zawory = f"UPDATE zawory SET stan = 'ZAMKNIETY' WHERE nazwa_zaworu IN ({placeholders})"
-            cursor.execute(sql_zamknij_zawory, zawory_do_zamkniecia)
-
-        # 3. Zaktualizuj stany sprzętu
-        cursor.execute("UPDATE sprzet SET stan_sprzetu = 'Gotowy' WHERE id = %s", (id_apollo,))
-        cursor.execute("UPDATE sprzet SET stan_sprzetu = 'Zatankowany' WHERE id = %s", (id_celu,))
+        # 2a. Stwórz wirtualną partię pierwotną dla tego transferu
+        batch_result = BatchManagementService.create_raw_material_batch(
+            material_type=sesja.typ_surowca,
+            source_type='APOLLO',
+            source_name=apollo_sprzet.nazwa_unikalna,
+            quantity=waga_kg,
+            operator=operator
+        )
+        nowy_batch_id = batch_result['batch_id']
         
-        # 4. ZARZĄDZANIE PARTIAMI (nowa logika z `partie_skladniki`)
-        cursor.execute("SELECT * FROM partie_surowca WHERE id_sprzetu = %s LIMIT 1", (id_celu,))
-        partia_w_celu = cursor.fetchone()
+        # 2b. Zatankuj tę nową partię do zbiornika docelowego.
+        #    Ta metoda zajmie się całą logiką tworzenia/aktualizacji mieszaniny.
+        BatchManagementService.tank_into_dirty_tank(
+            batch_id=nowy_batch_id,
+            tank_id=id_celu,
+            operator=operator
+        )
 
-        data_transferu = dt.now().strftime('%Y%m%d')
-        czas_transferu = dt.now().strftime('%H%M%S')
+        # --- KROK 3: Zakończenie logistyki operacji ---
+        operacja.status_operacji = 'zakonczona'
+        operacja.czas_zakonczenia = dt.now()
+        operacja.ilosc_kg = waga_kg
+        operacja.zmodyfikowane_przez = operator
+        operacja.id_apollo_sesji = sesja.id
+        
+        # Przypisz ID nowo utworzonej partii do logu operacji
+        # (Możemy to zrobić, choć Batches nie ma bezpośredniej relacji z OperacjeLog)
+        operacja.opis = f"Transfer z {apollo_sprzet.nazwa_unikalna} do zbiornika ID {id_celu}. Utworzono partię pierwotną ID: {nowy_batch_id}."
+        
+        zawory_do_zamkniecia_nazwy = [seg.zawory.nazwa_zaworu for seg in operacja.segmenty if seg.zawory]
+        if zawory_do_zamkniecia_nazwy:
+            stmt = db.update(Zawory).where(
+                Zawory.nazwa_zaworu.in_(zawory_do_zamkniecia_nazwy)
+            ).values(stan='ZAMKNIETY')
+            db.session.execute(stmt)
 
-        if partia_w_celu:
-            typ_surowca_w_celu = partia_w_celu['typ_surowca']
-            
-            # Jeśli typy są takie same, po prostu zaktualizuj wagę
-            if typ_surowca_w_celu == typ_surowca_zrodla:
-                nowa_waga = float(partia_w_celu['waga_aktualna_kg']) + waga_kg
-                cursor.execute("UPDATE partie_surowca SET waga_aktualna_kg = %s WHERE id = %s", (nowa_waga, partia_w_celu['id']))
-            else:
-                # Jeśli typy są różne - tworzymy mieszaninę
-                cursor.execute("UPDATE partie_surowca SET id_sprzetu = NULL, status_partii = 'Archiwalna' WHERE id = %s", (partia_w_celu['id'],))
-                
-                # Inteligentne tworzenie nowego typu mieszaniny
-                skladniki_typow = set()
-                if typ_surowca_w_celu.startswith('MIX('):
-                    # Wyciągnij istniejące typy z MIX(...)
-                    istniejace_typy = typ_surowca_w_celu[4:-1].split(',')
-                    for t in istniejace_typy:
-                        skladniki_typow.add(t.strip())
-                else:
-                    skladniki_typow.add(typ_surowca_w_celu)
-                
-                skladniki_typow.add(typ_surowca_zrodla)
-                nowy_typ_mieszaniny = f"MIX({', '.join(sorted(list(skladniki_typow)))})"
-
-                # Nowy, bardziej szczegółowy opis
-                nowa_waga = float(partia_w_celu['waga_aktualna_kg']) + waga_kg
-                pochodzenie_opis = (f"Mieszanina stworzona z: "
-                                    f"{partia_w_celu['waga_aktualna_kg']}kg partii '{partia_w_celu['unikalny_kod']}' ({typ_surowca_w_celu}) "
-                                    f"oraz {waga_kg}kg transferu z Apollo ({typ_surowca_zrodla}).")
-                
-                unikalny_kod = f"MIX-{data_transferu}_{czas_transferu}-{zrodlo_nazwa}-{cel_nazwa}"
-                
-                cursor.execute("""
-                    INSERT INTO partie_surowca (unikalny_kod, nazwa_partii, typ_surowca, waga_aktualna_kg, waga_poczatkowa_kg, id_sprzetu, zrodlo_pochodzenia, pochodzenie_opis, status_partii, typ_transformacji)
-                    VALUES (%s, %s, %s, %s, %s, %s, 'apollo', %s, 'Surowy w reaktorze', 'MIESZANIE')
-                """, (unikalny_kod, unikalny_kod, nowy_typ_mieszaniny, nowa_waga, nowa_waga, id_celu, pochodzenie_opis))
-                nowa_partia_id = cursor.lastrowid
-
-                # Zapisz składniki w nowej tabeli
-                skladniki = [
-                    (nowa_partia_id, partia_w_celu['id'], partia_w_celu['waga_aktualna_kg']),
-                    (nowa_partia_id, partia_w_apollo['id'], waga_kg)
-                ]
-                cursor.executemany("""
-                    INSERT INTO partie_skladniki (id_partii_wynikowej, id_partii_skladowej, waga_skladowa_kg)
-                    VALUES (%s, %s, %s)
-                """, skladniki)
-        else:
-            # Tworzenie nowej partii w pustym urządzeniu
-            pochodzenie_opis = f"Roztankowanie z {zrodlo_nazwa} w ramach operacji ID: {id_operacji}"
-            unikalny_kod = f"{typ_surowca_zrodla.replace(' ', '_')}-{data_transferu}_{czas_transferu}-{zrodlo_nazwa}-{cel_nazwa}"
-            
-            cursor.execute("""
-                INSERT INTO partie_surowca (unikalny_kod, nazwa_partii, typ_surowca, waga_aktualna_kg, waga_poczatkowa_kg, id_sprzetu, 
-                zrodlo_pochodzenia, pochodzenie_opis, status_partii, data_utworzenia, typ_transformacji)
-                VALUES (%s, %s, %s, %s, %s, %s, 'apollo', %s, 'Surowy w reaktorze', NOW(), 'TRANSFER')
-            """, (unikalny_kod, unikalny_kod, typ_surowca_zrodla, waga_kg, waga_kg, id_celu, pochodzenie_opis))
-            nowa_partia_id = cursor.lastrowid
-            
-            # Powiąż nową partię z partią w Apollo
-            cursor.execute("""
-                INSERT INTO partie_skladniki (id_partii_wynikowej, id_partii_skladowej, waga_skladowa_kg)
-                VALUES (%s, %s, %s)
-            """, (nowa_partia_id, partia_w_apollo['id'], waga_kg))
-
-        # 5. Zaktualizuj wagę partii w Apollo
-        nowa_waga_apollo = float(partia_w_apollo['waga_aktualna_kg']) - waga_kg
-        cursor.execute("UPDATE partie_surowca SET waga_aktualna_kg = %s WHERE id = %s", (nowa_waga_apollo, partia_w_apollo['id']))
-
-        conn.commit()
-        return jsonify({'success': True, 'message': f'Operacja {id_operacji} zakończona.'})
+        if operacja.sprzet_zrodlowy:
+            operacja.sprzet_zrodlowy.stan_sprzetu = 'Gotowy'
+        if operacja.sprzet_docelowy:
+            operacja.sprzet_docelowy.stan_sprzetu = 'Zatankowany'
+        
+        # Zamiast ręcznie zarządzać PartiąSurowca, pozwalamy, aby BatchManagementService to robił.
+        # Usuwamy starą logikę:
+        # partia_w_apollo = db.session.execute(...).scalar_one_or_none()
+        # if partia_w_apollo:
+        #     partia_w_apollo.waga_aktualna_kg -= waga_kg
+        
+        db.session.commit()
+        return jsonify({'success': True, 'message': f'Operacja {id_operacji} zakończona. Utworzono i zatankowano partię.'})
 
     except (ValueError, KeyError) as e:
-        if conn and conn.is_connected(): conn.rollback()
+        db.session.rollback()
         return jsonify({'error': str(e)}), 400
-    except mysql.connector.Error as err:
-        if conn and conn.is_connected(): conn.rollback()
-        return jsonify({'error': f'Błąd bazy danych: {err}'}), 500
-    finally:
-        if 'cursor' in locals() and cursor: cursor.close()
-        if conn and conn.is_connected(): conn.close() 
+    except Exception as e:
+        db.session.rollback()
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Błąd serwera: {str(e)}'}), 500
 
 @bp.route('/apollo-transfer/anuluj', methods=['POST'])
 def anuluj_apollo_transfer():
