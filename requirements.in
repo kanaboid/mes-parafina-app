@@ -1,0 +1,18 @@
+# requirements.in
+
+# Main dependencies
+flask
+flask-sqlalchemy
+mysql-connector-python
+alembic
+flask-apscheduler
+python-dotenv
+networkx
+tabulate
+flask-socketio
+eventlet
+
+# Linux
+gunicorn
+# Windows
+pywin32==310; sys_platform == 'win32'
