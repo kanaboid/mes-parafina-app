@@ -4,6 +4,8 @@ from datetime import datetime
 from flask import current_app
 from mysql.connector.errors import OperationalError
 from .db import get_db_connection
+from .extensions import db
+from .models import Sprzet, OperatorTemperatures
 
 class SensorService:
     def __init__(self, app=None):
@@ -170,3 +172,92 @@ class SensorService:
         elif typ_sprzetu == 'reaktor':
             return round(random.uniform(0, 2), 2)
         return 0.0
+
+    @staticmethod
+    def set_temperature_for_multiple(equipment_names, temperatura):
+        """
+        Ustawia hurtowo temperaturę docelową dla listy sprzętów.
+        
+        :param equipment_names: Lista stringów z nazwami unikalnymi sprzętów.
+        :param temperatura: Nowa temperatura docelowa.
+        :return: Lista nazw sprzętów, które udało się zaktualizować.
+        """
+        if not equipment_names:
+            return []
+
+        try:
+            # Krok 1: Znajdź ID sprzętów na podstawie ich nazw
+            sprzety_q = db.select(Sprzet).where(Sprzet.nazwa_unikalna.in_(equipment_names))
+            sprzety_do_aktualizacji = db.session.execute(sprzety_q).scalars().all()
+
+            if not sprzety_do_aktualizacji:
+                print("Nie znaleziono żadnego sprzętu o podanych nazwach.")
+                return []
+
+            ids_do_aktualizacji = [s.id for s in sprzety_do_aktualizacji]
+            nazwy_zaktualizowane = [s.nazwa_unikalna for s in sprzety_do_aktualizacji]
+            current_time = datetime.now()
+
+            # Krok 2: Użyj `update` do masowej aktualizacji w tabeli `sprzet`
+            stmt_sprzet = db.update(Sprzet).where(
+                Sprzet.id.in_(ids_do_aktualizacji)
+            ).values(
+                temperatura_aktualna=temperatura,
+                temperatura_docelowa=temperatura,
+                ostatnia_aktualizacja=current_time
+            )
+            db.session.execute(stmt_sprzet)
+
+            # Krok 3: Dodaj wpisy do historii `operator_temperatures`
+            # Robimy to w pętli, ponieważ musimy dodać osobne wiersze
+            nowe_wpisy_historii = []
+            for sprzet_id in ids_do_aktualizacji:
+                nowe_wpisy_historii.append(
+                    OperatorTemperatures(id_sprzetu=sprzet_id, temperatura=temperatura, czas_ustawienia=current_time)
+                )
+            db.session.add_all(nowe_wpisy_historii)
+            
+            db.session.commit()
+            return nazwy_zaktualizowane
+
+        except Exception as e:
+            db.session.rollback()
+            print(f"Wystąpił błąd podczas masowej aktualizacji temperatury: {e}")
+            raise
+
+    @staticmethod
+    def get_temperatures_for_multiple(equipment_names):
+        """
+        Pobiera aktualne i docelowe temperatury dla listy sprzętów.
+        
+        :param equipment_names: Lista stringów z nazwami unikalnymi sprzętów.
+        :return: Lista słowników z danymi o temperaturze dla każdego znalezionego sprzętu.
+        """
+        if not equipment_names:
+            return []
+
+        try:
+            # Używamy select() do wybrania konkretnych kolumn, co jest bardziej wydajne
+            sprzety_q = db.select(
+                Sprzet.nazwa_unikalna,
+                Sprzet.temperatura_aktualna,
+                Sprzet.temperatura_docelowa
+            ).where(
+                Sprzet.nazwa_unikalna.in_(equipment_names)
+            )
+            
+            # .all() zwróci listę obiektów Row, które działają podobnie do słowników
+            results = db.session.execute(sprzety_q).all()
+            
+            # Konwertujemy listę Row na listę słowników dla łatwiejszego użycia
+            return [
+                {
+                    "nazwa": row.nazwa_unikalna,
+                    "aktualna": row.temperatura_aktualna,
+                    "docelowa": row.temperatura_docelowa
+                } 
+                for row in results
+            ]
+        except Exception as e:
+            print(f"Wystąpił błąd podczas pobierania temperatur: {e}")
+            raise
