@@ -12,6 +12,7 @@ services:
       - MYSQLUSER=${MYSQLUSER}
       - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
       - MYSQLHOST=db # Hostem jest nazwa usługi bazy danych
+      - TZ=Europe/Warsaw
     networks:
       - mes-parafina-net
     depends_on:
