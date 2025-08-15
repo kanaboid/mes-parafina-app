@@ -8,8 +8,8 @@ from .sensors import SensorService
 from flask_apscheduler import APScheduler
 from datetime import datetime
 from flask_sqlalchemy import SQLAlchemy
-from .extensions import db
-from flask_socketio import SocketIO
+from .extensions import db, socketio
+
 
 
 # ... instancje pathfinder, monitoring, sensor_service, scheduler ...
@@ -17,7 +17,7 @@ pathfinder = PathFinder()
 monitoring = MonitoringService()
 sensor_service = SensorService()
 scheduler = APScheduler()
-socketio = SocketIO()
+
 
 
 def create_app(config_class=Config): # ZMIANA: Dodajemy opcjonalny argument
