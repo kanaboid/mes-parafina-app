@@ -9,6 +9,7 @@ from flask_apscheduler import APScheduler
 from datetime import datetime
 from flask_sqlalchemy import SQLAlchemy
 from .extensions import db
+from flask_socketio import SocketIO
 
 
 # ... instancje pathfinder, monitoring, sensor_service, scheduler ...
@@ -16,12 +17,15 @@ pathfinder = PathFinder()
 monitoring = MonitoringService()
 sensor_service = SensorService()
 scheduler = APScheduler()
+socketio = SocketIO()
+
 
 def create_app(config_class=Config): # ZMIANA: Dodajemy opcjonalny argument
     app = Flask(__name__)
     app.config.from_object(config_class)
     
     db.init_app(app)
+    socketio.init_app(app)
     # Inicjalizacja serwisów
     if not app.config.get('TESTING'):
         pathfinder.init_app(app)
@@ -81,5 +85,6 @@ def create_app(config_class=Config): # ZMIANA: Dodajemy opcjonalny argument
     @app.route('/hello')
     def hello():
         return "Witaj w aplikacji MES!"
+    from . import sockets
 
     return app

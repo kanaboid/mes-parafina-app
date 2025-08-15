@@ -33,7 +33,11 @@ def index():
     """Serwuje główną stronę aplikacji (frontend)."""
     return render_template('index.html')
 
-# --- DODAJ TĘ NOWĄ FUNKCJĘ ---
+
+@bp.route('/console')
+def console():
+    """Serwuje stronę konsoli administracyjnej."""
+    return render_template('console.html')
 
 @bp.route('/batch-tester')
 def batch_tester_page():
