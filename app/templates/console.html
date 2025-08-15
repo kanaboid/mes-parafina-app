@@ -27,34 +27,34 @@
             const output = document.getElementById('console-output');
             const input = document.getElementById('console-input');
             
-            // Nawiąż połączenie z serwerem
             const socket = io();
-
+    
             function logToConsole(message, className = 'server-response') {
-                const p = document.createElement('p');
-                p.textContent = message;
-                p.className = className;
-                output.appendChild(p);
-                output.scrollTop = output.scrollHeight; // Auto-scroll
+                const pre = document.createElement('pre'); // Używamy <pre> dla zachowania formatowania
+                pre.textContent = message;
+                pre.className = className;
+                output.appendChild(pre);
+                output.scrollTop = output.scrollHeight;
             }
-
-            // Obsługa połączenia
+    
             socket.on('connect', () => {
                 console.log('Połączono z serwerem Socket.IO!');
             });
-
+    
             // Obsługa wiadomości z serwera
             socket.on('response', (msg) => {
-                logToConsole(msg.data);
+                // Sprawdzamy, czy serwer oznaczył wiadomość jako błąd
+                const className = msg.is_error ? 'error-response' : 'server-response';
+                logToConsole(msg.data, className);
             });
-
+    
             // Obsługa wysyłania komend
             input.addEventListener('keydown', (event) => {
                 if (event.key === 'Enter' && input.value.trim() !== '') {
                     const command = input.value;
                     logToConsole(`> ${command}`, 'client-command');
-                    // Wyślij wiadomość do serwera
-                    socket.emit('message_from_client', { data: command });
+                    // --- ZMIANA NAZWY ZDARZENIA ---
+                    socket.emit('command_from_client', { data: command });
                     input.value = '';
                 }
             });
