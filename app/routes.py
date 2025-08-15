@@ -34,7 +34,7 @@ def index():
     return render_template('index.html')
 
 
-@bp.route('/console')
+@bp.route('/admin-console')
 def console():
     """Serwuje stronę konsoli administracyjnej."""
     return render_template('console.html')
