@@ -6,7 +6,7 @@ from .pathfinder_service import PathFinder
 from .monitoring import MonitoringService
 from .sensors import SensorService
 from flask_apscheduler import APScheduler
-from datetime import datetime
+from datetime import datetime, timezone
 from flask_sqlalchemy import SQLAlchemy
 from .extensions import db, socketio
 
@@ -52,7 +52,7 @@ def create_app(config_class=Config): # ZMIANA: Dodajemy opcjonalny argument
                        id='read_sensors', 
                        seconds=600,
                        max_instances=1,
-                       next_run_time=datetime.now())
+                       next_run_time=datetime.now(timezone.utc))
         def read_sensors():
             with app.app_context():
                 try:

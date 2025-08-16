@@ -2,7 +2,7 @@
 # type: ignore
 
 from flask import Blueprint, jsonify, request, render_template
-from datetime import datetime
+from datetime import datetime, timezone
 from .topology_manager import TopologyManager
 from .pathfinder_tester import PathFinderTester
 from .db import get_db_connection
@@ -435,7 +435,7 @@ def api_topology_text():
             'success': True,
             'data': {
                 'text': text_description,
-                'generated_at': datetime.now().isoformat()
+                'generated_at': datetime.now(timezone.utc).isoformat()
             }
         })
     except Exception as e:
@@ -802,7 +802,7 @@ def api_health_check():
                 'summary': {
                     'total_issues': total_issues,
                     'total_warnings': total_warnings,
-                    'checked_at': datetime.now().isoformat()
+                    'checked_at': datetime.now(timezone.utc).isoformat()
                 }
             }
         })
@@ -857,7 +857,7 @@ def api_isolated_nodes():
                 'summary': {
                     'isolated_count': len(isolated_nodes),
                     'dead_end_count': len(dead_end_nodes),
-                    'analyzed_at': datetime.now().isoformat()
+                    'analyzed_at': datetime.now(timezone.utc).isoformat()
                 }
             }
         })

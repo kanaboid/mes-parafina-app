@@ -3,7 +3,7 @@
 
 import mysql.connector
 from flask import current_app, jsonify
-from datetime import datetime
+from datetime import datetime, timezone
 from .db import get_db_connection
 import json
 
@@ -495,7 +495,7 @@ class TopologyManager:
             return {
                 'nodes': nodes,
                 'edges': edges,
-                'timestamp': datetime.now().isoformat()
+                'timestamp': datetime.now(timezone.utc).isoformat()
             }
         finally:
             cursor.close()

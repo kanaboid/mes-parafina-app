@@ -19,6 +19,7 @@ class Config:
     SQLALCHEMY_DATABASE_URI = (
         f"mysql+mysqlconnector://{MYSQL_USER}:{MYSQL_PASSWORD}@"
         f"{MYSQL_HOST}/{MYSQL_DB}"
+        "?charset=utf8mb4"
     )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     TESTING = False
@@ -34,6 +35,7 @@ class TestConfig(Config):
     SQLALCHEMY_DATABASE_URI = (
         f"mysql+mysqlconnector://{MYSQL_USER}:{MYSQL_PASSWORD}@"
         f"{MYSQL_HOST}/{MYSQL_DB}"
+        "?charset=utf8mb4"
     )
 
 class DevConfigForTesting(Config):

@@ -1,6 +1,6 @@
 import random
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from flask import current_app
 from mysql.connector.errors import OperationalError
 from .db import get_db_connection
@@ -35,7 +35,7 @@ class SensorService:
             try:
                 conn = get_db_connection()
                 cursor = conn.cursor()
-                current_time = datetime.now()
+                current_time = datetime.now(timezone.utc)
 
                 # Zapisz nową temperaturę bazową, od której symulacja będzie liczyć
                 cursor.execute("""
@@ -95,14 +95,15 @@ class SensorService:
             """, (sprzet_id,))
             
             operator_temp = cursor.fetchone()
-            current_time = datetime.now()
+            current_time = datetime.now(timezone.utc)
             
             if not operator_temp:
                 # Brak ustawionej temperatury - użyj domyślnej
                 return 60.0
-                
+            czas_ustawienia_z_bazy = operator_temp['czas_ustawienia']
+            czas_ustawienia_aware = czas_ustawienia_z_bazy.replace(tzinfo=timezone.utc)
             # Oblicz przyrost temperatury
-            minutes_passed = (current_time - operator_temp['czas_ustawienia']).total_seconds() / 60.0
+            minutes_passed = (current_time - czas_ustawienia_aware).total_seconds() / 60.0
             base_temperature = float(operator_temp['temperatura'])
             temperature_rise = minutes_passed * 0.14
             new_temperature = base_temperature + temperature_rise
@@ -116,7 +117,7 @@ class SensorService:
     def read_sensors(self):
         """Odczytuje i aktualizuje dane z czujników"""
         
-        current_time = datetime.now()
+        current_time = datetime.now(timezone.utc)
         print(f"[{current_time}] Rozpoczynam odczyt czujników...")
         
         conn = get_db_connection()
@@ -196,7 +197,7 @@ class SensorService:
 
             ids_do_aktualizacji = [s.id for s in sprzety_do_aktualizacji]
             nazwy_zaktualizowane = [s.nazwa_unikalna for s in sprzety_do_aktualizacji]
-            current_time = datetime.now()
+            current_time = datetime.now(timezone.utc)
 
             # Krok 2: Użyj `update` do masowej aktualizacji w tabeli `sprzet`
             stmt_sprzet = db.update(Sprzet).where(

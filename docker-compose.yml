@@ -12,7 +12,7 @@ services:
       - MYSQLUSER=${MYSQLUSER}
       - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
       - MYSQLHOST=db # Hostem jest nazwa usługi bazy danych
-      - TZ=Europe/Warsaw
+      - TZ=UTC
     networks:
       - mes-parafina-net
     depends_on:
@@ -33,7 +33,7 @@ services:
       - MYSQL_USER=${MYSQLUSER}
       # Uwaga: obraz MySQL używa MYSQL_PASSWORD do ustawienia hasła dla nowo tworzonego użytkownika
       - MYSQL_PASSWORD=${MYSQL_PASSWORD_FOR_USER}
-      - TZ=Europe/Warsaw
+      - TZ=UTC
     volumes:
       - mysql_data:/var/lib/mysql
     networks:

@@ -1,5 +1,17 @@
 {% extends "base.html" %}
-
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  document.querySelectorAll('.utc-datetime').forEach(el => {
+    const raw = (el.dataset.utc || el.textContent || '').trim();
+    if (!raw || raw === '---') return;
+    // Utnij ułamki sekund (np. .536000), żeby Date nie wywalił parsowania
+    const cleaned = raw.split('.')[0];
+    el.textContent = formatUTCDateToLocal(cleaned);
+  });
+});
+</script>
+{% endblock %}
 {% block title %}Historia Alarmów - System MES{% endblock %}
 
 {% block content %}
@@ -26,8 +38,8 @@
             <td>{{ alarm.nazwa_sprzetu }}</td>
             <td>{{ alarm.wartosc }}</td>
             <td>{{ alarm.limit_przekroczenia }}</td>
-            <td>{{ alarm.czas_wystapienia.strftime('%Y-%m-%d %H:%M:%S') }}</td>
-            <td>{{ alarm.czas_zakonczenia.strftime('%Y-%m-%d %H:%M:%S') if alarm.czas_zakonczenia else '---' }}</td>
+            <td class="utc-datetime" data-utc="{{ alarm.czas_wystapienia.isoformat() }}">{{ alarm.czas_wystapienia.isoformat() }}</td>
+            <td class="utc-datetime" data-utc="{{ alarm.czas_zakonczenia.isoformat() if alarm.czas_zakonczenia else '---' }}">{{ alarm.czas_zakonczenia.isoformat() if alarm.czas_zakonczenia else '---' }}</td>
             <td>{{ alarm.status_alarmu }}</td>
         </tr>
         {% else %}

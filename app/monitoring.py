@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 import mysql.connector
 from flask import current_app
 from .db import get_db_connection
@@ -78,11 +78,11 @@ class MonitoringService:
         sql = """INSERT INTO alarmy 
                  (typ_alarmu, nazwa_sprzetu, wartosc, limit_przekroczenia, czas_wystapienia, status_alarmu) 
                  VALUES (%s, %s, %s, %s, %s, 'AKTYWNY')"""
-        cursor.execute(sql, (typ_alarmu, nazwa_sprzetu, wartosc, limit, datetime.now()))
+        cursor.execute(sql, (typ_alarmu, nazwa_sprzetu, wartosc, limit, datetime.now(timezone.utc)))
 
     def _resolve_alarm(self, cursor, alarm_id):
         """Prywatna metoda do zamykania istniejącego alarmu."""
         sql = """UPDATE alarmy 
                  SET status_alarmu = 'ZAKONCZONY', czas_zakonczenia = %s 
                  WHERE id = %s"""
-        cursor.execute(sql, (datetime.now(), alarm_id))
+        cursor.execute(sql, (datetime.now(timezone.utc), alarm_id))

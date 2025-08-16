@@ -48,6 +48,7 @@ document.addEventListener('DOMContentLoaded', () => {
      */
     function createApolloCard(apollo) {
         const isActive = apollo.aktywna_sesja;
+        const lastTransferTime = formatUTCDateToLocal(apollo.ostatni_transfer_czas);
         const cardClass = isActive ? 'border-primary' : 'border-secondary';
         const headerClass = isActive ? 'bg-primary text-white' : 'bg-light';
 
@@ -91,7 +92,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 <p class="mb-1"><strong>Wytopione:</strong> <span class="fw-bold fs-5">${apollo.dostepne_kg} kg</span></p>
                                 <p class="text-muted"><strong>Całkowity bilans sesji:</strong> ${apollo.bilans_sesji_kg} kg</p>
                                 ${apollo.ostatni_transfer_czas 
-                                    ? `<p class="text-info-emphasis small mt-2">Ostatnie roztankowanie: ${apollo.ostatni_transfer_kg} kg o ${apollo.ostatni_transfer_czas}</p>`
+                                    ? `<p class="text-info-emphasis small mt-2">Ostatnie roztankowanie: ${apollo.ostatni_transfer_kg} kg o ${lastTransferTime}</p>`
                                     : '<p class="text-muted small mt-2">Brak transferów w tej sesji.</p>'
                                 }
                             `
@@ -149,11 +150,12 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 apolloTransfers.forEach(op => {
                     const opElement = document.createElement('div');
+                    const startTimeLocal = formatUTCDateToLocal(op.czas_rozpoczecia);
                     opElement.className = 'list-group-item d-flex justify-content-between align-items-center';
                     opElement.innerHTML = `
                         <div>
                             <strong>ID: ${op.id}</strong> - ${op.opis}
-                            <small class="text-muted d-block">Rozpoczęto: ${op.czas_rozpoczecia}</small>
+                            <small class="text-muted d-block">Rozpoczęto: ${startTimeLocal}</small>
                         </div>
                         <div class="btn-group" role="group">
                             <button class="btn btn-success btn-sm" data-action="end-transfer" data-op-id="${op.id}">Zakończ</button>
@@ -230,9 +232,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 tableBody.innerHTML = '';
                 if (historyData.length > 0) {
                     historyData.forEach(row => {
+                        const endTimeLocal = formatUTCDateToLocal(row.czas_zakonczenia);
                         tableBody.innerHTML += `
                             <tr>
-                                <td>${row.czas_zakonczenia}</td>
+                                <td>${endTimeLocal}</td>
                                 <td>${row.ilosc_kg}</td>
                                 <td>${row.nazwa_celu || 'Brak danych'}</td>
                             </tr>
@@ -265,9 +268,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (historia.length > 0) {
                 historia.forEach(wpis => {
+                    const eventTimeLocal = formatUTCDateToLocal(wpis.czas_zdarzenia.substring(0, 19));
                     const row = `
                         <tr>
-                            <td>${new Date(wpis.czas_zdarzenia).toLocaleString()}</td>
+                            <td>${eventTimeLocal}</td>
                             <td>${wpis.typ_zdarzenia === 'DODANIE_SUROWCA' ? 'Dodanie surowca' : 'Korekta ręczna'}</td>
                             <td>${wpis.waga_kg}</td>
                             <td>${wpis.operator || '-'}</td>

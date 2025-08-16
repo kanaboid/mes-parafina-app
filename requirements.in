@@ -11,6 +11,7 @@ networkx
 tabulate
 flask-socketio
 eventlet
+pytest 
 
 # Linux
 gunicorn

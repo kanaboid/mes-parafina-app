@@ -27,7 +27,7 @@ class ApolloService:
             # przy autocommit=False, wiÄ™c nie ma potrzeby wywoĹ‚ywaÄ‡ start_transaction()
             
             # 1. StwĂłrz nowÄ… sesjÄ™
-            czas_startu = datetime.now()
+            czas_startu = datetime.now(timezone.utc)
             cursor.execute("""
                 INSERT INTO apollo_sesje 
                 (id_sprzetu, typ_surowca, czas_rozpoczecia, rozpoczeta_przez, status_sesji) 
@@ -47,7 +47,7 @@ class ApolloService:
             sprzet_info = cursor.fetchone()
             nazwa_sprzetu = sprzet_info['nazwa_unikalna'] if sprzet_info else f"ID{id_sprzetu}"
             
-            teraz = datetime.now()
+            teraz = datetime.now(timezone.utc)
             timestamp_str = teraz.strftime('%Y%m%d-%H%M%S')
             unikalny_kod_partii = f"{nazwa_sprzetu}-{timestamp_str}"
             nazwa_partii = f"Partia w {nazwa_sprzetu} ({typ_surowca}) - {timestamp_str}"
@@ -91,7 +91,7 @@ class ApolloService:
                 INSERT INTO apollo_tracking
                 (id_sesji, typ_zdarzenia, waga_kg, czas_zdarzenia, operator)
                 VALUES (%s, 'DODANIE_SUROWCA', %s, %s, %s)
-            """, (id_sesji, waga_kg, datetime.now(), operator))
+            """, (id_sesji, waga_kg, datetime.now(timezone.utc), operator))
             
             # Zaktualizuj wagÄ™ partii w Apollo
             cursor.execute("""
@@ -111,7 +111,7 @@ class ApolloService:
                 sprzet_info = cursor.fetchone()
                 nazwa_sprzetu = sprzet_info['nazwa_unikalna'] if sprzet_info else f"ID{id_sprzetu}"
 
-                teraz = datetime.now()
+                teraz = datetime.now(timezone.utc)
                 timestamp_str = teraz.strftime('%Y%m%d-%H%M%S')
                 unikalny_kod_partii = f"{nazwa_sprzetu}-{timestamp_str}-AUTOCREATED"
                 nazwa_partii = f"Partia w {nazwa_sprzetu} ({typ_surowca}) - {timestamp_str}"
@@ -194,7 +194,7 @@ class ApolloService:
                 limit_topnienia = sum(float(z['waga_kg']) for z in zdarzenia if z['typ_zdarzenia'] == 'DODANIE_SUROWCA')
 
             # Oblicz, ile surowca mogĹ‚o siÄ™ stopiÄ‡ od punktu startowego
-            czas_topienia_sekundy = (datetime.now() - punkt_startowy_czas).total_seconds()
+            czas_topienia_sekundy = (datetime.now(timezone.utc) - punkt_startowy_czas).total_seconds()
             wytopiono_w_czasie = (czas_topienia_sekundy / 3600.0) * ApolloService.SZYBKOSC_WYTAPIANIA_KG_H
             
             # IloĹ›Ä‡ stopiona nie moĹĽe przekroczyÄ‡ limitu dostÄ™pnego surowca staĹ‚ego
@@ -241,7 +241,7 @@ class ApolloService:
                 INSERT INTO apollo_tracking
                 (id_sesji, typ_zdarzenia, waga_kg, czas_zdarzenia, operator, uwagi)
                 VALUES (%s, 'KOREKTA_RECZNA', %s, %s, %s, %s)
-            """, (id_sesji, rzeczywista_waga_kg, datetime.now(), operator, uwagi))
+            """, (id_sesji, rzeczywista_waga_kg, datetime.now(timezone.utc), operator, uwagi))
             
             conn.commit()
 
@@ -346,7 +346,7 @@ class ApolloService:
                 punkt_odniesienia = czas_ostatniej_operacji or sesja['czas_rozpoczecia']
                 
                 # PorĂłwnujemy "naiwne" obiekty datetime.
-                czas_teraz = datetime.now()
+                czas_teraz = datetime.now(timezone.utc)
                 
                 czas_od_ostatniej_operacji_s = (czas_teraz - punkt_odniesienia).total_seconds()
                 czas_od_ostatniej_operacji_h = max(0, czas_od_ostatniej_operacji_s) / 3600
@@ -579,7 +579,7 @@ def rozpocznij_cykl_filtracyjny():
             'dmuchanie': 45
         }
         
-        planowany_czas = datetime.now() + timedelta(minutes=durations.get(data['typ_cyklu'], 30))
+        planowany_czas = datetime.now(timezone.utc) + timedelta(minutes=durations.get(data['typ_cyklu'], 30))
         
         # Wstaw nowy cykl
         cursor.execute("""
@@ -900,14 +900,14 @@ class MonitoringService:
         sql = """INSERT INTO alarmy 
                  (typ_alarmu, nazwa_sprzetu, wartosc, limit_przekroczenia, czas_wystapienia, status_alarmu) 
                  VALUES (%s, %s, %s, %s, %s, 'AKTYWNY')"""
-        cursor.execute(sql, (typ_alarmu, nazwa_sprzetu, wartosc, limit, datetime.now()))
+        cursor.execute(sql, (typ_alarmu, nazwa_sprzetu, wartosc, limit, datetime.now(timezone.utc)))
 
     def _resolve_alarm(self, cursor, alarm_id):
         """Prywatna metoda do zamykania istniejÄ…cego alarmu."""
         sql = """UPDATE alarmy 
                  SET status_alarmu = 'ZAKOĹCZONY', czas_zakonczenia = %s 
                  WHERE id = %s"""
-        cursor.execute(sql, (datetime.now(), alarm_id))
+        cursor.execute(sql, (datetime.now(timezone.utc), alarm_id))
 # app/operations_routes.py
 from flask import Blueprint, jsonify, request, current_app
 from datetime import datetime
@@ -973,7 +973,7 @@ def tankowanie():
             }), 400
 
         # Krok 4: Stworzenie unikalnego kodu partii
-        teraz = datetime.now()
+        teraz = datetime.now(timezone.utc)
         unikalny_kod = f"{dane['typ_surowca']}-{teraz.strftime('%Y%m%d-%H%M%S')}-{dane['zrodlo_pochodzenia'].upper()}"
 
         # Krok 5: Stworzenie nowej partii surowca
@@ -1377,7 +1377,7 @@ def tankowanie_brudnego():
             return jsonify({'message': 'Beczka nie znaleziona'}), 404
 
         # Stworzenie unikalnego kodu partii
-        teraz = datetime.now()
+        teraz = datetime.now(timezone.utc)
         unikalny_kod = f"{dane['typ_surowca']}-{teraz.strftime('%Y%m%d-%H%M%S')}-{beczka['nazwa_unikalna']}"
 
         # UĹĽycie kursora bez dictionary=True do operacji zapisu
@@ -1852,8 +1852,8 @@ def end_apollo_transfer():
         cursor.execute("SELECT * FROM partie_surowca WHERE id_sprzetu = %s LIMIT 1", (id_celu,))
         partia_w_celu = cursor.fetchone()
 
-        data_transferu = datetime.now().strftime('%Y%m%d')
-        czas_transferu = datetime.now().strftime('%H%M%S')
+        data_transferu = datetime.now(timezone.utc).strftime('%Y%m%d')
+        czas_transferu = datetime.now(timezone.utc).strftime('%H%M%S')
 
         if partia_w_celu:
             typ_surowca_w_celu = partia_w_celu['typ_surowca']
@@ -2158,7 +2158,7 @@ def end_cysterna_transfer():
         partia_w_celu = cursor.fetchone()
 
         # Stworzenie "wirtualnej" partii dla dostawy
-        unikalny_kod_dostawy = f"{typ_surowca_dostawy.replace(' ', '_')}-{datetime.now().strftime('%Y%m%d_%H%M%S')}-DOSTAWA"
+        unikalny_kod_dostawy = f"{typ_surowca_dostawy.replace(' ', '_')}-{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}-DOSTAWA"
         cursor.execute("""
             INSERT INTO partie_surowca (unikalny_kod, nazwa_partii, typ_surowca, waga_aktualna_kg, waga_poczatkowa_kg, id_sprzetu, zrodlo_pochodzenia, pochodzenie_opis, status_partii, data_utworzenia)
             VALUES (%s, %s, %s, %s, %s, NULL, 'cysterna', %s, 'Archiwalna', NOW())
@@ -2183,7 +2183,7 @@ def end_cysterna_transfer():
             
             # 3. UtwĂłrz nowÄ… partiÄ™ wynikowÄ… (mieszaninÄ™)
             nowa_waga = float(partia_w_celu['waga_aktualna_kg']) + waga_kg
-            unikalny_kod_mix = f"MIX-{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            unikalny_kod_mix = f"MIX-{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
             cursor.execute("""
                 INSERT INTO partie_surowca (unikalny_kod, nazwa_partii, typ_surowca, waga_aktualna_kg, waga_poczatkowa_kg, id_sprzetu, status_partii, typ_transformacji)
                 VALUES (%s, %s, %s, %s, %s, %s, 'Surowy w reaktorze', 'MIESZANIE')
@@ -3375,7 +3375,7 @@ def get_historia_pomiarow():
             JOIN sprzet s ON h.id_sprzetu = s.id
             WHERE h.czas_pomiaru > %s
             ORDER BY h.czas_pomiaru DESC
-        """, (datetime.now() - timedelta(hours=24),))
+        """, (datetime.now(timezone.utc) - timedelta(hours=24),))
         
         pomiary = cursor.fetchall()
         
@@ -3407,7 +3407,7 @@ def potwierdz_alarm():
             SET status_alarmu = 'POTWIERDZONY',
                 czas_potwierdzenia = %s
             WHERE id = %s AND status_alarmu = 'AKTYWNY'
-        """, (datetime.now(), id_alarmu))
+        """, (datetime.now(timezone.utc), id_alarmu))
         
         conn.commit()
         
@@ -3719,7 +3719,7 @@ def rozpocznij_cykl_filtracyjny():
             'dmuchanie': 45
         }
         
-        planowany_czas = datetime.now() + timedelta(minutes=durations.get(data['typ_cyklu'], 30))
+        planowany_czas = datetime.now(timezone.utc) + timedelta(minutes=durations.get(data['typ_cyklu'], 30))
         
         # Wstaw nowy cykl
         cursor.execute("""
@@ -4858,7 +4858,7 @@ class SensorService:
             try:
                 conn = get_db_connection()
                 cursor = conn.cursor()
-                current_time = datetime.now()
+                current_time = datetime.now(timezone.utc)
 
                 # Zapisz nowÄ… temperaturÄ™ bazowÄ…, od ktĂłrej symulacja bÄ™dzie liczyÄ‡
                 cursor.execute("""
@@ -4918,7 +4918,7 @@ class SensorService:
             """, (sprzet_id,))
             
             operator_temp = cursor.fetchone()
-            current_time = datetime.now()
+            current_time = datetime.now(timezone.utc)
             
             if not operator_temp:
                 # Brak ustawionej temperatury - uĹĽyj domyĹ›lnej
@@ -4939,7 +4939,7 @@ class SensorService:
     def read_sensors(self):
         """Odczytuje i aktualizuje dane z czujnikĂłw"""
         
-        current_time = datetime.now()
+        current_time = datetime.now(timezone.utc)
         print(f"[{current_time}] Rozpoczynam odczyt czujnikĂłw...")
         
         conn = get_db_connection()
@@ -5492,7 +5492,7 @@ class TopologyManager:
             return {
                 'nodes': nodes,
                 'edges': edges,
-                'timestamp': datetime.now().isoformat()
+                'timestamp': datetime.now(timezone.utc).isoformat()
             }
         finally:
             cursor.close()
@@ -5973,7 +5973,7 @@ def api_topology_text():
             'success': True,
             'data': {
                 'text': text_description,
-                'generated_at': datetime.now().isoformat()
+                'generated_at': datetime.now(timezone.utc).isoformat()
             }
         })
     except Exception as e:
@@ -6340,7 +6340,7 @@ def api_health_check():
                 'summary': {
                     'total_issues': total_issues,
                     'total_warnings': total_warnings,
-                    'checked_at': datetime.now().isoformat()
+                    'checked_at': datetime.now(timezone.utc).isoformat()
                 }
             }
         })
@@ -6395,7 +6395,7 @@ def api_isolated_nodes():
                 'summary': {
                     'isolated_count': len(isolated_nodes),
                     'dead_end_count': len(dead_end_nodes),
-                    'analyzed_at': datetime.now().isoformat()
+                    'analyzed_at': datetime.now(timezone.utc).isoformat()
                 }
             }
         })
@@ -6446,10 +6446,10 @@ def create_app():
                    id='read_sensors', 
                    seconds=600,  # Odczyt co 10 minut
                    max_instances=1,
-                   next_run_time=datetime.now())
+                   next_run_time=datetime.now(timezone.utc))
     def read_sensors():
         """Odczyt z czujnikĂłw co dokĹ‚adnie 60 sekund"""
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Zaplanowane uruchomienie odczytu czujnikĂłw")
+        print(f"[{datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}] Zaplanowane uruchomienie odczytu czujnikĂłw")
         with app.app_context():
             try:
                 sensor_service.read_sensors()

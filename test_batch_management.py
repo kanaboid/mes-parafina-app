@@ -1,6 +1,7 @@
 # test_batch_management.py
 import unittest
 from datetime import datetime as dt
+from datetime import timezone
 from decimal import Decimal
 
 from app import create_app, db
@@ -62,7 +63,7 @@ class TestBatchManagementService(unittest.TestCase):
         self.assertEqual(batch_in_db.status, 'ACTIVE')
         
         # 3. Sprawdź, czy unikalny kod został wygenerowany w oczekiwanym formacie
-        today_str = dt.now().strftime('%y%m%d')
+        today_str = dt.now(timezone.utc).strftime('%y%m%d')
         expected_prefix = f"S-{source_name}-{material_type}-{today_str}"
         self.assertTrue(result['unique_code'].startswith(expected_prefix))
 

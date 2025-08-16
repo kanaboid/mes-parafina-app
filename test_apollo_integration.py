@@ -1,6 +1,6 @@
 # test_apollo_integration.py
 import unittest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from unittest.mock import patch # <--- DODAJ TEN IMPORT
 
@@ -57,7 +57,7 @@ class TestApolloBatchIntegration(unittest.TestCase):
             'typ_surowca': 'T-SPECIAL'
         }
 
-        czas_startu = datetime.now() - timedelta(hours=1)
+        czas_startu = datetime.now(timezone.utc) - timedelta(hours=1)
         sesja = ApolloSesje(id=1, id_sprzetu=TEST_APOLLO_ID, typ_surowca='T-SPECIAL', status_sesji='aktywna', czas_rozpoczecia=czas_startu)
         db.session.add(sesja)
         db.session.commit()

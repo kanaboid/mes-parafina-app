@@ -15,7 +15,9 @@ blinker==1.9.0
 click==8.2.1
     # via flask
 colorama==0.4.6
-    # via click
+    # via
+    #   click
+    #   pytest
 dnspython==2.7.0
     # via eventlet
 eventlet==0.40.2
@@ -40,6 +42,8 @@ gunicorn==23.0.0
     # via -r requirements.in
 h11==0.16.0
     # via wsproto
+iniconfig==2.1.0
+    # via pytest
 itsdangerous==2.2.0
     # via flask
 jinja2==3.1.6
@@ -57,7 +61,15 @@ mysql-connector-python==9.3.0
 networkx==3.5
     # via -r requirements.in
 packaging==25.0
-    # via gunicorn
+    # via
+    #   gunicorn
+    #   pytest
+pluggy==1.6.0
+    # via pytest
+pygments==2.19.2
+    # via pytest
+pytest==8.4.1
+    # via -r requirements.in
 python-dateutil==2.9.0.post0
     # via flask-apscheduler
 python-dotenv==1.1.1

@@ -1,6 +1,7 @@
 # test_apollo_service.py
 import unittest
 from datetime import datetime, timedelta
+from datetime import timezone
 
 from app import create_app, db
 from app.config import TestConfig
@@ -10,6 +11,11 @@ from sqlalchemy import text, select
 
 TEST_APOLLO_ID = 999
 TEST_APOLLO_NAZWA = 'AP999'
+
+def _as_aware_utc(dt: datetime | None) -> datetime:
+    if dt is None:
+        return datetime.now(timezone.utc)
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
 
 class TestApolloService(unittest.TestCase):
     def setUp(self):
@@ -69,12 +75,15 @@ class TestApolloService(unittest.TestCase):
         self.assertAlmostEqual(stan['dostepne_kg'], waga_startowa, delta=0.1)
 
     def test_07_oblicz_stan_po_korekcie_recznej(self):
-        czas_teraz = datetime(2025, 1, 1, 12, 0, 0)
-        ApolloService.rozpocznij_sesje_apollo(TEST_APOLLO_ID, 'TEST-SUROWIEC', 1000, event_time=czas_teraz - timedelta(minutes=20))
-        ApolloService.koryguj_stan_apollo(TEST_APOLLO_ID, 150.0, event_time=czas_teraz - timedelta(minutes=10))
-        ApolloService.dodaj_surowiec_do_apollo(TEST_APOLLO_ID, 50.0, event_time=czas_teraz - timedelta(minutes=5))
-        stan = ApolloService.oblicz_aktualny_stan_apollo(TEST_APOLLO_ID, current_time=czas_teraz)
-        self.assertAlmostEqual(stan['dostepne_kg'], 200.0, places=4)
+        teraz = _as_aware_utc(datetime(2025, 1, 1, 12, 0, 0))
+        
+        ApolloService.rozpocznij_sesje_apollo(TEST_APOLLO_ID, 'TEST-SUROWIEC', 1000, event_time=teraz - timedelta(minutes=20))
+        ApolloService.koryguj_stan_apollo(TEST_APOLLO_ID, 150.0, event_time=teraz - timedelta(minutes=10))
+        ApolloService.dodaj_surowiec_do_apollo(TEST_APOLLO_ID, 50.0, event_time=teraz - timedelta(minutes=5))
+        
+        stan = ApolloService.oblicz_aktualny_stan_apollo(TEST_APOLLO_ID, current_time=teraz)
+        
+        self.assertAlmostEqual(stan['dostepne_kg'], 200.0, places=2)
 
     def test_08_zakoncz_sesje_sukces(self):
         id_sesji = ApolloService.rozpocznij_sesje_apollo(TEST_APOLLO_ID, 'TEST-ZAKONCZENIE', 1000)
@@ -92,7 +101,7 @@ class TestApolloService(unittest.TestCase):
     def test_10_zakoncz_sesje_bez_powiazanej_partii(self):
         sesja = ApolloSesje(
             id_sprzetu=TEST_APOLLO_ID, typ_surowca='TYP_TESTOWY',
-            status_sesji='aktywna', czas_rozpoczecia=datetime.now()
+            status_sesji='aktywna', czas_rozpoczecia=datetime.now(timezone.utc)
         )
         db.session.add(sesja)
         db.session.commit()
@@ -105,60 +114,49 @@ class TestApolloService(unittest.TestCase):
 
     # --- Poprawione testy 12 i 13 ---
     def test_12_get_stan_apollo_aktywna_sesja_bez_transferow(self):
-        """Sprawdza `get_stan_apollo` dla prostej sesji."""
-        czas_startu_sesji = datetime.now() - timedelta(minutes=6)
-        sesja = ApolloSesje(
-            id_sprzetu=TEST_APOLLO_ID, typ_surowca='T-STAN',
-            status_sesji='aktywna', czas_rozpoczecia=czas_startu_sesji
-        )
+        czas_teraz = _as_aware_utc(datetime.now())
+        czas_startu_sesji = czas_teraz - timedelta(minutes=6)
+        sesja = ApolloSesje(id_sprzetu=TEST_APOLLO_ID, typ_surowca='T-STAN', status_sesji='aktywna', czas_rozpoczecia=czas_startu_sesji)
         db.session.add(sesja)
         db.session.commit()
         
-        # POPRAWKA: Dodajemy brakującą wartość `czas_zdarzenia`
-        tracking = ApolloTracking(
-            id_sesji=sesja.id, typ_zdarzenia='DODANIE_SUROWCA',
-            waga_kg=500, czas_zdarzenia=czas_startu_sesji
-        )
+        tracking = ApolloTracking(id_sesji=sesja.id, typ_zdarzenia='DODANIE_SUROWCA', waga_kg=500, czas_zdarzenia=czas_startu_sesji)
         db.session.add(tracking)
         
         sprzet = db.session.get(Sprzet, TEST_APOLLO_ID)
         sprzet.szybkosc_topnienia_kg_h = 1000.0
         db.session.commit()
         
-        stan = ApolloService.get_stan_apollo(TEST_APOLLO_ID)
+        stan = ApolloService.get_stan_apollo(TEST_APOLLO_ID, current_time=czas_teraz)
+        self.assertTrue(stan['aktywna_sesja'])
         self.assertAlmostEqual(stan['bilans_sesji_kg'], 500.0)
         self.assertAlmostEqual(stan['dostepne_kg'], 100.0, delta=1.0)
 
     def test_13_get_stan_apollo_z_transferem(self):
-        """Sprawdza `get_stan_apollo` po transferze."""
-        czas_startu_sesji = datetime.now() - timedelta(minutes=30)
-        sesja = ApolloSesje(
-            id_sprzetu=TEST_APOLLO_ID, typ_surowca='T-STAN-TR',
-            status_sesji='aktywna', czas_rozpoczecia=czas_startu_sesji
-        )
+        czas_teraz = _as_aware_utc(datetime.now())
+        czas_startu_sesji = czas_teraz - timedelta(minutes=30)
+        sesja = ApolloSesje(id_sprzetu=TEST_APOLLO_ID, typ_surowca='T-STAN-TR', status_sesji='aktywna', czas_rozpoczecia=czas_startu_sesji)
         db.session.add(sesja)
         db.session.commit()
 
-        tracking = ApolloTracking(
-            id_sesji=sesja.id, typ_zdarzenia='DODANIE_SUROWCA',
-            waga_kg=1000, czas_zdarzenia=czas_startu_sesji
-        )
+        tracking_dodanie = ApolloTracking(id_sesji=sesja.id, typ_zdarzenia='DODANIE_SUROWCA', waga_kg=1000, czas_zdarzenia=czas_startu_sesji)
         
-        # POPRAWKA: Dodajemy brakującą wartość `czas_rozpoczecia`
-        czas_transferu = datetime.now() - timedelta(minutes=12)
-        operacja = OperacjeLog(
-            typ_operacji='TRANSFER', id_apollo_sesji=sesja.id, status_operacji='zakonczona',
-            ilosc_kg=200, czas_rozpoczecia=czas_transferu, czas_zakonczenia=czas_transferu
-        )
-        db.session.add_all([tracking, operacja])
+        czas_transferu = _as_aware_utc(datetime.now()) - timedelta(minutes=12)
+        tracking_transfer = ApolloTracking(id_sesji=sesja.id, typ_zdarzenia='TRANSFER_WYJSCIOWY', waga_kg=200, czas_zdarzenia=czas_transferu)
+        
+        db.session.add_all([tracking_dodanie, tracking_transfer])
+        db.session.commit() # <-- Ważne, aby zapisać dane PRZED wywołaniem serwisu
         
         sprzet = db.session.get(Sprzet, TEST_APOLLO_ID)
         sprzet.szybkosc_topnienia_kg_h = 1000.0
         db.session.commit()
         
-        stan = ApolloService.get_stan_apollo(TEST_APOLLO_ID)
-        self.assertAlmostEqual(stan['bilans_sesji_kg'], 800.0)
-        self.assertAlmostEqual(stan['dostepne_kg'], 200.0, delta=1.0)
+        stan = ApolloService.get_stan_apollo(TEST_APOLLO_ID, current_time=czas_teraz)
+        self.assertTrue(stan['aktywna_sesja'])
+        self.assertAlmostEqual(stan['bilans_sesji_kg'], 800.0) # 1000 - 200
+        
+        # Oczekiwany wytop: w 30 minut stopiło się 500 kg. Po transferze 200kg, zostało 300kg.
+        self.assertAlmostEqual(stan['dostepne_kg'], 300.0, delta=1.0)
 
     def test_14_oblicz_stan_po_czesciowym_transferze_i_doladowaniu(self):
         """

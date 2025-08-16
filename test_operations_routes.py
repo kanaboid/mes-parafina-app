@@ -1,7 +1,7 @@
 # test_operations_routes.py
 import unittest
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock
 
 # Importy z aplikacji
@@ -45,8 +45,8 @@ class TestOperationsRoutes(unittest.TestCase):
     def test_02_get_aktywne_operacje_zwraca_tylko_aktywne(self):
         """Sprawdza, czy GET /aktywne zwraca tylko operacje ze statusem 'aktywna'."""
         # --- Przygotowanie (Arrange) ---
-        aktywna = OperacjeLog(typ_operacji='AKTYWNA', status_operacji='aktywna', czas_rozpoczecia=datetime.now(), opis='Test Op')
-        zakonczona = OperacjeLog(typ_operacji='ZAKONCZONA', status_operacji='zakonczona', czas_rozpoczecia=datetime.now())
+        aktywna = OperacjeLog(typ_operacji='AKTYWNA', status_operacji='aktywna', czas_rozpoczecia=datetime.now(timezone.utc), opis='Test Op')
+        zakonczona = OperacjeLog(typ_operacji='ZAKONCZONA', status_operacji='zakonczona', czas_rozpoczecia=datetime.now(timezone.utc))
         db.session.add_all([aktywna, zakonczona])
         db.session.commit()
 
@@ -149,7 +149,7 @@ class TestOperationsRoutes(unittest.TestCase):
             id=123, typ_operacji='TRANSFER', status_operacji='aktywna',
             id_partii_surowca=50, id_sprzetu_zrodlowego=1, id_sprzetu_docelowego=2,
             punkt_startowy='R01_OUT', punkt_docelowy='R02_IN',
-            czas_rozpoczecia=datetime.now()
+            czas_rozpoczecia=datetime.now(timezone.utc)
         )
         zawor = Zawory(id=100, nazwa_zaworu='V-ZAKONCZ', stan='OTWARTY')
         segment = Segmenty(id=1000, nazwa_segmentu='SEG-ZAKONCZ', id_zaworu=100)

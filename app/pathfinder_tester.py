@@ -3,7 +3,7 @@
 
 import mysql.connector
 from flask import current_app, jsonify
-from datetime import datetime
+from datetime import datetime, timezone
 from .db import get_db_connection
 from .pathfinder_service import PathFinder
 import json

@@ -1,7 +1,7 @@
 # app/batch_management_service.py
 from .extensions import db
 from .models import Batches, Sprzet, TankMixes, MixComponents, AuditTrail, ApolloSesje, ApolloTracking
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import func, select
 from sqlalchemy.orm import joinedload
 from decimal import Decimal
@@ -11,7 +11,7 @@ class BatchManagementService:
     
     @staticmethod
     def _generate_unique_code(material_type, source_name):
-        today_str = datetime.now().strftime('%y%m%d')
+        today_str = datetime.now(timezone.utc).strftime('%y%m%d')
         base_prefix = f"S-{source_name}-{material_type}-{today_str}"
         query = select(func.count(Batches.id)).where(Batches.unique_code.like(f"{base_prefix}%"))
         daily_count = db.session.execute(query).scalar()
@@ -33,7 +33,7 @@ class BatchManagementService:
 
     @staticmethod
     def _generate_mix_code(tank_name):
-        today_str = datetime.now().strftime('%y%m%d')
+        today_str = datetime.now(timezone.utc).strftime('%y%m%d')
         base_prefix = f"B-{tank_name}-{today_str}"
         query = select(func.count(TankMixes.id)).where(TankMixes.unique_code.like(f"{base_prefix}%"))
         daily_count = db.session.execute(query).scalar()
@@ -239,7 +239,7 @@ class BatchManagementService:
                 id_sesji=id_sesji,
                 typ_zdarzenia='TRANSFER_WYJSCIOWY',
                 waga_kg=actual_quantity_transferred,
-                czas_zdarzenia=datetime.now(),
+                czas_zdarzenia=datetime.now(timezone.utc),
                 operator=operator
             )
             db.session.add(tracking_log)

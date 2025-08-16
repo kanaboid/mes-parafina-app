@@ -1,6 +1,7 @@
 # app/operations_routes.py
 from flask import Blueprint, jsonify, request, current_app
 from datetime import datetime as dt
+from datetime import timezone
 import mysql.connector
 from .db import get_db_connection
 from .pathfinder_service import PathFinder
@@ -101,7 +102,7 @@ def rozpocznij_trase():
             typ_operacji=typ_operacji,
             id_partii_surowca=partia.id,
             status_operacji='aktywna',
-            czas_rozpoczecia=dt.now(),
+            czas_rozpoczecia=dt.now(timezone.utc),
             opis=opis_operacji,
             punkt_startowy=start_point,
             punkt_docelowy=end_point
@@ -154,7 +155,7 @@ def zakoncz_operacje():
 
         # Krok 2: Zmień status operacji
         operacja.status_operacji = 'zakonczona'
-        operacja.czas_zakonczenia = dt.now() # Używamy aliasu `dt`
+        operacja.czas_zakonczenia = dt.now(timezone.utc) # Używamy aliasu `dt`
 
         # Krok 3: Znajdź i zamknij zawory (korzystając z relacji)
         zawory_do_zamkniecia_nazwy = []
@@ -396,7 +397,7 @@ def end_apollo_transfer():
         # --- KROK 1: Aktualizacja stanu Apollo ---
         tracking_transfer = ApolloTracking(
             id_sesji=sesja.id, typ_zdarzenia='TRANSFER_WYJSCIOWY', waga_kg=waga_kg,
-            czas_zdarzenia=dt.now(), id_operacji_log=operacja.id, operator=operator
+            czas_zdarzenia=dt.now(timezone.utc), id_operacji_log=operacja.id, operator=operator
         )
         db.session.add(tracking_transfer)
 
@@ -423,7 +424,7 @@ def end_apollo_transfer():
 
         # --- KROK 3: Zakończenie logistyki operacji ---
         operacja.status_operacji = 'zakonczona'
-        operacja.czas_zakonczenia = dt.now()
+        operacja.czas_zakonczenia = dt.now(timezone.utc)
         operacja.ilosc_kg = waga_kg
         operacja.zmodyfikowane_przez = operator
         operacja.id_apollo_sesji = sesja.id
@@ -683,7 +684,7 @@ def end_cysterna_transfer():
         partia_w_celu = cursor.fetchone()
 
         # Stworzenie "wirtualnej" partii dla dostawy
-        unikalny_kod_dostawy = f"{typ_surowca_dostawy.replace(' ', '_')}-{dt.now().strftime('%Y%m%d_%H%M%S')}-DOSTAWA"
+        unikalny_kod_dostawy = f"{typ_surowca_dostawy.replace(' ', '_')}-{dt.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}-DOSTAWA"
         cursor.execute("""
             INSERT INTO partie_surowca (unikalny_kod, nazwa_partii, typ_surowca, waga_aktualna_kg, waga_poczatkowa_kg, id_sprzetu, zrodlo_pochodzenia, pochodzenie_opis, status_partii, data_utworzenia)
             VALUES (%s, %s, %s, %s, %s, NULL, 'cysterna', %s, 'Archiwalna', NOW())
@@ -708,7 +709,7 @@ def end_cysterna_transfer():
             
             # 3. Utwórz nową partię wynikową (mieszaninę)
             nowa_waga = float(partia_w_celu['waga_aktualna_kg']) + waga_kg
-            unikalny_kod_mix = f"MIX-{dt.now().strftime('%Y%m%d_%H%M%S')}"
+            unikalny_kod_mix = f"MIX-{dt.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
             cursor.execute("""
                 INSERT INTO partie_surowca (unikalny_kod, nazwa_partii, typ_surowca, waga_aktualna_kg, waga_poczatkowa_kg, id_sprzetu, status_partii, typ_transformacji)
                 VALUES (%s, %s, %s, %s, %s, %s, 'Surowy w reaktorze', 'MIESZANIE')

@@ -4,7 +4,7 @@ Dodatkowe API endpoints dla zarządzania cyklami filtracyjnymi
 """
 
 from flask import Blueprint, jsonify, request
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from .db import get_db_connection
 import mysql.connector
 
@@ -166,7 +166,7 @@ def rozpocznij_cykl_filtracyjny():
             'dmuchanie': 45
         }
         
-        planowany_czas = datetime.now() + timedelta(minutes=durations.get(data['typ_cyklu'], 30))
+        planowany_czas = datetime.now(timezone.utc) + timedelta(minutes=durations.get(data['typ_cyklu'], 30))
         
         # Wstaw nowy cykl
         cursor.execute("""

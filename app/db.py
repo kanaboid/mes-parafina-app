@@ -14,4 +14,7 @@ def get_db_connection(config=None):
         database=config['MYSQL_DB'],
         autocommit=False
     )
+    cursor = connection.cursor()
+    cursor.execute("SET time_zone = '+00:00'")
+    cursor.close()
     return connection

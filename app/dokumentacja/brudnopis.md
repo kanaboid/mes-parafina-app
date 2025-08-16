@@ -435,7 +435,7 @@ def tankowanie():
             }), 400
 
         # Krok 4: Stworzenie unikalnego kodu partii
-        teraz = datetime.now()
+        teraz = datetime.now(timezone.utc)
         unikalny_kod = f"{dane['typ_surowca']}-{teraz.strftime('%Y%m%d-%H%M%S')}-{dane['zrodlo_pochodzenia'].upper()}"
 
         # Krok 5: Stworzenie nowej partii surowca
@@ -1097,7 +1097,7 @@ def get_historia_pomiarow():
             JOIN sprzet s ON h.id_sprzetu = s.id
             WHERE h.czas_pomiaru > %s
             ORDER BY h.czas_pomiaru DESC
-        """, (datetime.now() - timedelta(hours=24),))
+        """, (datetime.now(timezone.utc) - timedelta(hours=24),))
         
         pomiary = cursor.fetchall()
         
@@ -1129,7 +1129,7 @@ def potwierdz_alarm():
             SET status_alarmu = 'POTWIERDZONY',
                 czas_potwierdzenia = %s
             WHERE id = %s AND status_alarmu = 'AKTYWNY'
-        """, (datetime.now(), id_alarmu))
+        """, (datetime.now(timezone.utc), id_alarmu))
         
         conn.commit()
         
@@ -1434,7 +1434,7 @@ def rozpocznij_cykl_filtracyjny():
             'dmuchanie': 45
         }
         
-        planowany_czas = datetime.now() + timedelta(minutes=durations.get(data['typ_cyklu'], 30))
+        planowany_czas = datetime.now(timezone.utc) + timedelta(minutes=durations.get(data['typ_cyklu'], 30))
         
         # Wstaw nowy cykl
         cursor.execute("""
@@ -1927,7 +1927,7 @@ def tankowanie_brudnego():
             return jsonify({'message': 'Beczka nie znaleziona'}), 404
 
         # Stworzenie unikalnego kodu partii
-        teraz = datetime.now()
+        teraz = datetime.now(timezone.utc)
         unikalny_kod = f"{dane['typ_surowca']}-{teraz.strftime('%Y%m%d-%H%M%S')}-{beczka['nazwa_unikalna']}"
 
         # Użycie kursora bez dictionary=True do operacji zapisu

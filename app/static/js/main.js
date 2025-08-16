@@ -29,7 +29,7 @@ async function updateMeasurementsTable() {
                 <td>${pomiar.nazwa_unikalna}</td>
                 <td>${pomiar.temperatura}°C</td>
                 <td>${pomiar.cisnienie} bar</td>
-                <td>${pomiar.czas_pomiaru}</td>
+                <td>${formatUTCDateToLocal(pomiar.czas_pomiaru)}</td>
             </tr>
         `).join('');
     } catch (error) {
@@ -206,7 +206,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <td>${op.id}</td>
                         <td>${op.typ_operacji}</td>
                         <td>${op.id_partii_surowca || 'B/D'}</td>
-                        <td>${op.czas_rozpoczecia}</td>
+                        <td>${formatUTCDateToLocal(op.czas_rozpoczecia)}</td>
                         <td>${op.opis}</td>
                         <td><button class="end-operation-btn" data-op-id="${op.id}">Zakończ</button></td>
                     `;
@@ -533,7 +533,7 @@ async function confirmAlarm(alarmId) {
                     <span class="alarm-type">${alarm.typ_alarmu}</span>
                     <span class="alarm-equipment">${alarm.nazwa_sprzetu}</span>
                     <span class="alarm-value">${alarm.wartosc} / ${alarm.limit_przekroczenia}</span>
-                    <span class="alarm-time">${alarm.czas_wystapienia}</span>
+                    <span class="alarm-time">${formatUTCDateToLocal(alarm.czas_wystapienia)}</span>
                     ${alarm.status_alarmu === 'AKTYWNY' ? 
                         `<button class="confirm-alarm-btn" data-alarm-id="${alarm.id}">Potwierdź</button>` : ''}
                 </div>
