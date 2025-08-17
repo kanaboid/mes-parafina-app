@@ -10,6 +10,7 @@ from .pathfinder_service import PathFinder
 from .apollo_service import ApolloService  # Importujemy serwis Apollo
 from mysql.connector.errors import OperationalError
 from decimal import Decimal
+from app.sockets import broadcast_apollo_update
 
 def get_pathfinder():
     if 'pathfinder' not in g:
@@ -1407,7 +1408,7 @@ def rozpocznij_sesje_apollo():
             data['waga_kg'],
             data.get('operator')
         )
-        
+        broadcast_apollo_update()
         return jsonify({
             'success': True,
             'message': f'Rozpoczęto nową sesję wytapiania w Apollo',
@@ -1434,7 +1435,7 @@ def dodaj_surowiec_apollo():
             data['waga_kg'],
             data.get('operator')
         )
-        
+        broadcast_apollo_update()
         return jsonify({
             'success': True,
             'message': f'Dodano {data["waga_kg"]}kg surowca do Apollo'
@@ -1606,7 +1607,7 @@ def zakoncz_sesje_apollo():
             data['id_sprzetu'],
             data.get('operator')
         )
-        
+        broadcast_apollo_update()
         return jsonify({
             'success': True,
             'message': f'Sesja dla Apollo ID {data["id_sprzetu"]} została zakończona.'

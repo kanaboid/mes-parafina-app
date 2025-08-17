@@ -12,6 +12,7 @@ from .batch_management_service import BatchManagementService
 
 from .extensions import db
 from .models import * #Sprzet, PartieSurowca, PortySprzetu, Segmenty, Zawory, OperacjeLog, t_log_uzyte_segmenty
+from app.sockets import broadcast_apollo_update
 
 # Utworzenie nowego Blueprintu dla operacji
 bp = Blueprint('operations', __name__, url_prefix='/api/operations')
@@ -354,6 +355,7 @@ def start_apollo_transfer():
         write_cursor.execute("UPDATE sprzet SET stan_sprzetu = 'W transferze' WHERE id = %s", (id_celu,))
         
         conn.commit()
+        broadcast_apollo_update()
 
         return jsonify({'message': 'Transfer rozpoczęty pomyślnie.','id_operacji': operacja_id}), 201
 
@@ -452,6 +454,7 @@ def end_apollo_transfer():
         #     partia_w_apollo.waga_aktualna_kg -= waga_kg
         
         db.session.commit()
+        broadcast_apollo_update()
         return jsonify({'success': True, 'message': f'Operacja {id_operacji} zakończona. Utworzono i zatankowano partię.'})
 
     except (ValueError, KeyError) as e:
@@ -512,6 +515,7 @@ def anuluj_apollo_transfer():
         cursor.execute("UPDATE sprzet SET stan_sprzetu = 'Gotowy' WHERE id = %s", (id_celu))
         cursor.execute("UPDATE sprzet SET stan_sprzetu = 'Zatankowany' WHERE id = %s", (id_zrodla))
         conn.commit()
+        broadcast_apollo_update()
 
         return jsonify({'success': True, 'message': f'Operacja {id_operacji} została anulowana.'})
 

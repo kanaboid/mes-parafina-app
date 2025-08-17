@@ -9,7 +9,8 @@ from app.sensors import SensorService
 from app.models import Sprzet
 from app import db
 from decimal import Decimal, InvalidOperation
-
+from app.apollo_service import ApolloService
+from app.models import OperacjeLog
 
 @socketio.on('connect')
 def handle_connect():
@@ -164,3 +165,44 @@ def handle_set_temp(args):
             'data': f"Wystąpił krytyczny błąd serwera: {e}",
             'is_error': True
         })
+
+def broadcast_apollo_update():
+    """
+    Pobiera najnowszy stan wszystkich urządzeń Apollo oraz aktywnych
+    transferów i rozgłasza go do wszystkich podłączonych klientów.
+    """
+    print("Broadcasting Apollo update to all clients...")
+    try:
+        # 1. Pobierz najnowszy stan wszystkich Apollo
+        # Ta logika jest skopiowana z endpointu /api/apollo/lista-stanow
+        sprzet_apollo_q = db.select(Sprzet).filter_by(typ_sprzetu='apollo')
+        apollo_devices = db.session.execute(sprzet_apollo_q).scalars().all()
+        
+        updated_apollo_list = []
+        for apollo in apollo_devices:
+            stan = ApolloService.get_stan_apollo(apollo.id)
+            if stan:
+                # Nie musimy już nic doklejać, `stan` jest kompletny
+                updated_apollo_list.append(stan)
+        
+        # 2. Pobierz najnowszy stan aktywnych transferów
+        # Ta logika jest skopiowana z endpointu /api/operations/aktywne
+        active_transfers_q = db.select(OperacjeLog).filter_by(
+            status_operacji='aktywna',
+            typ_operacji='ROZTANKOWANIE_APOLLO'
+        )
+        active_transfers = db.session.execute(active_transfers_q).scalars().all()
+        
+        updated_transfers_list = [{
+            'id': op.id,
+            'opis': op.opis,
+            'czas_rozpoczecia': op.czas_rozpoczecia.strftime('%Y-%m-%d %H:%M:%S')
+        } for op in active_transfers]
+
+        # 3. Wyślij dane do wszystkich klientów przez WebSocket
+        socketio.emit('apollo_update', {
+            'apollo_list': updated_apollo_list,
+            'active_transfers': updated_transfers_list
+        })
+    except Exception as e:
+        print(f"Błąd podczas broadcastu aktualizacji Apollo: {e}")

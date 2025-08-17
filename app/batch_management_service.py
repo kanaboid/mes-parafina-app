@@ -6,12 +6,20 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import joinedload
 from decimal import Decimal
 from .apollo_service import ApolloService
+import pytz
+
+WARSAW_TZ = pytz.timezone('Europe/Warsaw')
 
 class BatchManagementService:
     
-    @staticmethod
     def _generate_unique_code(material_type, source_name):
-        today_str = datetime.now(timezone.utc).strftime('%y%m%d')
+        # 1. Pobierz aktualny czas w UTC
+        now_utc = datetime.now(timezone.utc)
+        # 2. Skonwertuj go do strefy czasowej Warszawy
+        now_warsaw = now_utc.astimezone(WARSAW_TZ)
+        # 3. Użyj czasu lokalnego do sformatowania stringa
+        today_str = now_warsaw.strftime('%y%m%d')
+        
         base_prefix = f"S-{source_name}-{material_type}-{today_str}"
         query = select(func.count(Batches.id)).where(Batches.unique_code.like(f"{base_prefix}%"))
         daily_count = db.session.execute(query).scalar()
@@ -33,7 +41,11 @@ class BatchManagementService:
 
     @staticmethod
     def _generate_mix_code(tank_name):
-        today_str = datetime.now(timezone.utc).strftime('%y%m%d')
+        # Zastosuj tę samą logikę co powyżej
+        now_utc = datetime.now(timezone.utc)
+        now_warsaw = now_utc.astimezone(WARSAW_TZ)
+        today_str = now_warsaw.strftime('%y%m%d')
+
         base_prefix = f"B-{tank_name}-{today_str}"
         query = select(func.count(TankMixes.id)).where(TankMixes.unique_code.like(f"{base_prefix}%"))
         daily_count = db.session.execute(query).scalar()

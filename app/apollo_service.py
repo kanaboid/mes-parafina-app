@@ -107,6 +107,8 @@ class ApolloService:
         Oblicza aktualny stan Apollo. Wersja 6: Poprawny, prosty symulator.
         """
         czas_teraz = _as_aware_utc(current_time)
+
+        # 1) Pobierz sesję
         sesja = db.session.execute(
             db.select(ApolloSesje).filter_by(id_sprzetu=id_sprzetu, status_sesji='aktywna')
         ).scalar_one_or_none()
@@ -114,7 +116,11 @@ class ApolloService:
         if not sesja:
             return {'aktywna_sesja': False, 'dostepne_kg': 0}
 
-        # Pobierz WSZYSTKIE zdarzenia dla sesji, posortowane
+        # 2) Pobierz prędkość z DB (fallback do stałej)
+        sprzet = db.session.get(Sprzet, id_sprzetu)
+        speed_kg_h = Decimal(sprzet.szybkosc_topnienia_kg_h) if sprzet and sprzet.szybkosc_topnienia_kg_h is not None else Decimal(ApolloService.SZYBKOSC_WYTAPIANIA_KG_H)
+
+        # 3) Zdarzenia i symulacja
         wszystkie_zdarzenia = db.session.execute(
             db.select(ApolloTracking).filter_by(id_sesji=sesja.id).order_by(ApolloTracking.czas_zdarzenia)
         ).scalars().all()
@@ -123,26 +129,25 @@ class ApolloService:
         ilosc_stala = Decimal('0.0')
         czas_poprzedni = _as_aware_utc(sesja.czas_rozpoczecia)
 
-        # Dołącz "teraz" jako wirtualne ostatnie zdarzenie
         class WirtualneZdarzenie:
             def __init__(self, czas):
                 self.czas_zdarzenia = czas
                 self.typ_zdarzenia = 'KONIEC_SYMULACJI'
 
-        punkty_symulacji = wszystkie_zdarzenia + [WirtualneZdarzenie(czas_teraz)]
+        punkty_symulacji = list(wszystkie_zdarzenia) + [WirtualneZdarzenie(czas_teraz)]
 
         for zdarzenie in punkty_symulacji:
             czas_biezacy = _as_aware_utc(zdarzenie.czas_zdarzenia)
-            
-            # 1. Oblicz topienie od ostatniego punktu w czasie do teraz
+
+            # Topienie od poprzedniego punktu
             delta_czasu_s = (czas_biezacy - czas_poprzedni).total_seconds()
             if delta_czasu_s > 0 and ilosc_stala > 0:
-                wytopiono = (Decimal(delta_czasu_s) / 3600) * Decimal(ApolloService.SZYBKOSC_WYTAPIANIA_KG_H)
+                wytopiono = (Decimal(delta_czasu_s) / Decimal('3600')) * speed_kg_h
                 realnie_stopione = min(ilosc_stala, wytopiono)
                 ilosc_plynna += realnie_stopione
                 ilosc_stala -= realnie_stopione
-            
-            # 2. Zastosuj efekt zdarzenia
+
+            # Efekt zdarzenia
             if zdarzenie.typ_zdarzenia == 'DODANIE_SUROWCA':
                 ilosc_stala += zdarzenie.waga_kg
             elif zdarzenie.typ_zdarzenia == 'TRANSFER_WYJSCIOWY':
@@ -150,12 +155,11 @@ class ApolloService:
             elif zdarzenie.typ_zdarzenia == 'KOREKTA_RECZNA':
                 ilosc_plynna = zdarzenie.waga_kg
                 ilosc_stala = Decimal('0.0')
-            
-            # Zaktualizuj czas dla następnej iteracji
+
             czas_poprzedni = czas_biezacy
-        
+
         dostepne_kg = max(Decimal('0.0'), ilosc_plynna)
-        
+
         return {
             'aktywna_sesja': True,
             'id_sesji': sesja.id,
@@ -241,7 +245,8 @@ class ApolloService:
             result = {
                 'id_sprzetu': apollo.id,
                 'nazwa_apollo': apollo.nazwa_unikalna,
-                'aktywna_sesja': False
+                'aktywna_sesja': False,
+                'szybkosc_topnienia_kg_h': float(apollo.szybkosc_topnienia_kg_h or ApolloService.SZYBKOSC_WYTAPIANIA_KG_H)
             }
             
             sesja = db.session.execute(

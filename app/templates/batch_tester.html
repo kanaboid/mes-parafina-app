@@ -1,11 +1,12 @@
-<!DOCTYPE html>
-<html lang="pl">
+{% extends "base.html" %}
+{% block content %}
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tester Systemu Partii</title>
     <style>
-        body { font-family: sans-serif; margin: 2em; background-color: #f4f4f9; }
+        body { font-family: sans-serif; background-color: #f4f4f9; }
         .container { max-width: 1200px; margin: auto; }
         .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 2em; }
         .card { background: white; padding: 1.5em; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
@@ -21,7 +22,7 @@
         .status-error { color: red; }
     </style>
 </head>
-<body>
+
     <div class="container">
         <h1>Tester Systemu Zarządzania Partiami</h1>
 
@@ -245,5 +246,6 @@
     });
 });
     </script>
-</body>
-</html>
+
+
+{% endblock %}

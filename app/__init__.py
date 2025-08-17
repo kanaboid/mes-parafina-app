@@ -9,6 +9,8 @@ from flask_apscheduler import APScheduler
 from datetime import datetime, timezone
 from flask_sqlalchemy import SQLAlchemy
 from .extensions import db, socketio
+from flask_admin import Admin
+from flask_admin.contrib.sqla import ModelView
 
 
 
@@ -86,5 +88,23 @@ def create_app(config_class=Config): # ZMIANA: Dodajemy opcjonalny argument
     def hello():
         return "Witaj w aplikacji MES!"
     from . import sockets
+    
+    
+    # Konfiguracja Flask-Admin
+    
+    
+    admin = Admin(app, name='MES', template_mode='bootstrap4')
+    from . import models
+    admin.add_view(ModelView(models.Sprzet, db.session))
+    admin.add_view(ModelView(models.PartieSurowca, db.session, name="Partie (stare)"))
+    admin.add_view(ModelView(models.Zawory, db.session))
+    admin.add_view(ModelView(models.Segmenty, db.session))
+    admin.add_view(ModelView(models.PortySprzetu, db.session, name="Porty Sprzętu"))
+    
+    # Dodajmy też widoki dla nowego systemu partii
+    admin.add_view(ModelView(models.Batches, db.session, name="Partie Pierwotne (nowe)", endpoint="batches_admin"))
+    admin.add_view(ModelView(models.TankMixes, db.session, name="Mieszaniny w Zbiornikach"))
+    admin.add_view(ModelView(models.MixComponents, db.session, name="Składniki Mieszanin"))
+    admin.add_view(ModelView(models.AuditTrail, db.session, name="Ślad Audytowy"))
 
     return app
