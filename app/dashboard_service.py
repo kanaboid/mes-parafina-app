@@ -18,31 +18,35 @@ class DashboardService:
         # To zapytanie jest bardziej złożone, więc użyjemy ORM
         reaktory_q = db.select(Sprzet).where(Sprzet.typ_sprzetu == 'reaktor').order_by(Sprzet.nazwa_unikalna)
         reaktory = db.session.execute(reaktory_q).scalars().all()
-        reaktory_data = []
-        for reaktor in reaktory:
-            partia_info = None
-            waga_kg = 0
-            if reaktor.active_mix: # Sprawdzamy, czy jest aktywna mieszanina
-                mix = reaktor.active_mix
-                composition = BatchManagementService.get_mix_composition(mix.id) # Reużywamy logiki
-                waga_kg = composition.get('total_weight', 0)
-                partia_info = {
-                    "kod": mix.unique_code,
-                    "typ": f"MIX ({len(composition['components'])} składników)",
-                    "sklad": composition['components']
-                }
+        reaktory_w_procesie_data = []
+        reaktory_puste_data = []
 
-            reaktory_data.append({
+        for reaktor in reaktory:
+            reaktor_data = {
                 "id": reaktor.id,
                 "nazwa": reaktor.nazwa_unikalna,
                 "stan_sprzetu": reaktor.stan_sprzetu,
                 "temperatura_aktualna": float(reaktor.temperatura_aktualna) if reaktor.temperatura_aktualna else None,
                 "temperatura_docelowa": float(reaktor.temperatura_docelowa) if reaktor.temperatura_docelowa else None,
                 "cisnienie_aktualne": float(reaktor.cisnienie_aktualne) if reaktor.cisnienie_aktualne else None,
-                "waga_kg": float(waga_kg),
-                "partia": partia_info,
-                "stan_palnika": reaktor.stan_palnika
-            })
+                "stan_palnika": reaktor.stan_palnika,
+                "partia": None # Domyślnie brak partii
+            }
+
+            if reaktor.active_mix: # Jeśli jest aktywna mieszanina, reaktor jest "w procesie"
+                mix = reaktor.active_mix
+                composition = BatchManagementService.get_mix_composition(mix.id)
+                waga_kg = composition.get('total_weight', 0)
+
+                reaktor_data["partia"] = {
+                    "id": mix.id, # Przekazujemy ID mieszaniny
+                    "kod": mix.unique_code,
+                    "typ": f"MIX ({len(composition.get('components', []))} składników)",
+                    "waga_kg": float(waga_kg)
+                }
+                reaktory_w_procesie_data.append(reaktor_data)
+            else: # Jeśli nie ma aktywnej mieszaniny, reaktor jest "pusty"
+                reaktory_puste_data.append(reaktor_data)
 
         # 2. Pobierz dane o beczkach brudnych i czystych
         beczki_q = db.select(Sprzet).where(Sprzet.typ_sprzetu.in_(['beczka_brudna', 'beczka_czysta'])).order_by(Sprzet.nazwa_unikalna)
@@ -81,7 +85,8 @@ class DashboardService:
         } for a in alarmy]
 
         return {
-            "reaktory": reaktory_data,
+            "reaktory_w_procesie": reaktory_w_procesie_data, # Zmieniona nazwa klucza
+            "reaktory_puste": reaktory_puste_data,       # Nowy klucz
             "beczki_brudne": beczki_brudne_data,
             "beczki_czyste": beczki_czyste_data,
             "alarmy": alarmy_data

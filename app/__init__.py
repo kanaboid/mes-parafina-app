@@ -11,7 +11,7 @@ from flask_sqlalchemy import SQLAlchemy
 from .extensions import db, socketio
 from flask_admin import Admin
 from flask_admin.contrib.sqla import ModelView
-
+import logging
 
 
 # ... instancje pathfinder, monitoring, sensor_service, scheduler ...
@@ -20,7 +20,8 @@ monitoring = MonitoringService()
 sensor_service = SensorService()
 scheduler = APScheduler()
 
-
+logging.basicConfig()
+logging.getLogger('apscheduler').setLevel(logging.DEBUG)
 
 def create_app(config_class=Config): # ZMIANA: Dodajemy opcjonalny argument
     app = Flask(__name__)
@@ -69,6 +70,16 @@ def create_app(config_class=Config): # ZMIANA: Dodajemy opcjonalny argument
         def check_alarms():
             with app.app_context():
                 monitoring.check_equipment_status()
+
+        @scheduler.task('interval', id='broadcast_dashboard', seconds=10, max_instances=1)
+        def broadcast_dashboard_job():
+            """
+            Regularnie pobiera i wysyła aktualne dane do wszystkich dashboardów.
+            """
+            print(f"\n--- SCHEDULER: Uruchamiam zadanie broadcast_dashboard o {datetime.now()} ---\n")
+            with app.app_context():
+                from .sockets import broadcast_dashboard_update
+                broadcast_dashboard_update()
 
         scheduler.start()
 

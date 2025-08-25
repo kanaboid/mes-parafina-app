@@ -25,5 +25,7 @@ socketio = SocketIO(
     cors_allowed_origins="*",
     #logger=True,
     #engineio_logger=True,
-    message_queue=redis_url
+    message_queue=redis_url,
+    ping_timeout=20,
+    ping_interval=10
 )

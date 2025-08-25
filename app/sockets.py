@@ -11,6 +11,7 @@ from app import db
 from decimal import Decimal, InvalidOperation
 from app.apollo_service import ApolloService
 from app.models import OperacjeLog
+from app.dashboard_service import DashboardService
 
 @socketio.on('connect')
 def handle_connect():

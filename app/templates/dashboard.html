@@ -30,7 +30,16 @@
     <div id="alarms-container" class="mb-4">
         <!-- Alarmy będą wstawiane tutaj -->
     </div>
-
+    <div class="card mb-4">
+        <div class="card-header">
+            Dostępne Reaktory (Puste)
+        </div>
+        <div class="card-body">
+            <div id="puste-reaktory-container" class="d-flex flex-wrap gap-2">
+                <span class="text-muted">Ładowanie...</span>
+            </div>
+        </div>
+    </div>
     <!-- SEKCJA REAKTORÓW -->
     <h2 class="mb-3">Reaktory w Procesie</h2>
     <div id="reaktory-container" class="row g-4">
@@ -58,6 +67,29 @@
         </div>
     </div>
 </div>
+
+<div class="modal fade" id="plan-transfer-modal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Nowy transfer z <span class="fw-bold" id="plan-transfer-source-name"></span></h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <form id="plan-transfer-form">
+            <input type="hidden" id="plan-transfer-source-id">
+            <div class="mb-3">
+              <label class="form-label">Wybierz pusty reaktor docelowy:</label>
+              <div id="plan-transfer-destinations-container">
+                <!-- Opcje będą wstawiane tutaj przez JavaScript -->
+              </div>
+            </div>
+            <button type="submit" class="btn btn-success">Rozpocznij Transfer</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
 {% endblock %}
 
 {% block scripts %}
