@@ -40,7 +40,8 @@ class DashboardService:
                 "temperatura_docelowa": float(reaktor.temperatura_docelowa) if reaktor.temperatura_docelowa else None,
                 "cisnienie_aktualne": float(reaktor.cisnienie_aktualne) if reaktor.cisnienie_aktualne else None,
                 "waga_kg": float(waga_kg),
-                "partia": partia_info
+                "partia": partia_info,
+                "stan_palnika": reaktor.stan_palnika
             })
 
         # 2. Pobierz dane o beczkach brudnych i czystych

@@ -12,7 +12,7 @@ from .batch_management_service import BatchManagementService
 
 from .extensions import db
 from .models import * #Sprzet, PartieSurowca, PortySprzetu, Segmenty, Zawory, OperacjeLog, t_log_uzyte_segmenty
-from app.sockets import broadcast_apollo_update
+from app.sockets import broadcast_apollo_update, broadcast_dashboard_update
 
 # Utworzenie nowego Blueprintu dla operacji
 bp = Blueprint('operations', __name__, url_prefix='/api/operations')
@@ -515,7 +515,7 @@ def anuluj_apollo_transfer():
         cursor.execute("UPDATE sprzet SET stan_sprzetu = 'Gotowy' WHERE id = %s", (id_celu))
         cursor.execute("UPDATE sprzet SET stan_sprzetu = 'Zatankowany' WHERE id = %s", (id_zrodla))
         conn.commit()
-        broadcast_apollo_update()
+        broadcast_dashboard_update()
 
         return jsonify({'success': True, 'message': f'Operacja {id_operacji} została anulowana.'})
 

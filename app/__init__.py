@@ -78,11 +78,13 @@ def create_app(config_class=Config): # ZMIANA: Dodajemy opcjonalny argument
     from .topology_routes import topology_bp
     from .operations_routes import bp as operations_bp
     from .batch_routes import batch_bp
+    from .sprzet_routes import sprzet_bp
     app.register_blueprint(routes.bp)
     app.register_blueprint(cykle_bp)
     app.register_blueprint(topology_bp)
     app.register_blueprint(operations_bp)
     app.register_blueprint(batch_bp)
+    app.register_blueprint(sprzet_bp)
 
     @app.route('/hello')
     def hello():
@@ -95,7 +97,7 @@ def create_app(config_class=Config): # ZMIANA: Dodajemy opcjonalny argument
     
     admin = Admin(app, name='MES', template_mode='bootstrap4')
     from . import models
-    admin.add_view(ModelView(models.Sprzet, db.session))
+    admin.add_view(ModelView(models.Sprzet, db.session, name="Sprzęt", endpoint="sprzet_admin"))
     admin.add_view(ModelView(models.PartieSurowca, db.session, name="Partie (stare)"))
     admin.add_view(ModelView(models.Zawory, db.session))
     admin.add_view(ModelView(models.Segmenty, db.session))

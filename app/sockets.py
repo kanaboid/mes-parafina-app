@@ -206,3 +206,19 @@ def broadcast_apollo_update():
         })
     except Exception as e:
         print(f"Błąd podczas broadcastu aktualizacji Apollo: {e}")
+
+
+def broadcast_dashboard_update():
+    """
+    Pobiera najnowszy stan dashboardu i rozgłasza go
+    do wszystkich podłączonych klientów.
+    """
+    print("Broadcasting dashboard update to all clients...")
+    try:
+        # Użyj serwisu, który już napisaliśmy
+        dashboard_data = DashboardService.get_main_dashboard_data()
+        
+        # Wyślij dane do wszystkich klientów przez WebSocket
+        socketio.emit('dashboard_update', dashboard_data)
+    except Exception as e:
+        print(f"Błąd podczas broadcastu aktualizacji dashboardu: {e}")

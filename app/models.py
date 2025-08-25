@@ -4,9 +4,10 @@ import decimal
 import datetime
 from typing import Optional, List
 
+
 from sqlalchemy import (
     DECIMAL, DateTime, ForeignKeyConstraint, Index, Integer, JSON, String,
-    Table, Text, TIMESTAMP, text, VARCHAR, ForeignKey, func
+    Table, Text, TIMESTAMP, text, VARCHAR, ForeignKey, func, Boolean
 )
 from sqlalchemy.dialects.mysql import ENUM, TINYINT
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -67,7 +68,12 @@ class Sprzet(db.Model):
     temperatura_docelowa: Mapped[Optional[decimal.Decimal]] = mapped_column(DECIMAL(5, 2), comment='Temperatura zadana przez operatora')
     szybkosc_topnienia_kg_h: Mapped[Optional[decimal.Decimal]] = mapped_column(DECIMAL(10, 2), server_default=text("'1000.00'"), comment='Szacowana szybkość topnienia surowca w kg na godzinę')
     active_mix_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
-
+    szybkosc_grzania_c_na_minute: Mapped[Optional[decimal.Decimal]] = mapped_column(DECIMAL(5, 2), comment="Szacowana szybkość grzania w °C/min")
+    szybkosc_chlodzenia_c_na_minute: Mapped[Optional[decimal.Decimal]] = mapped_column(DECIMAL(5, 2), comment="Szacowana szybkość chłodzenia w °C/min")
+    stan_palnika: Mapped[Optional[str]] = mapped_column(ENUM('WLACZONY', 'WYLACZONY'), default='WYLACZONY', comment="Aktualny stan palnika reaktora")
+    
+    filter_cake_status: Mapped[Optional[str]] = mapped_column(String(50), comment='Status placka na filtrze (np. CZYSTY, T10_GOTOWY)')
+    filter_cake_origin_mix_id: Mapped[Optional[int]] = mapped_column(Integer, comment='ID mieszaniny (TankMix), z której pochodzi obecny placek')
     # Relacje
     
     apollo_sesje: Mapped[List['ApolloSesje']] = relationship('ApolloSesje', back_populates='sprzet')
@@ -575,7 +581,15 @@ class TankMixes(db.Model):
     tank_id: Mapped[int] = mapped_column(ForeignKey('sprzet.id'), nullable=False)
     creation_date: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     status: Mapped[str] = mapped_column(ENUM('ACTIVE', 'ARCHIVED'), default='ACTIVE')
-
+    process_status: Mapped[str] = mapped_column(String(50), default='SUROWY', nullable=False, comment='Jawny status etapu przetwarzania mieszaniny')
+    main_composition: Mapped[Optional[dict]] = mapped_column(JSON, comment='Słownik głównych składników z procentami, np. {"T10": 99.0}')
+    wydmuch_percentage: Mapped[decimal.Decimal] = mapped_column(DECIMAL(5, 2), default=decimal.Decimal('0.00'), nullable=False)
+    filter_remains_percentage: Mapped[decimal.Decimal] = mapped_column(DECIMAL(5, 2), default=decimal.Decimal('0.00'), nullable=False)
+    filtration_cycles_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    wydmuch_cycles_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    bleaching_earth_bags_total: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    whiteboard_id: Mapped[Optional[str]] = mapped_column(String(10), comment="Identyfikator z whiteboardu, np. (A), (B)")
+    is_wydmuch_mix: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, comment='Oznacza, czy ta mieszanina składa się wyłącznie z wydmuchów.')
     # Relacja do sprzętu (zbiornika)
     tank: Mapped["Sprzet"] = relationship(
         back_populates="mixes",

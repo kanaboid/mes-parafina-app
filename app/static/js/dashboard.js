@@ -1,4 +1,5 @@
 // app/static/js/dashboard.js
+
 document.addEventListener('DOMContentLoaded', () => {
     
     // --- ELEMENTY DOM ---
@@ -12,11 +13,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const socket = io();
     socket.on('connect', () => console.log("Połączono z dashboardem przez WebSocket."));
     
-    // TODO: Stworzyć na backendzie event 'dashboard_update', który będzie wysyłał dane
-    // socket.on('dashboard_update', (data) => {
-    //     console.log("Otrzymano aktualizację dashboardu:", data);
-    //     updateUI(data);
-    // });
+    // Odkomentuj to, gdy zaimplementujemy broadcast na backendzie
+    socket.on('dashboard_update', (data) => {
+        console.log("Otrzymano aktualizację dashboardu:", data);
+        updateUI(data);
+    });
 
     // --- GŁÓWNA FUNKCJA AKTUALIZUJĄCA UI ---
     function updateUI(data) {
@@ -36,6 +37,22 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         reaktory.forEach(r => {
             const statusClass = r.stan_sprzetu === 'W transferze' ? 'status-alarm' : (r.partia ? 'status-ok' : 'status-idle');
+            
+            const isBurnerOn = r.stan_palnika === 'WLACZONY';
+            const burnerSwitchHTML = `
+                <div class="form-check form-switch mt-2">
+                    <input class="form-check-input action-btn" type="checkbox" role="switch" 
+                           id="burner-switch-${r.id}"
+                           data-action="toggle-burner"
+                           data-sprzet-id="${r.id}"
+                           ${isBurnerOn ? 'checked' : ''}>
+                    <label class="form-check-label" for="burner-switch-${r.id}">
+                        Palnik ${isBurnerOn ? '<span class="text-success fw-bold">WŁĄCZONY</span>' : '<span class="text-muted">WYŁĄCZONY</span>'}
+                    </label>
+                </div>
+            `;
+
+            // === POPRAWIONY BLOK HTML ===
             const cardHTML = `
                 <div class="col-xl-4 col-lg-6 mb-4">
                     <div class="card h-100 card-reaktor">
@@ -47,9 +64,15 @@ document.addEventListener('DOMContentLoaded', () => {
                             <p><strong>Partia:</strong> ${r.partia ? r.partia.kod : '<em>Pusty</em>'}</p>
                             <p><strong>Temperatura:</strong> ${r.temperatura_aktualna || 'N/A'}°C / ${r.temperatura_docelowa || 'N/A'}°C</p>
                             <p><strong>Ciśnienie:</strong> ${r.cisnienie_aktualne || 'N/A'} bar</p>
+                            ${burnerSwitchHTML} 
                         </div>
                         <div class="card-footer text-center">
-                            <button class="btn btn-primary btn-sm">Szczegóły</button>
+                            <button class="btn btn-primary btn-sm action-btn" 
+                                    data-action="show-details" 
+                                    data-sprzet-id="${r.id}"
+                                    data-sprzet-nazwa="${r.nazwa}">
+                                Szczegóły
+                            </button>
                         </div>
                     </div>
                 </div>`;
@@ -90,6 +113,50 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>`;
             alarmsContainer.innerHTML += alarmHTML;
         });
+    }
+
+    // --- OBSŁUGA ZDARZEŃ ---
+    reaktoryContainer.addEventListener('click', (e) => {
+        const targetElement = e.target.closest('.action-btn');
+        if (!targetElement) return;
+
+        const action = targetElement.dataset.action;
+        const sprzetId = targetElement.dataset.sprzetId;
+        
+        if (action === 'show-details') {
+            const sprzetNazwa = targetElement.dataset.sprzetNazwa;
+            handleShowDetails(sprzetId, sprzetNazwa);
+        }
+        else if (action === 'toggle-burner') {
+            const isChecked = targetElement.checked;
+            const newState = isChecked ? 'WLACZONY' : 'WYLACZONY';
+            handleToggleBurner(sprzetId, newState);
+        }
+    });
+
+    // --- FUNKCJE OBSŁUGUJĄCE AKCJE ---
+    function handleShowDetails(id, nazwa) {
+        alert(`Kliknięto "Szczegóły" dla sprzętu: ${nazwa} (ID: ${id})`);
+    }
+
+    async function handleToggleBurner(id, newState) {
+        console.log(`Wysyłanie żądania zmiany stanu palnika dla ID ${id} na ${newState}`);
+        try {
+            const response = await fetch(`/api/sprzet/${id}/palnik`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: newState })
+            });
+            const result = await response.json();
+            if (!response.ok) {
+                throw new Error(result.error || 'Wystąpił nieznany błąd');
+            }
+            // Nie jest potrzebne showToast, bo broadcast z serwera i tak wywoła aktualizację
+        } catch (error) {
+            console.error('Błąd podczas zmiany stanu palnika:', error);
+            //showToast(error.message, 'error'); // Można odkomentować, jeśli chcemy dodatkowy toast o błędzie
+            initialLoad(); // Przeładuj stan do wersji sprzed nieudanej operacji
+        }
     }
 
     // --- INICJALIZACJA ---

@@ -635,7 +635,7 @@ def api_get_porty():
             'message': f'Błąd podczas pobierania portów: {str(e)}'
         }), 500
 
-@topology_bp.route('/api/sprzet', methods=['GET'])
+@topology_bp.route('/api/sprzet', methods=['GET'], endpoint='api_get_sprzet_topology')
 def api_get_sprzet():
     """API: Pobiera listę sprzętu"""
     try:
@@ -686,7 +686,7 @@ def api_get_points():
             'message': f'Błąd podczas pobierania punktów: {str(e)}'
         }), 500
 
-@topology_bp.route('/api/sprzet/<int:sprzet_id>/porty', methods=['GET'])
+@topology_bp.route('/api/sprzet/<int:sprzet_id>/porty', methods=['GET'], endpoint='api_get_sprzet_ports')
 def api_get_sprzet_ports(sprzet_id):
     """API: Pobiera porty dla konkretnego sprzętu"""
     try:
