@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard Produkcyjny{% endblock %}
+
+{% block styles %}
+<style>
+    .status-indicator {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        margin-right: 8px;
+    }
+    .status-ok { background-color: #28a745; }
+    .status-idle { background-color: #ffc107; }
+    .status-alarm { background-color: #dc3545; }
+    .card-reaktor .card-body { font-size: 1.1rem; }
+</style>
+{% endblock %}
+
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Pulpit Operatora</h1>
+        <span class="badge bg-secondary" id="last-updated-time">Ładowanie...</span>
+    </div>
+
+    <!-- Sekcja Alarmów -->
+    <div id="alarms-container" class="mb-4">
+        <!-- Alarmy będą wstawiane tutaj -->
+    </div>
+
+    <!-- SEKCJA REAKTORÓW -->
+    <h2 class="mb-3">Reaktory w Procesie</h2>
+    <div id="reaktory-container" class="row g-4">
+        <!-- Karty reaktorów będą wstawiane tutaj -->
+        <p>Ładowanie stanu reaktorów...</p>
+    </div>
+
+    <hr class="my-5">
+
+    <!-- SEKCJE BECZEK -->
+    <div class="row">
+        <div class="col-md-6">
+            <h2 class="mb-3">Beczki Brudne (Surowiec)</h2>
+            <div id="beczki-brudne-container" class="list-group">
+                <!-- Lista beczek będzie wstawiana tutaj -->
+                <p>Ładowanie stanu beczek...</p>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <h2 class="mb-3">Beczki Czyste (Produkt)</h2>
+            <div id="beczki-czyste-container" class="list-group">
+                 <!-- Lista beczek będzie wstawiana tutaj -->
+                 <p>Ładowanie stanu beczek...</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}

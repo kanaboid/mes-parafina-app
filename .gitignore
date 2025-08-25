@@ -12,5 +12,4 @@ __pycache__/
 Camera/
 .dockerignore
 .dockerfile
-Dockerfile
 node_modules/

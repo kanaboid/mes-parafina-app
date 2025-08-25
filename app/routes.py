@@ -11,6 +11,7 @@ from .apollo_service import ApolloService  # Importujemy serwis Apollo
 from mysql.connector.errors import OperationalError
 from decimal import Decimal
 from app.sockets import broadcast_apollo_update
+from app.dashboard_service import DashboardService
 
 def get_pathfinder():
     if 'pathfinder' not in g:
@@ -1853,3 +1854,18 @@ def get_historia_zaladunku_sesji(sesja_id):
             cursor.close()
             conn.close()
 
+@bp.route('/dashboard')
+def dashboard_view():
+    """Serwuje główną stronę dashboardu."""
+    return render_template('dashboard.html')
+
+@bp.route('/api/dashboard/main-status')
+def api_dashboard_status():
+    """Zwraca zagregowane dane dla głównego dashboardu."""
+    try:
+        data = DashboardService.get_main_dashboard_data()
+        return jsonify(data)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
