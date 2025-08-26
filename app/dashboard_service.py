@@ -4,6 +4,7 @@ from .extensions import db
 from .models import Sprzet, PartieSurowca, Alarmy
 from sqlalchemy import func
 from app.batch_management_service import BatchManagementService
+from collections import defaultdict
 
 
 class DashboardService:
@@ -54,23 +55,34 @@ class DashboardService:
         beczki_brudne_data = []
         beczki_czyste_data = []
         
-        for beczka in beczki:
-            partia_info = None
-            if beczka.active_mix:
-                 mix = beczka.active_mix
-                 composition = BatchManagementService.get_mix_composition(mix.id)
-                 partia_info = { "kod": mix.unique_code, "typ": "MIX", "waga_kg": composition['total_weight'] }
-            
-            beczka_data = {
-                "id": beczka.id,
-                "nazwa": beczka.nazwa_unikalna,
-                "stan_sprzetu": beczka.stan_sprzetu,
-                "partia": partia_info
-            }
-            if beczka.typ_sprzetu == 'beczka_brudna':
-                beczki_brudne_data.append(beczka_data)
-            else:
-                beczki_czyste_data.append(beczka_data)
+        stock_summary = defaultdict(lambda: {'brudny': Decimal('0.0'), 'czysty': Decimal('0.0')})
+
+        for beczka in beczki_brudne_data:
+            if beczka.get('partia'):
+                # Używamy `main_composition` z `TankMixes`, jeśli istnieje i jest słownikiem
+                composition = beczka['partia'].get('sklad') # Zakładając, że `sklad` zawiera `summary_by_material`
+                if composition:
+                     for material_info in composition:
+                        mat_type = material_info['material_type']
+                        mat_quantity = Decimal(material_info['total_quantity'])
+                        stock_summary[mat_type]['brudny'] += mat_quantity
+
+        # Agregacja dla beczek czystych
+        for beczka in beczki_czyste_data:
+            if beczka.get('partia'):
+                composition = beczka['partia'].get('sklad')
+                if composition:
+                    for material_info in composition:
+                        mat_type = material_info['material_type']
+                        mat_quantity = Decimal(material_info['total_quantity'])
+                        stock_summary[mat_type]['czysty'] += mat_quantity
+        
+        # Konwertuj defaultdict na zwykłą listę słowników dla JSON
+        stock_summary_list = [
+            {'material_type': k, 'dirty_stock_kg': float(v['brudny']), 'clean_stock_kg': float(v['czysty'])}
+            for k, v in stock_summary.items()
+        ]
+
 
         # 3. Pobierz aktywne, niepotwierdzone alarmy
         alarmy_q = db.select(Alarmy).where(Alarmy.status_alarmu == 'AKTYWNY').order_by(Alarmy.czas_wystapienia.desc()).limit(5)
@@ -89,5 +101,6 @@ class DashboardService:
             "reaktory_puste": reaktory_puste_data,       # Nowy klucz
             "beczki_brudne": beczki_brudne_data,
             "beczki_czyste": beczki_czyste_data,
-            "alarmy": alarmy_data
+            "alarmy": alarmy_data,
+            "stock_summary": stock_summary_list
         }

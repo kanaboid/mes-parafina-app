@@ -9,6 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const beczkiCzysteContainer = document.getElementById('beczki-czyste-container');
     const alarmsContainer = document.getElementById('alarms-container');
     const lastUpdatedTime = document.getElementById('last-updated-time');
+    const stockSummaryContainer = document.getElementById('stock-summary-container');
 
     const modals = {
         planTransfer: new bootstrap.Modal(document.getElementById('plan-transfer-modal'))
@@ -33,6 +34,7 @@ document.addEventListener('DOMContentLoaded', () => {
         renderBeczki(data.beczki_brudne, beczkiBrudneContainer, true);
         renderBeczki(data.beczki_czyste, beczkiCzysteContainer, false);
         renderAlarms(data.alarmy);
+        renderStockSummary(data.stock_summary);
         lastUpdatedTime.textContent = `Ostatnia aktualizacja: ${new Date().toLocaleTimeString()}`;
     }
 
@@ -139,6 +141,42 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>`;
             alarmsContainer.innerHTML += alarmHTML;
         });
+    }
+
+    function renderStockSummary(summaryData) {
+        stockSummaryContainer.innerHTML = '';
+        if (!summaryData || summaryData.length === 0) {
+            stockSummaryContainer.innerHTML = '<p class="text-muted">Brak surowców w magazynach.</p>';
+            return;
+        }
+
+        let tableHTML = `
+            <table class="table table-sm table-bordered">
+                <thead class="table-light">
+                    <tr>
+                        <th>Typ Surowca</th>
+                        <th class="text-end">W Magazynie Brudnym (kg)</th>
+                        <th class="text-end">W Magazynie Czystym (kg)</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+
+        // Sortujemy alfabetycznie po typie surowca
+        summaryData.sort((a, b) => a.material_type.localeCompare(b.material_type));
+
+        summaryData.forEach(item => {
+            tableHTML += `
+                <tr>
+                    <td><strong>${item.material_type}</strong></td>
+                    <td class="text-end">${item.dirty_stock_kg.toFixed(2)}</td>
+                    <td class="text-end">${item.clean_stock_kg.toFixed(2)}</td>
+                </tr>
+            `;
+        });
+
+        tableHTML += '</tbody></table>';
+        stockSummaryContainer.innerHTML = tableHTML;
     }
 
     // --- OBSŁUGA ZDARZEŃ ---

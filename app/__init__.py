@@ -20,8 +20,8 @@ monitoring = MonitoringService()
 sensor_service = SensorService()
 scheduler = APScheduler()
 
-logging.basicConfig()
-logging.getLogger('apscheduler').setLevel(logging.DEBUG)
+# logging.basicConfig()
+# logging.getLogger('apscheduler').setLevel(logging.DEBUG)
 
 def create_app(config_class=Config): # ZMIANA: Dodajemy opcjonalny argument
     app = Flask(__name__)
