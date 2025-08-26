@@ -28,9 +28,6 @@ socketio = SocketIO(
     #engineio_logger=True,
     message_queue=redis_url,
     ping_timeout=20,
-    ping_interval=10,
-    ssl_verify=False,
-    ssl_cert=None,
-    ssl_key=None
+    ping_interval=10
 
 )
