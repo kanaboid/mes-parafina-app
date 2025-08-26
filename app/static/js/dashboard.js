@@ -42,26 +42,42 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderReaktory(reaktory) {
         reaktoryContainer.innerHTML = '';
         if (!reaktory || reaktory.length === 0) {
-            // Zmieniamy komunikat na bardziej adekwatny
             reaktoryContainer.innerHTML = '<div class="col"><p class="text-muted">Brak reaktorów w aktywnym procesie.</p></div>';
             return;
         }
+
         reaktory.forEach(r => {
-            const statusClass = r.stan_sprzetu === 'W transferze' ? 'status-alarm' : (r.partia ? 'status-ok' : 'status-idle');
+            // --- Logika dla pasków postępu (bez zmian) ---
+            let tempPercent = (r.temperatura_aktualna && r.temperatura_max) ? (r.temperatura_aktualna / r.temperatura_max) * 100 : 0;
+            let tempColorClass = 'bg-success';
+            if (tempPercent > 95) tempColorClass = 'bg-danger';
+            else if (tempPercent > 80) tempColorClass = 'bg-warning';
+            const tempProgressBar = `<div class="progress" style="height: 10px;"><div class="progress-bar ${tempColorClass}" role="progressbar" style="width: ${tempPercent}%;"></div></div>`;
+            
+            let pressurePercent = (r.cisnienie_aktualne && r.cisnienie_max) ? (r.cisnienie_aktualne / r.cisnienie_max) * 100 : 0;
+            let pressureColorClass = 'bg-success';
+            if (pressurePercent > 95) pressureColorClass = 'bg-danger';
+            else if (pressurePercent > 80) pressureColorClass = 'bg-warning';
+            const pressureProgressBar = `<div class="progress" style="height: 10px;"><div class="progress-bar ${pressureColorClass}" role="progressbar" style="width: ${pressurePercent}%;"></div></div>`;
+            
+            // --- Logika dla przełącznika palnika (bez zmian) ---
             const isBurnerOn = r.stan_palnika === 'WLACZONY';
             const burnerSwitchHTML = `
-                <div class="form-check form-switch mt-2">
-                    <input class="form-check-input action-btn" type="checkbox" role="switch" 
-                           id="burner-switch-${r.id}"
-                           data-action="toggle-burner"
-                           data-sprzet-id="${r.id}"
-                           ${isBurnerOn ? 'checked' : ''}>
+                <div class="form-check form-switch mt-3">
+                    <input class="form-check-input action-btn" type="checkbox" role="switch" id="burner-switch-${r.id}"
+                           data-action="toggle-burner" data-sprzet-id="${r.id}" ${isBurnerOn ? 'checked' : ''}>
                     <label class="form-check-label" for="burner-switch-${r.id}">
                         Palnik ${isBurnerOn ? '<span class="text-success fw-bold">WŁĄCZONY</span>' : '<span class="text-muted">WYŁĄCZONY</span>'}
                     </label>
                 </div>`;
+            
+            // --- Logika dla statusu i partii (bez zmian) ---
+            const statusClass = r.stan_sprzetu === 'W transferze' ? 'status-alarm' : (r.partia ? 'status-ok' : 'status-idle');
+            
+            // --- NOWA, POPRAWIONA LOGIKA DLA WAGI ---
+            const wagaHTML = r.partia ? `<p><strong>Waga:</strong> ${(r.partia.waga_kg/1000).toFixed(1)} t</p>` : '';
 
-            const wagaHTML = r.partia ? `<p><strong>Waga:</strong> ${r.partia.waga_kg.toFixed(2)} kg</p>` : '';
+            // --- Kompletny szablon karty ---
             const cardHTML = `
                 <div class="col-xl-4 col-lg-6 mb-4">
                     <div class="card h-100 card-reaktor">
@@ -71,16 +87,15 @@ document.addEventListener('DOMContentLoaded', () => {
                         </div>
                         <div class="card-body">
                             <p><strong>Partia:</strong> ${r.partia ? r.partia.kod : '<em>Pusty</em>'}</p>
-                            ${wagaHTML}
-                            <p><strong>Temperatura:</strong> ${r.temperatura_aktualna || 'N/A'}°C / ${r.temperatura_docelowa || 'N/A'}°C</p>
-                            <p><strong>Ciśnienie:</strong> ${r.cisnienie_aktualne || 'N/A'} bar</p>
+                            ${wagaHTML} 
+                            <p class="mb-1"><strong>Temperatura:</strong> ${r.temperatura_aktualna || 'N/A'}°C / ${r.temperatura_docelowa || 'N/A'}°C</p>
+                            ${tempProgressBar}
+                            <p class="mb-1 mt-3"><strong>Ciśnienie:</strong> ${r.cisnienie_aktualne || 'N/A'} bar</p>
+                            ${pressureProgressBar}
                             ${burnerSwitchHTML}
                         </div>
                         <div class="card-footer text-center">
-                            <button class="btn btn-primary btn-sm action-btn" 
-                                    data-action="show-details" 
-                                    data-sprzet-id="${r.id}"
-                                    data-sprzet-nazwa="${r.nazwa}">
+                            <button class="btn btn-primary btn-sm action-btn" data-action="show-details" data-sprzet-id="${r.id}" data-sprzet-nazwa="${r.nazwa}">
                                 Szczegóły
                             </button>
                         </div>
@@ -125,7 +140,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <small>${b.stan_sprzetu}</small>
                     </div>
                     <p class="mb-1">
-                        ${b.partia ? `Zawartość: <strong>${b.partia.kod}</strong> (${b.partia.waga_kg} kg)` : '<em>Pusta</em>'}
+                        ${b.partia ? `Zawartość: <strong>${b.partia.kod}</strong> (${(b.partia.waga_kg/1000)} t)` : '<em>Pusta</em>'}
                     </p>
                     ${transferButtonHTML}
                 </div>`;
@@ -158,8 +173,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 <thead class="table-light">
                     <tr>
                         <th>Typ Surowca</th>
-                        <th class="text-end">W Magazynie Brudnym (kg)</th>
-                        <th class="text-end">W Magazynie Czystym (kg)</th>
+                        <th class="text-end">W Magazynie Brudnym (t)</th>
+                        <th class="text-end">W Magazynie Czystym (t)</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -172,8 +187,8 @@ document.addEventListener('DOMContentLoaded', () => {
             tableHTML += `
                 <tr>
                     <td><strong>${item.material_type}</strong></td>
-                    <td class="text-end">${item.dirty_stock_kg.toFixed(2)}</td>
-                    <td class="text-end">${item.clean_stock_kg.toFixed(2)}</td>
+                    <td class="text-end">${(item.dirty_stock_kg/1000).toFixed(1)}</td>
+                    <td class="text-end">${(item.clean_stock_kg/1000).toFixed(1)}</td>
                 </tr>
             `;
         });

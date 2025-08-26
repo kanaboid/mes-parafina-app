@@ -7,6 +7,7 @@ from .extensions import db
 from .models import *
 from .batch_management_service import BatchManagementService
 
+
 # Nowy Blueprint dla operacji na partiach
 batch_bp = Blueprint('batches', __name__, url_prefix='/api/batches')
 

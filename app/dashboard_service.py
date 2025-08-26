@@ -45,7 +45,9 @@ class DashboardService:
                     "temperatura_aktualna": float(sprzet.temperatura_aktualna) if sprzet.temperatura_aktualna else None,
                     "temperatura_docelowa": float(sprzet.temperatura_docelowa) if sprzet.temperatura_docelowa else None,
                     "cisnienie_aktualne": float(sprzet.cisnienie_aktualne) if sprzet.cisnienie_aktualne else None,
-                    "stan_palnika": sprzet.stan_palnika
+                    "stan_palnika": sprzet.stan_palnika,
+                    "temperatura_max": float(sprzet.temperatura_max) if sprzet.temperatura_max else 120.0,
+                    "cisnienie_max": float(sprzet.cisnienie_max) if sprzet.cisnienie_max else 6.0
                 })
 
             partia_info = None

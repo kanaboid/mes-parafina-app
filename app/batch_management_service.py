@@ -88,7 +88,7 @@ class BatchManagementService:
     @staticmethod
     def get_mix_composition(mix_id):
         """Zwraca skład na podstawie wag zapisanych w MixComponents. (Wersja wzmocniona)"""
-        print(f"DEBUG: Uruchomiono get_mix_composition dla mix_id: {mix_id}")
+        # print(f"DEBUG: Uruchomiono get_mix_composition dla mix_id: {mix_id}")
         
         # Użyj joinedload, aby od razu załadować powiązane obiekty Batch
         query = db.select(TankMixes).options(
@@ -98,7 +98,7 @@ class BatchManagementService:
         mix = db.session.execute(query).unique().scalar_one_or_none()
 
         if not mix:
-            print(f"DEBUG: Nie znaleziono mieszaniny o ID {mix_id}")
+            # print(f"DEBUG: Nie znaleziono mieszaniny o ID {mix_id}")
             return {'total_weight': 0.0, 'components_by_batch': [], 'summary_by_material': []}
         
         # Filtruj składniki, które mają realną wagę w mieszaninie
@@ -107,7 +107,7 @@ class BatchManagementService:
 
         total_weight = sum(c.quantity_in_mix for c in components_with_quantity)
         if total_weight == 0:
-            print("DEBUG: Całkowita waga mieszaniny wynosi 0.")
+            # print("DEBUG: Całkowita waga mieszaniny wynosi 0.")
             return {'total_weight': 0.0, 'components_by_batch': [], 'summary_by_material': []}
 
         # Oblicz szczegóły dla każdej partii pierwotnej
@@ -140,10 +140,11 @@ class BatchManagementService:
         final_result = {
             'total_weight': float(total_weight), 
             'components_by_batch': composition_details,
+            'components': composition_details, # <-- ZWRACAMY KLUCZ 'components'
             'summary_by_material': sorted(material_summary_details, key=lambda x: x['material_type'])
         }
         
-        print(f"DEBUG: Zwracane dane składu: {final_result}")
+        # print(f"DEBUG: Zwracane dane składu: {final_result}")
         return final_result
 
     @staticmethod
