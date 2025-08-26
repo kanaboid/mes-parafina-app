@@ -7,6 +7,7 @@ from sqlalchemy.orm import joinedload
 from decimal import Decimal
 from .apollo_service import ApolloService
 import pytz
+from collections import defaultdict
 
 WARSAW_TZ = pytz.timezone('Europe/Warsaw')
 
@@ -86,28 +87,64 @@ class BatchManagementService:
 
     @staticmethod
     def get_mix_composition(mix_id):
-        """Zwraca skład na podstawie wag zapisanych w MixComponents."""
+        """Zwraca skład na podstawie wag zapisanych w MixComponents. (Wersja wzmocniona)"""
+        print(f"DEBUG: Uruchomiono get_mix_composition dla mix_id: {mix_id}")
+        
+        # Użyj joinedload, aby od razu załadować powiązane obiekty Batch
         query = db.select(TankMixes).options(
             joinedload(TankMixes.components).joinedload(MixComponents.batch)
         ).where(TankMixes.id == mix_id)
         
-        result = db.session.execute(query)
-        mix = result.unique().scalar_one_or_none()
-        if not mix: return {'total_weight': Decimal('0.00'), 'components': []}
-        
-        components_with_quantity = [c for c in mix.components if c.quantity_in_mix > 0]
-        total_weight = sum(c.quantity_in_mix for c in components_with_quantity)
-        if total_weight == 0: return {'total_weight': Decimal('0.00'), 'components': []}
+        mix = db.session.execute(query).unique().scalar_one_or_none()
 
+        if not mix:
+            print(f"DEBUG: Nie znaleziono mieszaniny o ID {mix_id}")
+            return {'total_weight': 0.0, 'components_by_batch': [], 'summary_by_material': []}
+        
+        # Filtruj składniki, które mają realną wagę w mieszaninie
+        components_with_quantity = [c for c in mix.components if c.quantity_in_mix > 0]
+        print(f"DEBUG: Znaleziono {len(components_with_quantity)} składników z wagą > 0.")
+
+        total_weight = sum(c.quantity_in_mix for c in components_with_quantity)
+        if total_weight == 0:
+            print("DEBUG: Całkowita waga mieszaniny wynosi 0.")
+            return {'total_weight': 0.0, 'components_by_batch': [], 'summary_by_material': []}
+
+        # Oblicz szczegóły dla każdej partii pierwotnej
         composition_details = []
         for c in components_with_quantity:
+            percentage = (c.quantity_in_mix / total_weight) * 100 if total_weight > 0 else 0
             composition_details.append({
-                'batch_id': c.batch.id, 'batch_code': c.batch.unique_code,
+                'batch_id': c.batch.id,
+                'batch_code': c.batch.unique_code,
                 'material_type': c.batch.material_type,
-                'quantity_in_mix': c.quantity_in_mix,
-                'percentage': (c.quantity_in_mix / total_weight) * 100
+                'quantity_in_mix': float(c.quantity_in_mix),
+                'percentage': float(percentage)
             })
-        return {'total_weight': total_weight, 'components': composition_details}
+
+        # Agreguj wyniki po typie materiału
+        material_type_summary = defaultdict(lambda: Decimal('0.0'))
+        for c in components_with_quantity:
+            material_type_summary[c.batch.material_type] += c.quantity_in_mix
+
+        material_summary_details = []
+        for material_type, total_quantity in material_type_summary.items():
+            percentage = (total_quantity / total_weight) * 100 if total_weight > 0 else 0
+            material_summary_details.append({
+                'material_type': material_type,
+                'total_quantity': float(total_quantity),
+                'percentage': float(percentage)
+            })
+        
+        # Przygotuj finalny wynik
+        final_result = {
+            'total_weight': float(total_weight), 
+            'components_by_batch': composition_details,
+            'summary_by_material': sorted(material_summary_details, key=lambda x: x['material_type'])
+        }
+        
+        print(f"DEBUG: Zwracane dane składu: {final_result}")
+        return final_result
 
     @staticmethod
     def transfer_between_dirty_tanks(source_tank_id, destination_tank_id, quantity_to_transfer, operator):

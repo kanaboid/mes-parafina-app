@@ -12,7 +12,8 @@ from mysql.connector.errors import OperationalError
 from decimal import Decimal
 from app.sockets import broadcast_apollo_update
 from app.dashboard_service import DashboardService
-
+from .models import Sprzet
+from .extensions import db
 
 def get_pathfinder():
     if 'pathfinder' not in g:
@@ -35,6 +36,13 @@ bp = Blueprint('api', __name__, url_prefix='/')
 def index():
     """Serwuje główną stronę aplikacji (frontend)."""
     return render_template('index.html')
+
+@bp.route('/sprzet/<int:sprzet_id>/details')
+def sprzet_details_view(sprzet_id):
+    sprzet = db.session.get(Sprzet, sprzet_id)
+    if not sprzet:
+        return "Nie znaleziono sprzętu", 404
+    return render_template('sprzet_details.html', sprzet=sprzet)
 
 
 @bp.route('/admin-console')

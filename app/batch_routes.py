@@ -191,3 +191,19 @@ def get_tank_status(tank_id):
     except Exception as e:
         # Nie robimy rollback, bo to operacja tylko do odczytu
         return jsonify({'status': 'error', 'message': f'Błąd serwera: {e}'}), 500
+
+@batch_bp.route('/mixes/<int:mix_id>/composition', methods=['GET'])
+def get_mix_composition_endpoint(mix_id):
+    """
+    Zwraca szczegółowy, dwupoziomowy skład dla danej mieszaniny.
+    """
+    try:
+        composition_data = BatchManagementService.get_mix_composition(mix_id)
+        if not composition_data:
+            return jsonify({'error': f'Mieszanina o ID {mix_id} nie została znaleziona.'}), 404
+        
+        return jsonify(composition_data)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Błąd serwera: {e}'}), 500

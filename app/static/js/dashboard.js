@@ -60,6 +60,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         Palnik ${isBurnerOn ? '<span class="text-success fw-bold">WŁĄCZONY</span>' : '<span class="text-muted">WYŁĄCZONY</span>'}
                     </label>
                 </div>`;
+
+            const wagaHTML = r.partia ? `<p><strong>Waga:</strong> ${r.partia.waga_kg.toFixed(2)} kg</p>` : '';
             const cardHTML = `
                 <div class="col-xl-4 col-lg-6 mb-4">
                     <div class="card h-100 card-reaktor">
@@ -69,6 +71,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         </div>
                         <div class="card-body">
                             <p><strong>Partia:</strong> ${r.partia ? r.partia.kod : '<em>Pusty</em>'}</p>
+                            ${wagaHTML}
                             <p><strong>Temperatura:</strong> ${r.temperatura_aktualna || 'N/A'}°C / ${r.temperatura_docelowa || 'N/A'}°C</p>
                             <p><strong>Ciśnienie:</strong> ${r.cisnienie_aktualne || 'N/A'} bar</p>
                             ${burnerSwitchHTML}
@@ -208,7 +211,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- FUNKCJE OBSŁUGUJĄCE AKCJE ---
     function handleShowDetails(id, nazwa) {
-        alert(`Kliknięto "Szczegóły" dla sprzętu: ${nazwa} (ID: ${id})`);
+        window.location.href = `/sprzet/${id}/details`;
     }
 
     async function handleToggleBurner(id, newState) {

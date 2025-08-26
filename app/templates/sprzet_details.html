@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Szczegóły - {{ sprzet.nazwa_unikalna }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Szczegóły Sprzętu: <span class="text-primary">{{ sprzet.nazwa_unikalna }}</span></h1>
+        <a href="{{ url_for('api.dashboard_view') }}" class="btn btn-secondary">Powrót do Dashboardu</a>
+    </div>
+
+    <!-- Jeśli w sprzęcie jest mieszanina, pokaż jej szczegóły -->
+    {% if sprzet.active_mix_id %}
+    <div id="composition-data" data-mix-id="{{ sprzet.active_mix_id }}">
+        
+        <h2 class="mt-5">Podsumowanie wg Typu Materiału</h2>
+        <div id="summary-composition-container">
+            <p>Ładowanie podsumowania...</p>
+        </div>
+
+        <h2 class="mt-5">Szczegółowa Lista Partii Pierwotnych</h2>
+        <div id="detailed-composition-container">
+            <p>Ładowanie szczegółów...</p>
+        </div>
+
+    </div>
+    {% else %}
+    <div class="alert alert-info">Ten sprzęt jest obecnie pusty.</div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/sprzet_details.js') }}"></script>
+{% endblock %}

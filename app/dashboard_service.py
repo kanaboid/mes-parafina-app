@@ -1,104 +1,109 @@
 # app/dashboard_service.py
 
 from .extensions import db
-from .models import Sprzet, PartieSurowca, Alarmy
+from .models import Sprzet, Alarmy, TankMixes
+from .batch_management_service import BatchManagementService
 from sqlalchemy import func
-from app.batch_management_service import BatchManagementService
+from sqlalchemy.orm import joinedload
+from decimal import Decimal
 from collections import defaultdict
-
 
 class DashboardService:
 
     @staticmethod
     def get_main_dashboard_data():
         """
-        Agreguje wszystkie dane potrzebne do wyświetlenia głównego dashboardu.
+        Agreguje wszystkie dane potrzebne do wyświetlenia głównego dashboardu. (Wersja poprawiona)
         """
         
-        # 1. Pobierz dane o reaktorach z ich partiami (nowy system mieszanin)
-        # To zapytanie jest bardziej złożone, więc użyjemy ORM
-        reaktory_q = db.select(Sprzet).where(Sprzet.typ_sprzetu == 'reaktor').order_by(Sprzet.nazwa_unikalna)
-        reaktory = db.session.execute(reaktory_q).scalars().all()
+        # --- ETAP 1: Pobierz wszystkie reaktory i beczki z ich aktywnymi mieszaninami ---
+        sprzet_q = db.select(Sprzet).options(
+            joinedload(Sprzet.active_mix) # Użyj `joinedload`, aby uniknąć problemu N+1
+        ).where(
+            Sprzet.typ_sprzetu.in_(['reaktor', 'beczka_brudna', 'beczka_czysta'])
+        ).order_by(Sprzet.typ_sprzetu, Sprzet.nazwa_unikalna)
+        
+        wszystkie_urzadzenia = db.session.execute(sprzet_q).scalars().unique().all()
+
         reaktory_w_procesie_data = []
         reaktory_puste_data = []
-
-        for reaktor in reaktory:
-            reaktor_data = {
-                "id": reaktor.id,
-                "nazwa": reaktor.nazwa_unikalna,
-                "stan_sprzetu": reaktor.stan_sprzetu,
-                "temperatura_aktualna": float(reaktor.temperatura_aktualna) if reaktor.temperatura_aktualna else None,
-                "temperatura_docelowa": float(reaktor.temperatura_docelowa) if reaktor.temperatura_docelowa else None,
-                "cisnienie_aktualne": float(reaktor.cisnienie_aktualne) if reaktor.cisnienie_aktualne else None,
-                "stan_palnika": reaktor.stan_palnika,
-                "partia": None # Domyślnie brak partii
-            }
-
-            if reaktor.active_mix: # Jeśli jest aktywna mieszanina, reaktor jest "w procesie"
-                mix = reaktor.active_mix
-                composition = BatchManagementService.get_mix_composition(mix.id)
-                waga_kg = composition.get('total_weight', 0)
-
-                reaktor_data["partia"] = {
-                    "id": mix.id, # Przekazujemy ID mieszaniny
-                    "kod": mix.unique_code,
-                    "typ": f"MIX ({len(composition.get('components', []))} składników)",
-                    "waga_kg": float(waga_kg)
-                }
-                reaktory_w_procesie_data.append(reaktor_data)
-            else: # Jeśli nie ma aktywnej mieszaniny, reaktor jest "pusty"
-                reaktory_puste_data.append(reaktor_data)
-
-        # 2. Pobierz dane o beczkach brudnych i czystych
-        beczki_q = db.select(Sprzet).where(Sprzet.typ_sprzetu.in_(['beczka_brudna', 'beczka_czysta'])).order_by(Sprzet.nazwa_unikalna)
-        beczki = db.session.execute(beczki_q).scalars().all()
         beczki_brudne_data = []
         beczki_czyste_data = []
-        
+
+        # --- ETAP 2: Przetwórz dane i rozdziel na odpowiednie listy ---
+        for sprzet in wszystkie_urzadzenia:
+            # Przygotuj bazowy słownik dla każdego sprzętu
+            sprzet_data = {
+                "id": sprzet.id,
+                "nazwa": sprzet.nazwa_unikalna,
+                "stan_sprzetu": sprzet.stan_sprzetu,
+                "partia": None # Domyślnie
+            }
+            # Dodaj specyficzne dane dla reaktorów
+            if sprzet.typ_sprzetu == 'reaktor':
+                sprzet_data.update({
+                    "temperatura_aktualna": float(sprzet.temperatura_aktualna) if sprzet.temperatura_aktualna else None,
+                    "temperatura_docelowa": float(sprzet.temperatura_docelowa) if sprzet.temperatura_docelowa else None,
+                    "cisnienie_aktualne": float(sprzet.cisnienie_aktualne) if sprzet.cisnienie_aktualne else None,
+                    "stan_palnika": sprzet.stan_palnika
+                })
+
+            partia_info = None
+            if sprzet.active_mix:
+                mix = sprzet.active_mix
+                composition = BatchManagementService.get_mix_composition(mix.id)
+                waga_kg = composition.get('total_weight', Decimal('0.0'))
+
+                partia_info = {
+                    "id": mix.id,
+                    "kod": mix.unique_code,
+                    "waga_kg": float(waga_kg),
+                    # Przekazujemy pełny skład, będzie potrzebny do agregacji
+                    "sklad": composition.get('summary_by_material', []) 
+                }
+                sprzet_data["partia"] = partia_info
+            
+            # Rozdziel do odpowiednich list
+            if sprzet.typ_sprzetu == 'reaktor':
+                if sprzet.active_mix:
+                    reaktory_w_procesie_data.append(sprzet_data)
+                else:
+                    reaktory_puste_data.append(sprzet_data)
+            elif sprzet.typ_sprzetu == 'beczka_brudna':
+                beczki_brudne_data.append(sprzet_data)
+            elif sprzet.typ_sprzetu == 'beczka_czysta':
+                beczki_czyste_data.append(sprzet_data)
+
+        # --- ETAP 3: Agregacja do podsumowania magazynu (teraz na poprawnych danych) ---
         stock_summary = defaultdict(lambda: {'brudny': Decimal('0.0'), 'czysty': Decimal('0.0')})
 
         for beczka in beczki_brudne_data:
-            if beczka.get('partia'):
-                # Używamy `main_composition` z `TankMixes`, jeśli istnieje i jest słownikiem
-                composition = beczka['partia'].get('sklad') # Zakładając, że `sklad` zawiera `summary_by_material`
-                if composition:
-                     for material_info in composition:
-                        mat_type = material_info['material_type']
-                        mat_quantity = Decimal(material_info['total_quantity'])
-                        stock_summary[mat_type]['brudny'] += mat_quantity
+            if beczka.get('partia') and beczka['partia'].get('sklad'):
+                for material_info in beczka['partia']['sklad']:
+                    mat_type = material_info['material_type']
+                    mat_quantity = Decimal(material_info.get('total_quantity', '0.0'))
+                    stock_summary[mat_type]['brudny'] += mat_quantity
 
-        # Agregacja dla beczek czystych
         for beczka in beczki_czyste_data:
-            if beczka.get('partia'):
-                composition = beczka['partia'].get('sklad')
-                if composition:
-                    for material_info in composition:
-                        mat_type = material_info['material_type']
-                        mat_quantity = Decimal(material_info['total_quantity'])
-                        stock_summary[mat_type]['czysty'] += mat_quantity
+            if beczka.get('partia') and beczka['partia'].get('sklad'):
+                for material_info in beczka['partia']['sklad']:
+                    mat_type = material_info['material_type']
+                    mat_quantity = Decimal(material_info.get('total_quantity', '0.0'))
+                    stock_summary[mat_type]['czysty'] += mat_quantity
         
-        # Konwertuj defaultdict na zwykłą listę słowników dla JSON
-        stock_summary_list = [
+        stock_summary_list = sorted([
             {'material_type': k, 'dirty_stock_kg': float(v['brudny']), 'clean_stock_kg': float(v['czysty'])}
             for k, v in stock_summary.items()
-        ]
-
-
-        # 3. Pobierz aktywne, niepotwierdzone alarmy
+        ], key=lambda x: x['material_type'])
+        
+        # --- ETAP 4: Pobierz alarmy ---
         alarmy_q = db.select(Alarmy).where(Alarmy.status_alarmu == 'AKTYWNY').order_by(Alarmy.czas_wystapienia.desc()).limit(5)
         alarmy = db.session.execute(alarmy_q).scalars().all()
-        alarmy_data = [{
-            "id": a.id,
-            "typ": a.typ_alarmu,
-            "sprzet": a.nazwa_sprzetu,
-            "wartosc": float(a.wartosc),
-            "limit": float(a.limit_przekroczenia),
-            "czas": a.czas_wystapienia.isoformat() + 'Z' # Dodajemy Z dla UTC
-        } for a in alarmy]
+        alarmy_data = [{ "id": a.id, "typ": a.typ_alarmu, "sprzet": a.nazwa_sprzetu, "wartosc": float(a.wartosc), "limit": float(a.limit_przekroczenia), "czas": a.czas_wystapienia.isoformat() + 'Z' } for a in alarmy]
 
         return {
-            "reaktory_w_procesie": reaktory_w_procesie_data, # Zmieniona nazwa klucza
-            "reaktory_puste": reaktory_puste_data,       # Nowy klucz
+            "reaktory_w_procesie": reaktory_w_procesie_data,
+            "reaktory_puste": reaktory_puste_data,
             "beczki_brudne": beczki_brudne_data,
             "beczki_czyste": beczki_czyste_data,
             "alarmy": alarmy_data,
