@@ -1,7 +1,7 @@
 # app/routes.py
 
 from flask import Blueprint, jsonify, request, current_app, render_template, g
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from .sensors import SensorService  # Importujemy serwis czujników
 import mysql.connector
 import time
@@ -12,6 +12,7 @@ from mysql.connector.errors import OperationalError
 from decimal import Decimal
 from app.sockets import broadcast_apollo_update
 from app.dashboard_service import DashboardService
+
 
 def get_pathfinder():
     if 'pathfinder' not in g:

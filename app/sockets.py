@@ -154,6 +154,7 @@ def handle_set_temp(args):
             emit('response', {
                 'data': f"Sukces!\nZaktualizowano temperaturę dla: {', '.join(updated)}",
             })
+            broadcast_dashboard_update()
         else:
             emit('response', {
                 'data': "Nie udało się zaktualizować żadnego z podanych sprzętów (sprawdź nazwy).",

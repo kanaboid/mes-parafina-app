@@ -53,10 +53,11 @@ def create_app(config_class=Config): # ZMIANA: Dodajemy opcjonalny argument
     if not app.config.get('TESTING'):
         @scheduler.task('interval',     
                        id='read_sensors', 
-                       seconds=600,
+                       seconds=5,
                        max_instances=1,
                        next_run_time=datetime.now(timezone.utc))
         def read_sensors():
+            print(f"\n--- SCHEDULER: Uruchamiam zadanie read_sensors o {datetime.now()} ---\n")
             with app.app_context():
                 try:
                     sensor_service.read_sensors()
@@ -68,10 +69,14 @@ def create_app(config_class=Config): # ZMIANA: Dodajemy opcjonalny argument
                        seconds=30,
                        max_instances=1)
         def check_alarms():
+            print(f"\n--- SCHEDULER: Uruchamiam zadanie check_alarms o {datetime.now()} ---\n")
             with app.app_context():
                 monitoring.check_equipment_status()
 
-        @scheduler.task('interval', id='broadcast_dashboard', seconds=10, max_instances=1)
+        @scheduler.task('interval', 
+                        id='broadcast_dashboard', 
+                        seconds=3, 
+                        max_instances=1)
         def broadcast_dashboard_job():
             """
             Regularnie pobiera i wysyła aktualne dane do wszystkich dashboardów.

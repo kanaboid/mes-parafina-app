@@ -4,7 +4,8 @@ from app import create_app
 from app.sensors import SensorService
 from app.extensions import db
 from tabulate import tabulate
-
+from app.sockets import broadcast_dashboard_update
+import time
 # Tworzymy instancję aplikacji, aby mieć dostęp do jej kontekstu
 # Jest to konieczne, aby SensorService mógł korzystać z `db.session`
 app = create_app()
@@ -44,6 +45,8 @@ def set_temp_command(temperatura, sprzety):
     if updated:
         click.echo(click.style("Sukces!", fg="green"))
         click.echo(f"Zaktualizowano temperaturę dla: {', '.join(updated)}")
+        time.sleep(1)
+        broadcast_dashboard_update()
     else:
         click.echo(click.style("Nie udało się zaktualizować żadnego sprzętu.", fg="yellow"))
 
@@ -101,3 +104,50 @@ def show_temp_command(sprzety):
 
     # Wyświetl sformatowaną tabelę
     click.echo(tabulate(table_data, headers=headers, tablefmt="grid"))
+
+@app.cli.command("clear-measurements")
+@click.option("--confirm", is_flag=True, help="Potwierdź usunięcie wszystkich danych")
+@click.option("--recreate", is_flag=True, help="Usuń i utwórz tabelę na nowo (najszybsze)")
+def clear_measurements_command(confirm, recreate):
+    """
+    Czyści wszystkie dane z tabeli historia_pomiarow.
+    
+    Przykłady użycia:
+    flask clear-measurements --confirm                    # Usuwa wszystkie dane (DELETE)
+    flask clear-measurements --confirm --recreate        # Usuwa i tworzy tabelę na nowo (najszybsze)
+    """
+    if not confirm:
+        click.echo(click.style("BŁĄD: Musisz potwierdzić operację używając flagi --confirm", fg="red"))
+        click.echo("Przykład: flask clear-measurements --confirm")
+        return
+    
+    with app.app_context():
+        try:
+            if recreate:
+                # Najszybsze rozwiązanie: usuń i utwórz tabelę na nowo
+                click.echo("Usuwanie tabeli historia_pomiarow...")
+                
+                # Użyj SQLAlchemy do usunięcia konkretnej tabeli
+                from app.models import HistoriaPomiarow
+                HistoriaPomiarow.__table__.drop(db.engine, checkfirst=True)
+                
+                click.echo("Tworzenie nowej tabeli historia_pomiarow...")
+                HistoriaPomiarow.__table__.create(db.engine)
+                
+                db.session.commit()
+                click.echo("Tabela została usunięta i utworzona na nowo!")
+                
+            else:
+                # Standardowe usuwanie wszystkich danych
+                click.echo("Usuwanie wszystkich rekordów...")
+                result = db.session.execute("DELETE FROM historia_pomiarow")
+                deleted_count = result.rowcount
+                db.session.commit()
+                click.echo(f"Usunięto {deleted_count} rekordów")
+            
+            click.echo(click.style("Sukces! Tabela została całkowicie wyczyszczona.", fg="green"))
+            
+        except Exception as e:
+            db.session.rollback()
+            click.echo(click.style(f"Błąd podczas czyszczenia tabeli: {str(e)}", fg="red"))
+            raise click.Abort()
