@@ -14,6 +14,8 @@ class Config:
     MYSQL_USER = os.environ.get('MYSQLUSER', 'root')
     MYSQL_PASSWORD = os.environ.get('MYSQL_ROOT_PASSWORD', '')
     MYSQL_DB = 'mes_parafina_db'
+    ENVIRONMENT = os.environ.get('ENVIRONMENT', 'development')
+    PREFERRED_URL_SCHEME = 'https' if ENVIRONMENT == 'production' else 'http'
 
     # URI dla bazy deweloperskiej/produkcyjnej
     SQLALCHEMY_DATABASE_URI = (
