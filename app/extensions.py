@@ -6,6 +6,7 @@ from flask_socketio import SocketIO
 from sqlalchemy import event
 from sqlalchemy.engine import Engine
 
+
 db = SQLAlchemy()
 
 @event.listens_for(Engine, "connect")
@@ -27,5 +28,9 @@ socketio = SocketIO(
     #engineio_logger=True,
     message_queue=redis_url,
     ping_timeout=20,
-    ping_interval=10
+    ping_interval=10,
+    ssl_verify=False,
+    ssl_cert=None,
+    ssl_key=None
+
 )

@@ -26,6 +26,17 @@ scheduler = APScheduler()
 def create_app(config_class=Config): # ZMIANA: Dodajemy opcjonalny argument
     app = Flask(__name__)
     app.config.from_object(config_class)
+
+    if app.config.get('ENVIRONMENT') == 'production':
+        app.config['PREFERRED_URL_SCHEME'] = 'https'
+    else:
+        app.config['PREFERRED_URL_SCHEME'] = 'http'
+        @app.after_request
+        def add_security_headers(response):
+            response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+            response.headers['X-Content-Type-Options'] = 'nosniff'
+            response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+            return response
     
     db.init_app(app)
     socketio.init_app(app)
