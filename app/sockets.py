@@ -39,6 +39,8 @@ def handle_command(json_data):
         handle_show_temp(args)
     elif command == 'set-temp':
         handle_set_temp(args)
+    elif command == 'clear-measurements':
+        handle_clear_measurements(args)
     elif command == 'help':
         handle_help()
     else:
@@ -56,6 +58,8 @@ Dostępne komendy:
                                         Można użyć flagi -- reaktory.
 
   set-temp <temp> <sprzet1> ...        - Ustawia temperaturę dla podanego sprzętu. Można użyć flagi --reaktory lub --all.
+
+  clear-measurements                    - Czyści wszystkie dane z tabeli historia_pomiarow. Musisz potwierdzić operację używając flagi --confirm.
 """
     emit('response', {'data': help_text})
 
@@ -165,6 +169,47 @@ def handle_set_temp(args):
         print(f"Błąd podczas wykonywania set-temp: {e}")
         emit('response', {
             'data': f"Wystąpił krytyczny błąd serwera: {e}",
+            'is_error': True
+        })
+
+def handle_clear_measurements(args):
+    """Logika dla komendy clear-measurements."""
+    try:
+        # Sprawdź czy użytkownik potwierdził operację
+        if not args or args[0] != '--confirm':
+            emit('response', {
+                'data': 'BŁĄD: Musisz potwierdzić operację używając flagi --confirm\n'
+                       'Użycie: clear-measurements --confirm',
+                'is_error': True
+            })
+            return
+        
+        emit('response', {'data': 'Rozpoczynam czyszczenie tabeli historia_pomiarow...'})
+        
+        # Usuń i utwórz tabelę na nowo (najszybsze rozwiązanie)
+        from app.models import HistoriaPomiarow
+        
+        emit('response', {'data': 'Usuwanie tabeli historia_pomiarow...'})
+        HistoriaPomiarow.__table__.drop(db.engine, checkfirst=True)
+        
+        emit('response', {'data': 'Tworzenie nowej tabeli historia_pomiarow...'})
+        HistoriaPomiarow.__table__.create(db.engine)
+        
+        db.session.commit()
+        
+        emit('response', {
+            'data': 'Sukces! Tabela historia_pomiarow została całkowicie wyczyszczona.',
+            'is_success': True
+        })
+        
+        # Odśwież dashboard po czyszczeniu
+        broadcast_dashboard_update()
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"Błąd podczas czyszczenia tabeli historia_pomiarow: {e}")
+        emit('response', {
+            'data': f'Wystąpił błąd podczas czyszczenia tabeli: {str(e)}',
             'is_error': True
         })
 

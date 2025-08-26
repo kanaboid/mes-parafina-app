@@ -53,7 +53,7 @@ def create_app(config_class=Config): # ZMIANA: Dodajemy opcjonalny argument
     if not app.config.get('TESTING'):
         @scheduler.task('interval',     
                        id='read_sensors', 
-                       seconds=5,
+                       seconds=60,
                        max_instances=1,
                        next_run_time=datetime.now(timezone.utc))
         def read_sensors():
@@ -66,25 +66,26 @@ def create_app(config_class=Config): # ZMIANA: Dodajemy opcjonalny argument
 
         @scheduler.task('interval', 
                        id='check_alarms', 
-                       seconds=30,
+                       seconds=5,
                        max_instances=1)
         def check_alarms():
             print(f"\n--- SCHEDULER: Uruchamiam zadanie check_alarms o {datetime.now()} ---\n")
             with app.app_context():
                 monitoring.check_equipment_status()
-
-        @scheduler.task('interval', 
-                        id='broadcast_dashboard', 
-                        seconds=3, 
-                        max_instances=1)
-        def broadcast_dashboard_job():
-            """
-            Regularnie pobiera i wysyła aktualne dane do wszystkich dashboardów.
-            """
-            print(f"\n--- SCHEDULER: Uruchamiam zadanie broadcast_dashboard o {datetime.now()} ---\n")
-            with app.app_context():
                 from .sockets import broadcast_dashboard_update
                 broadcast_dashboard_update()
+        # @scheduler.task('interval', 
+        #                 id='broadcast_dashboard', 
+        #                 seconds=10, 
+        #                 max_instances=1)
+        # def broadcast_dashboard_job():
+        #     """
+        #     Regularnie pobiera i wysyła aktualne dane do wszystkich dashboardów.
+        #     """
+        #     print(f"\n--- SCHEDULER: Uruchamiam zadanie broadcast_dashboard o {datetime.now()} ---\n")
+        #     with app.app_context():
+        #         from .sockets import broadcast_dashboard_update
+        #         broadcast_dashboard_update()
 
         scheduler.start()
 
