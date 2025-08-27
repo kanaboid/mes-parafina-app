@@ -30,12 +30,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         let tableHTML = `
-            <p><strong>Całkowita waga: ${totalWeight.toFixed(2)} kg</strong></p>
+            <p><strong>Całkowita waga: ${(parseFloat(totalWeight)/1000).toFixed(3)} t</strong></p>
             <table class="table table-bordered">
                 <thead class="table-light">
                     <tr>
                         <th>Typ Materiału</th>
-                        <th class="text-end">Waga (kg)</th>
+                        <th class="text-end">Waga (t)</th>
                         <th class="text-end">Udział Procentowy</th>
                     </tr>
                 </thead>
@@ -45,8 +45,8 @@ document.addEventListener('DOMContentLoaded', () => {
             tableHTML += `
                 <tr>
                     <td><strong>${item.material_type}</strong></td>
-                    <td class="text-end">${item.total_quantity.toFixed(2)}</td>
-                    <td class="text-end">${item.percentage.toFixed(2)} %</td>
+                    <td class="text-end">${(parseFloat(item.total_quantity)/1000).toFixed(3)}</td>
+                    <td class="text-end">${parseFloat(item.percentage).toFixed(2)} %</td>
                 </tr>`;
         });
 
@@ -66,8 +66,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     <tr>
                         <th>Kod Partii Pierwotnej</th>
                         <th>Typ Materiału</th>
-                        <th class="text-end">Waga w Mieszaninie (kg)</th>
-                        <th class="text-end">Udział Procentowy</th>
+                        <th class="text-end">Udział wagowy (t)</th>
+                        <th class="text-end">Udział procentowy</th>
                     </tr>
                 </thead>
                 <tbody>`;
@@ -77,8 +77,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 <tr>
                     <td>${item.batch_code}</td>
                     <td>${item.material_type}</td>
-                    <td class="text-end">${item.quantity_in_mix.toFixed(2)}</td>
-                    <td class="text-end">${item.percentage.toFixed(2)} %</td>
+                    <td class="text-end">${(parseFloat(item.quantity_in_mix)/1000).toFixed(3)}</td>
+                    <td class="text-end">${parseFloat(item.percentage).toFixed(2)} %</td>
                 </tr>`;
         });
 

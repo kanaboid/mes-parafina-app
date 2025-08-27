@@ -118,8 +118,8 @@ class BatchManagementService:
                 'batch_id': c.batch.id,
                 'batch_code': c.batch.unique_code,
                 'material_type': c.batch.material_type,
-                'quantity_in_mix': float(c.quantity_in_mix),
-                'percentage': float(percentage)
+                'quantity_in_mix': c.quantity_in_mix,
+                'percentage': percentage
             })
 
         # Agreguj wyniki po typie materiału
@@ -132,13 +132,13 @@ class BatchManagementService:
             percentage = (total_quantity / total_weight) * 100 if total_weight > 0 else 0
             material_summary_details.append({
                 'material_type': material_type,
-                'total_quantity': float(total_quantity),
-                'percentage': float(percentage)
+                'total_quantity': total_quantity,
+                'percentage': percentage
             })
         
         # Przygotuj finalny wynik
         final_result = {
-            'total_weight': float(total_weight), 
+            'total_weight': total_weight, 
             'components_by_batch': composition_details,
             'components': composition_details, # <-- ZWRACAMY KLUCZ 'components'
             'summary_by_material': sorted(material_summary_details, key=lambda x: x['material_type'])

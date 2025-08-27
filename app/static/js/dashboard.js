@@ -94,10 +94,15 @@ document.addEventListener('DOMContentLoaded', () => {
                             ${pressureProgressBar}
                             ${burnerSwitchHTML}
                         </div>
-                        <div class="card-footer text-center">
-                            <button class="btn btn-primary btn-sm action-btn" data-action="show-details" data-sprzet-id="${r.id}" data-sprzet-nazwa="${r.nazwa}">
-                                Szczegóły
-                            </button>
+                        <div class="card-footer p-2">
+                            <div class="d-grid">
+                                <button class="btn btn-primary btn-lg action-btn" 
+                                        data-action="show-details" 
+                                        data-sprzet-id="${r.id}"
+                                        data-sprzet-nazwa="${r.nazwa}">
+                                    Szczegóły
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>`;
