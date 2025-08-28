@@ -33,6 +33,12 @@ class SprzetService:
             return sprzet
 
         sprzet.stan_palnika = status
+
+        if status == 'WLACZONY':
+            mix = db.session.get(TankMixes, sprzet.active_mix_id) if sprzet.active_mix_id else None
+            if mix and mix.process_status == 'SUROWY':
+                mix.process_status = 'PODGRZEWANY'
+                print(f"Automatycznie zmieniono status mieszaniny ID {mix.id} na PODGRZEWANY.")
         
         # Opcjonalnie: Możemy tu dodać logowanie do nowej tabeli `historia_palnika`
         # np. log_burner_activity(sprzet_id, status, operator, datetime.now(timezone.utc))

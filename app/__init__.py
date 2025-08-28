@@ -64,7 +64,7 @@ def create_app(config_class=Config): # ZMIANA: Dodajemy opcjonalny argument
     if not app.config.get('TESTING'):
         @scheduler.task('interval',     
                        id='read_sensors', 
-                       seconds=60,
+                       seconds=5,
                        max_instances=1,
                        next_run_time=datetime.now(timezone.utc))
         def read_sensors():

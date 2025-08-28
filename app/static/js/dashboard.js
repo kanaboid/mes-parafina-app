@@ -67,7 +67,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             data-action="start-heating" 
                             data-sprzet-id="${r.id}"
                             data-sprzet-nazwa="${r.nazwa}">
-                        Rozpocznij Podgrzewanie
+                        Wlącz palnik(INFO)
                     </button>`;
             }
             // W przyszłości można tu dodać inne warunki:
