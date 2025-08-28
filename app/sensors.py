@@ -79,7 +79,7 @@ class SensorService:
             return base_temperature
 
         if reaktor.stan_palnika == 'WLACZONY':
-            print("    [CALC] Stan palnika: WLACZONY. Obliczam grzanie.")
+            #print("    [CALC] Stan palnika: WLACZONY. Obliczam grzanie.")
             szybkosc_grzania = reaktor.szybkosc_grzania_c_na_minute or Decimal('0.5')
             temp_docelowa = reaktor.temperatura_docelowa or Decimal('120.0')
             przyrost = minutes_passed * szybkosc_grzania
@@ -110,7 +110,7 @@ class SensorService:
             for item in equipment_list:
                 #print(f"\n[DEBUG] Przetwarzam: {item.nazwa_unikalna}")
                 db.session.refresh(item)
-                print(f"  -> Stan z bazy PRZED obliczeniami: Temp={item.temperatura_aktualna}, Palnik={item.stan_palnika}, OstatniaAkt={item.ostatnia_aktualizacja}")
+                #print(f"  -> Stan z bazy PRZED obliczeniami: Temp={item.temperatura_aktualna}, Palnik={item.stan_palnika}, OstatniaAkt={item.ostatnia_aktualizacja}")
                 
                 nowa_temperatura = item.temperatura_aktualna
                 if item.typ_sprzetu == 'reaktor':
@@ -125,7 +125,7 @@ class SensorService:
                 pomiary_do_dodania.append(
                     HistoriaPomiarow(id_sprzetu=item.id, temperatura=nowa_temperatura, cisnienie=nowe_cisnienie, czas_pomiaru=current_time)
                 )
-                print(f"  -> Stan PO obliczeniach: NowaTemp={nowa_temperatura:.2f}°C, NoweCiśnienie={nowe_cisnienie}bar")
+                #print(f"  -> Stan PO obliczeniach: NowaTemp={nowa_temperatura:.2f}°C, NoweCiśnienie={nowe_cisnienie}bar")
 
             if pomiary_do_dodania:
                 db.session.add_all(pomiary_do_dodania)

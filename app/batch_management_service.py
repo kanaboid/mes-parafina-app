@@ -103,7 +103,7 @@ class BatchManagementService:
         
         # Filtruj składniki, które mają realną wagę w mieszaninie
         components_with_quantity = [c for c in mix.components if c.quantity_in_mix > 0]
-        print(f"DEBUG: Znaleziono {len(components_with_quantity)} składników z wagą > 0.")
+        #print(f"DEBUG: Znaleziono {len(components_with_quantity)} składników z wagą > 0.")
 
         total_weight = sum(c.quantity_in_mix for c in components_with_quantity)
         if total_weight == 0:
