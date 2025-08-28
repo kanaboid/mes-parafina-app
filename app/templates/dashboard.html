@@ -99,6 +99,26 @@
       </div>
     </div>
   </div>
+  <div class="modal fade" id="start-heating-modal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Rozpocznij podgrzewanie w <span class="fw-bold" id="start-heating-sprzet-name"></span></h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <form id="start-heating-form">
+            <input type="hidden" id="start-heating-sprzet-id">
+            <div class="mb-3">
+              <label for="start-heating-temp" class="form-label">Podaj aktualną temperaturę wsadu (°C):</label>
+              <input type="number" class="form-control" id="start-heating-temp" step="0.1" required>
+            </div>
+            <button type="submit" class="btn btn-warning">Rozpocznij Podgrzewanie</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
 {% endblock %}
 
 {% block scripts %}

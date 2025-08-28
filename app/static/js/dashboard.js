@@ -12,10 +12,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const stockSummaryContainer = document.getElementById('stock-summary-container');
 
     const modals = {
-        planTransfer: new bootstrap.Modal(document.getElementById('plan-transfer-modal'))
+        planTransfer: new bootstrap.Modal(document.getElementById('plan-transfer-modal')),
+        startHeating: new bootstrap.Modal(document.getElementById('start-heating-modal'))
     };
     const forms = {
-        planTransfer: document.getElementById('plan-transfer-form')
+        planTransfer: document.getElementById('plan-transfer-form'),
+        startHeating: document.getElementById('start-heating-form')
     };
     
     // --- SOCKET.IO ---
@@ -47,7 +49,34 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         reaktory.forEach(r => {
+            
+            // --- LOGIKA DLA PRZYCISKÓW ---
+            let actionButtonsHTML = `
+                <button class="btn btn-primary action-btn btn-lg" 
+                        data-action="show-details" 
+                        data-sprzet-id="${r.id}"
+                        data-sprzet-nazwa="${r.nazwa}">
+                    Szczegóły
+                </button>
+            `;
+            
+            // Sprawdź, czy należy dodać przycisk kontekstowy
+            if (r.partia && r.partia.process_status === 'SUROWY') {
+                actionButtonsHTML += `
+                    <button class="btn btn-warning action-btn btn-lg" 
+                            data-action="start-heating" 
+                            data-sprzet-id="${r.id}"
+                            data-sprzet-nazwa="${r.nazwa}">
+                        Rozpocznij Podgrzewanie
+                    </button>`;
+            }
+            // W przyszłości można tu dodać inne warunki:
+            // else if (r.partia && r.partia.process_status === 'OCZEKUJE_NA_OCENE') { ... }
+            
+            
             // --- Logika dla pasków postępu (bez zmian) ---
+            
+            
             let tempPercent = (r.temperatura_aktualna && r.temperatura_max) ? (r.temperatura_aktualna / r.temperatura_max) * 100 : 0;
             let tempColorClass = 'bg-success';
             if (tempPercent > 95) tempColorClass = 'bg-danger';
@@ -95,13 +124,8 @@ document.addEventListener('DOMContentLoaded', () => {
                             ${burnerSwitchHTML}
                         </div>
                         <div class="card-footer p-2">
-                            <div class="d-grid">
-                                <button class="btn btn-primary btn-lg action-btn" 
-                                        data-action="show-details" 
-                                        data-sprzet-id="${r.id}"
-                                        data-sprzet-nazwa="${r.nazwa}">
-                                    Szczegóły
-                                </button>
+                            <div class="btn-group w-100" role="group">
+                                ${actionButtonsHTML}
                             </div>
                         </div>
                     </div>
@@ -273,7 +297,36 @@ document.addEventListener('DOMContentLoaded', () => {
         modals.planTransfer.show();
     }
 
+    function handleStartHeating(id, nazwa) {
+        document.getElementById('start-heating-sprzet-id').value = id;
+        document.getElementById('start-heating-sprzet-name').textContent = nazwa;
+        forms.startHeating.reset();
+        modals.startHeating.show();
+    }
+
+
     // --- OBSŁUGA FORMULARZY ---
+    forms.startHeating.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const sprzetId = document.getElementById('start-heating-sprzet-id').value;
+        const temp = document.getElementById('start-heating-temp').value;
+
+        try {
+            const response = await fetch(`/api/sprzet/${sprzetId}/rozpocznij-podgrzewanie`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ start_temperature: temp })
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.error);
+
+            showToast(`Rozpoczęto podgrzewanie. Szacowany czas: ${Math.round(result.data.estimated_minutes_remaining)} min.`);
+            modals.startHeating.hide();
+        } catch (error) {
+            showToast(error.message, 'error');
+        }
+    });
+
     forms.planTransfer.addEventListener('submit', (e) => {
         e.preventDefault();
         const sourceId = document.getElementById('plan-transfer-source-id').value;

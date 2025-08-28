@@ -62,7 +62,8 @@ class DashboardService:
                     "id": mix.id,
                     "kod": mix.unique_code,
                     "waga_kg": float(waga_kg),
-                    "sklad": sklad_dla_api 
+                    "sklad": sklad_dla_api,
+                    "process_status": mix.process_status
                 }
             
             if sprzet.typ_sprzetu == 'reaktor':

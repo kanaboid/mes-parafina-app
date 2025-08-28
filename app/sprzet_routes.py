@@ -7,6 +7,7 @@ from .db import get_db_connection
 from .apollo_service import ApolloService
 from .sensors import SensorService
 import mysql.connector
+from decimal import Decimal, InvalidOperation
 
 def get_sensor_service():
     """Pobiera instancję serwisu SensorService z kontekstu aplikacji."""
@@ -385,3 +386,36 @@ def get_stan_partii_w_sprzecie():
         if conn and conn.is_connected():
             cursor.close()
             conn.close()
+
+@sprzet_bp.route('/<int:sprzet_id>/rozpocznij-podgrzewanie', methods=['POST'])
+def start_heating_endpoint(sprzet_id):
+    """
+    Endpoint API do rozpoczynania procesu podgrzewania.
+    Oczekuje JSON: {"start_temperature": "75.5"}
+    """
+    data = request.get_json()
+    if not data or 'start_temperature' not in data:
+        return jsonify({'error': 'Brak wymaganego pola "start_temperature".'}), 400
+
+    try:
+        start_temp = Decimal(data['start_temperature'])
+        
+        # Wywołanie logiki z serwisu
+        result = SprzetService.start_heating_process(sprzet_id, start_temp)
+        
+        # Po udanej operacji, wyślij aktualizację do wszystkich na dashboardzie
+        broadcast_dashboard_update()
+        
+        return jsonify({
+            'message': f'Rozpoczęto podgrzewanie dla sprzętu ID {sprzet_id}.',
+            'data': result
+        }), 200
+
+    except InvalidOperation:
+        return jsonify({'error': 'Nieprawidłowy format temperatury.'}), 400
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400 # Błędy walidacji z serwisu
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Wystąpił błąd serwera: {e}'}), 500
