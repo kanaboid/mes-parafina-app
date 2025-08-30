@@ -29,9 +29,20 @@ scheduler_jobs = {}
 # logging.basicConfig()
 # logging.getLogger('apscheduler').setLevel(logging.DEBUG)
 
-def create_app(config_class=Config): # ZMIANA: Dodajemy opcjonalny argument
+def create_app(config_class=None):
+    # --- KROK 1: WŁĄCZENIE SZCZEGÓŁOWEGO LOGOWANIA ---
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    logging.getLogger('apscheduler').setLevel(logging.DEBUG)
+    # ----------------------------------------------------
+
     app = Flask(__name__)
-    app.config.from_object(config_class)
+    if config_class:
+        app.config.from_object(config_class)
+    else:
+        # Domyślna konfiguracja, jeśli żadna nie zostanie przekazana
+        app.config.from_object(Config)
+
+    print(f"--- [PID: {os.getpid()}] START FABRYKI APLIKACJI (Debug: {app.debug}) ---")
 
     if app.config.get('ENVIRONMENT') == 'production':
         app.config['PREFERRED_URL_SCHEME'] = 'https'
@@ -97,7 +108,7 @@ def create_app(config_class=Config): # ZMIANA: Dodajemy opcjonalny argument
         existing_job = scheduler.get_job('check_alarms')
         if existing_job:
             scheduler.remove_job('check_alarms')
-            print(f"🔄 Usunięto istniejące zadanie check_alarms przed utworzeniem nowego z interwałem {seconds}s")
+            print(f"🔄 [PID: {os.getpid()}] Usunięto istniejące zadanie check_alarms przed utworzeniem nowego z interwałem {seconds}s")
         
         @scheduler.task('interval', 
                        id='check_alarms', 
@@ -105,7 +116,7 @@ def create_app(config_class=Config): # ZMIANA: Dodajemy opcjonalny argument
                        max_instances=1)
         def check_alarms():
             current_time = datetime.now()
-            print(f"\n--- SCHEDULER [check_alarms-{seconds}s] Uruchamiam zadanie o {current_time} ---")
+            print(f"\n--- [PID: {os.getpid()}] SCHEDULER [check_alarms-{seconds}s] Uruchamiam zadanie o {current_time} ---")
             with app.app_context():
                 monitoring.check_equipment_status()
                 from .sockets import broadcast_dashboard_update
@@ -113,7 +124,7 @@ def create_app(config_class=Config): # ZMIANA: Dodajemy opcjonalny argument
         
         # Zapisz referencję do zadania
         scheduler_jobs['check_alarms'] = check_alarms
-        print(f"✅ Utworzono nowe zadanie check_alarms z interwałem {seconds}s")
+        print(f"✅ [PID: {os.getpid()}] Utworzono nowe zadanie check_alarms z interwałem {seconds}s")
         return check_alarms
 
     def cleanup_existing_jobs():
@@ -139,50 +150,32 @@ def create_app(config_class=Config): # ZMIANA: Dodajemy opcjonalny argument
         
         return is_active, status_text
 
-    # ZMIANA: Cały blok dodawania zadań i uruchamiania schedulera
+    # ZMIANA: Całkowite zastąpienie logiki blokady plikowej kanoniczną metodą Flaska
     if not app.config.get('TESTING'):
-        # OSTATECZNE ROZWIĄZANIE: Mechanizm blokady plikowej (file lock)
-        # Gwarantuje, że tylko jeden proces (nawet przy reloaderze) uruchomi scheduler.
-        lock_file_path = os.path.join(app.instance_path, 'scheduler.lock')
-        
-        def cleanup_lock_file():
-            """Funkcja do usunięcia pliku blokady przy zamknięciu aplikacji."""
+        # Ten warunek jest kluczowy w trybie debugowania.
+        # Kod wewnątrz wykona się tylko w procesie potomnym (workerze),
+        # który faktycznie obsługuje aplikację. Proces-matka (monitorujący pliki)
+        # pominie ten blok, zapobiegając duplikacji.
+        # W trybie produkcyjnym (gdy DEBUG=False), warunek również jest spełniony.
+        if os.environ.get('WERKZEUG_RUN_MAIN') == 'true' or not app.config.get("DEBUG"):
+            print(f"🚀 [PID: {os.getpid()}] Główny proces roboczy. Inicjalizuję scheduler.")
+            cleanup_existing_jobs()
+            
+            # Utwórz początkowe zadania
+            #create_read_sensors_job(5)
+            create_check_alarms_job(5)
+            
+            # Uruchom scheduler
             try:
-                if os.path.exists(lock_file_path):
-                    os.remove(lock_file_path)
-                    print("🧹 Usunięto plik blokady schedulera.")
-            except OSError as e:
-                print(f"Błąd podczas usuwania pliku blokady: {e}")
-
-        # W trybie debug, reloader może tworzyć wiele procesów.
-        # Tylko ten, który pierwszy utworzy plik .lock, uruchomi scheduler.
-        if app.debug:
-            try:
-                # O_CREAT | O_EXCL to operacja atomowa - zapobiega race conditions.
-                lock_fd = os.open(lock_file_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-                os.close(lock_fd)
-                
-                print("🔒 Zdobyto blokadę schedulera. Ten proces będzie nim zarządzał.")
-                atexit.register(cleanup_lock_file)  # Zarejestruj sprzątanie przy wyjściu
-
-                # Uruchomienie logiki schedulera
-                print("🚀 Uruchamiam scheduler w docelowym procesie aplikacji...")
-                cleanup_existing_jobs()
-                create_check_alarms_job(5)
                 if not scheduler.running:
                     scheduler.start()
-                    print("✅ Scheduler został uruchomiony.")
-
-            except FileExistsError:
-                print("ℹ️ Blokada schedulera jest już aktywna w innym procesie. Pomijam.")
+                    print(f"✅ [PID: {os.getpid()}] Scheduler został uruchomiony.")
+                else:
+                    print(f"ℹ️ [PID: {os.getpid()}] Scheduler już działa.")
+            except Exception as e:
+                print(f"❌ [PID: {os.getpid()}] Błąd podczas uruchamiania schedulera: {e}")
         else:
-            # W trybie produkcyjnym (bez debug) uruchamiamy normalnie.
-            print("🚀 Uruchamiam scheduler w trybie produkcyjnym...")
-            cleanup_existing_jobs()
-            create_check_alarms_job(5)
-            if not scheduler.running:
-                scheduler.start()
-                print("✅ Scheduler został uruchomiony.")
+            print(f"🔍 [PID: {os.getpid()}] Proces-matka reloadera. Pomijam inicjalizację schedulera.")
 
     # Rejestrujemy blueprinty
     from . import routes
@@ -225,6 +218,7 @@ def create_app(config_class=Config): # ZMIANA: Dodajemy opcjonalny argument
     @app.route('/api/scheduler/status', methods=['GET'])
     def get_scheduler_status():
         """Zwraca status wszystkich zadań w schedulerze"""
+        print(f"--- [PID: {os.getpid()}] Zapytanie API: /api/scheduler/status ---")
         if app.config.get('TESTING'):
             return {'error': 'Scheduler niedostępny w trybie testowym'}, 400
             
@@ -247,12 +241,14 @@ def create_app(config_class=Config): # ZMIANA: Dodajemy opcjonalny argument
             'jobs': jobs, 
             'scheduler_running': scheduler.running,
             'total_jobs': len(jobs),
-            'active_jobs': len([j for j in jobs if j['active']])
+            'active_jobs': len([j for j in jobs if j['active']]),
+            'api_pid': os.getpid()
         }
 
     @app.route('/api/scheduler/job/<job_id>/toggle', methods=['POST'])
     def toggle_scheduler_job(job_id):
         """Włącza/wyłącza konkretne zadanie w schedulerze"""
+        print(f"--- [PID: {os.getpid()}] Zapytanie API: /api/scheduler/job/{job_id}/toggle ---")
         if app.config.get('TESTING'):
             return {'error': 'Scheduler niedostępny w trybie testowym'}, 400
             
@@ -274,11 +270,13 @@ def create_app(config_class=Config): # ZMIANA: Dodajemy opcjonalny argument
                 scheduler.remove_job(job_id)
                 return {'message': f'Zadanie {job_id} zostało wyłączone', 'status': 'paused'}
         except Exception as e:
+            print(f"Błąd w [PID: {os.getpid()}] podczas przełączania zadania: {str(e)}")
             return {'error': f'Błąd podczas przełączania zadania: {str(e)}'}, 500
 
     @app.route('/api/scheduler/job/<job_id>/interval', methods=['POST'])
     def change_job_interval(job_id):
         """Zmienia interwał dla konkretnego zadania"""
+        print(f"--- [PID: {os.getpid()}] Zapytanie API: /api/scheduler/job/{job_id}/interval ---")
         if app.config.get('TESTING'):
             return {'error': 'Scheduler niedostępny w trybie testowym'}, 400
             
@@ -302,11 +300,13 @@ def create_app(config_class=Config): # ZMIANA: Dodajemy opcjonalny argument
             
             return {'message': f'Interwał dla zadania {job_id} został zmieniony na {new_seconds} sekund'}
         except Exception as e:
+            print(f"Błąd w [PID: {os.getpid()}] podczas zmiany interwału: {str(e)}")
             return {'error': f'Błąd podczas zmiany interwału: {str(e)}'}, 500
 
     @app.route('/api/scheduler/start', methods=['POST'])
     def start_scheduler():
         """Uruchamia scheduler"""
+        print(f"--- [PID: {os.getpid()}] Zapytanie API: /api/scheduler/start ---")
         if app.config.get('TESTING'):
             return {'error': 'Scheduler niedostępny w trybie testowym'}, 400
             
@@ -317,11 +317,13 @@ def create_app(config_class=Config): # ZMIANA: Dodajemy opcjonalny argument
             else:
                 return {'message': 'Scheduler już działa', 'status': 'running'}
         except Exception as e:
+            print(f"Błąd w [PID: {os.getpid()}] podczas uruchamiania schedulera: {str(e)}")
             return {'error': f'Błąd podczas uruchamiania schedulera: {str(e)}'}, 500
 
     @app.route('/api/scheduler/stop', methods=['POST'])
     def stop_scheduler():
         """Zatrzymuje scheduler"""
+        print(f"--- [PID: {os.getpid()}] Zapytanie API: /api/scheduler/stop ---")
         if app.config.get('TESTING'):
             return {'error': 'Scheduler niedostępny w trybie testowym'}, 400
             
@@ -332,11 +334,13 @@ def create_app(config_class=Config): # ZMIANA: Dodajemy opcjonalny argument
             else:
                 return {'message': 'Scheduler już jest zatrzymany', 'status': 'stopped'}
         except Exception as e:
+            print(f"Błąd w [PID: {os.getpid()}] podczas zatrzymywania schedulera: {str(e)}")
             return {'error': f'Błąd podczas zatrzymywania schedulera: {str(e)}'}, 500
 
     @app.route('/api/scheduler/reset', methods=['POST'])
     def reset_scheduler():
         """Resetuje scheduler - usuwa wszystkie zadania i tworzy nowe z domyślnymi ustawieniami"""
+        print(f"--- [PID: {os.getpid()}] Zapytanie API: /api/scheduler/reset ---")
         if app.config.get('TESTING'):
             return {'error': 'Scheduler niedostępny w trybie testowym'}, 400
             
@@ -358,11 +362,13 @@ def create_app(config_class=Config): # ZMIANA: Dodajemy opcjonalny argument
             
             return {'message': 'Scheduler został zresetowany z domyślnymi ustawieniami', 'status': 'reset'}
         except Exception as e:
+            print(f"Błąd w [PID: {os.getpid()}] podczas resetowania schedulera: {str(e)}")
             return {'error': f'Błąd podczas resetowania schedulera: {str(e)}'}, 500
 
     @app.route('/api/scheduler/debug', methods=['GET'])
     def debug_scheduler():
         """Endpoint do debugowania schedulera - pokazuje szczegółowe informacje o wszystkich zadaniach"""
+        print(f"--- [PID: {os.getpid()}] Zapytanie API: /api/scheduler/debug ---")
         if app.config.get('TESTING'):
             return {'error': 'Scheduler niedostępny w trybie testowym'}, 400
             
@@ -386,7 +392,8 @@ def create_app(config_class=Config): # ZMIANA: Dodajemy opcjonalny argument
                 'total_jobs': len(jobs),
                 'active_jobs': len([j for j in jobs if j['active']]),
                 'jobs': jobs,
-                'scheduler_jobs_keys': list(scheduler_jobs.keys())
+                'scheduler_jobs_keys': list(scheduler_jobs.keys()),
+                'api_pid': os.getpid()
             }
         except Exception as e:
             return {'error': f'Błąd podczas debugowania: {str(e)}'}, 500
@@ -394,6 +401,7 @@ def create_app(config_class=Config): # ZMIANA: Dodajemy opcjonalny argument
     @app.route('/api/scheduler/force-stop-all', methods=['POST'])
     def force_stop_all_jobs():
         """Wymusza wyłączenie wszystkich zadań schedulera"""
+        print(f"--- [PID: {os.getpid()}] Zapytanie API: /api/scheduler/force-stop-all ---")
         if app.config.get('TESTING'):
             return {'error': 'Scheduler niedostępny w trybie testowym'}, 400
             
@@ -413,9 +421,11 @@ def create_app(config_class=Config): # ZMIANA: Dodajemy opcjonalny argument
             return {
                 'message': f'Wymuszenie wyłączenia {removed_count} zadań', 
                 'status': 'stopped',
-                'removed_jobs': removed_count
+                'removed_jobs': removed_count,
+                'api_pid': os.getpid()
             }
         except Exception as e:
+            print(f"Błąd w [PID: {os.getpid()}] podczas wymuszenia wyłączenia: {str(e)}")
             return {'error': f'Błąd podczas wymuszenia wyłączenia: {str(e)}'}, 500
 
     return app

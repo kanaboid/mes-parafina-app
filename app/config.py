@@ -8,6 +8,7 @@ load_dotenv()
 class Config:
     """Konfiguracja produkcyjna / deweloperska"""
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'trudne-do-zgadniecia-haslo'
+    DEBUG = True  # OSTATECZNA POPRAWKA: Jawne włączenie trybu debug
 
     # Dane do połączenia z bazą danych MySQL
     MYSQL_HOST = os.environ.get('MYSQLHOST', 'localhost')
