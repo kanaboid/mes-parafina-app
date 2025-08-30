@@ -11,6 +11,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const lastUpdatedTime = document.getElementById('last-updated-time');
     const stockSummaryContainer = document.getElementById('stock-summary-container');
 
+    // Elementy kontroli schedulerów
+    const schedulerStatusContainer = document.getElementById('scheduler-status-container');
+    const startSchedulerBtn = document.getElementById('start-scheduler-btn');
+    const stopSchedulerBtn = document.getElementById('stop-scheduler-btn');
+    const resetSchedulerBtn = document.getElementById('reset-scheduler-btn');
+
     const modals = {
         planTransfer: new bootstrap.Modal(document.getElementById('plan-transfer-modal')),
         startHeating: new bootstrap.Modal(document.getElementById('start-heating-modal'))
@@ -226,6 +232,199 @@ document.addEventListener('DOMContentLoaded', () => {
         stockSummaryContainer.innerHTML = tableHTML;
     }
 
+    // --- FUNKCJE ZARZĄDZANIA SCHEDULERAMI ---
+    async function loadSchedulerStatus() {
+        try {
+            const response = await fetch('/api/scheduler/status');
+            if (!response.ok) throw new Error('Błąd pobierania statusu schedulerów');
+            const data = await response.json();
+            renderSchedulerStatus(data);
+        } catch (error) {
+            console.error('Błąd podczas ładowania statusu schedulerów:', error);
+            schedulerStatusContainer.innerHTML = '<p class="text-danger">Błąd ładowania statusu schedulerów</p>';
+        }
+    }
+
+    function renderSchedulerStatus(data) {
+        const { jobs, scheduler_running, total_jobs, active_jobs } = data;
+        
+        let html = `
+            <div class="row">
+                <div class="col-md-12 mb-3">
+                    <div class="d-flex align-items-center">
+                        <span class="me-2">Status główny:</span>
+                        <span class="badge ${scheduler_running ? 'bg-success' : 'bg-danger'}">
+                            ${scheduler_running ? 'DZIAŁA' : 'ZATRZYMANY'}
+                        </span>
+                        <span class="ms-3 text-muted">Zadania: ${active_jobs}/${total_jobs} aktywne</span>
+                    </div>
+                </div>
+            </div>
+            <div class="row">
+        `;
+
+        jobs.forEach(job => {
+            const statusBadge = job.active ? 
+                '<span class="badge bg-success">AKTYWNE</span>' : 
+                '<span class="badge bg-warning">WYŁĄCZONE</span>';
+            
+            const intervalMatch = job.trigger.match(/interval\(0:00:(\d+)\)/);
+            const currentInterval = intervalMatch ? parseInt(intervalMatch[1]) : 'N/A';
+            
+            html += `
+                <div class="col-md-6 mb-3">
+                    <div class="card border">
+                        <div class="card-header py-2">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <strong>${job.id}</strong>
+                                ${statusBadge}
+                            </div>
+                        </div>
+                        <div class="card-body py-2">
+                            <p class="mb-1"><small>Funkcja: ${job.func}</small></p>
+                            <p class="mb-2"><small>Interwał: ${currentInterval}s</small></p>
+                            <div class="btn-group btn-group-sm w-100" role="group">
+                                <button type="button" class="btn btn-outline-primary scheduler-toggle-btn" 
+                                        data-job-id="${job.id}" data-current-status="${job.active ? 'active' : 'paused'}">
+                                    ${job.active ? 'Wyłącz' : 'Włącz'}
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary dropdown-toggle" 
+                                        data-bs-toggle="dropdown" aria-expanded="false">
+                                    Interwał
+                                </button>
+                                <ul class="dropdown-menu">
+                                    <li><a class="dropdown-item interval-option" href="#" data-seconds="1">1 sekunda</a></li>
+                                    <li><a class="dropdown-item interval-option" href="#" data-seconds="5">5 sekund</a></li>
+                                    <li><a class="dropdown-item interval-option" href="#" data-seconds="10">10 sekund</a></li>
+                                    <li><a class="dropdown-item interval-option" href="#" data-seconds="30">30 sekund</a></li>
+                                    <li><a class="dropdown-item interval-option" href="#" data-seconds="60">1 minuta</a></li>
+                                    <li><a class="dropdown-item interval-option" href="#" data-seconds="600">10 minut</a></li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+
+        html += '</div>';
+        schedulerStatusContainer.innerHTML = html;
+        
+        // Dodaj event listenery dla nowych przycisków
+        addSchedulerEventListeners();
+    }
+
+    function addSchedulerEventListeners() {
+        // Przyciski włączania/wyłączania zadań
+        document.querySelectorAll('.scheduler-toggle-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                const jobId = e.target.dataset.jobId;
+                await toggleSchedulerJob(jobId);
+            });
+        });
+
+        // Opcje zmiany interwału
+        document.querySelectorAll('.interval-option').forEach(option => {
+            option.addEventListener('click', async (e) => {
+                e.preventDefault();
+                const seconds = parseInt(e.target.dataset.seconds);
+                const jobId = e.target.closest('.card').querySelector('.scheduler-toggle-btn').dataset.jobId;
+                await changeJobInterval(jobId, seconds);
+            });
+        });
+    }
+
+    async function toggleSchedulerJob(jobId) {
+        try {
+            const response = await fetch(`/api/scheduler/job/${jobId}/toggle`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            const result = await response.json();
+            
+            if (!response.ok) throw new Error(result.error);
+            
+            showToast(result.message, 'success');
+            await loadSchedulerStatus(); // Odśwież status
+        } catch (error) {
+            console.error('Błąd podczas przełączania zadania:', error);
+            showToast(error.message, 'error');
+        }
+    }
+
+    async function changeJobInterval(jobId, seconds) {
+        try {
+            const response = await fetch(`/api/scheduler/job/${jobId}/interval`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ seconds: seconds })
+            });
+            const result = await response.json();
+            
+            if (!response.ok) throw new Error(result.error);
+            
+            showToast(result.message, 'success');
+            await loadSchedulerStatus(); // Odśwież status
+        } catch (error) {
+            console.error('Błąd podczas zmiany interwału:', error);
+            showToast(error.message, 'error');
+        }
+    }
+
+    async function startScheduler() {
+        try {
+            const response = await fetch('/api/scheduler/start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            const result = await response.json();
+            
+            if (!response.ok) throw new Error(result.error);
+            
+            showToast(result.message, 'success');
+            await loadSchedulerStatus(); // Odśwież status
+        } catch (error) {
+            console.error('Błąd podczas uruchamiania schedulera:', error);
+            showToast(error.message, 'error');
+        }
+    }
+
+    async function stopScheduler() {
+        try {
+            const response = await fetch('/api/scheduler/stop', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            const result = await response.json();
+            
+            if (!response.ok) throw new Error(result.error);
+            
+            showToast(result.message, 'success');
+            await loadSchedulerStatus(); // Odśwież status
+        } catch (error) {
+            console.error('Błąd podczas zatrzymywania schedulera:', error);
+            showToast(error.message, 'error');
+        }
+    }
+
+    async function resetScheduler() {
+        try {
+            const response = await fetch('/api/scheduler/reset', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            const result = await response.json();
+            
+            if (!response.ok) throw new Error(result.error);
+            
+            showToast(result.message, 'success');
+            await loadSchedulerStatus(); // Odśwież status
+        } catch (error) {
+            console.error('Błąd podczas resetowania schedulera:', error);
+            showToast(error.message, 'error');
+        }
+    }
+
     // --- OBSŁUGA ZDARZEŃ ---
     reaktoryContainer.addEventListener('click', (e) => {
         const targetElement = e.target.closest('.action-btn');
@@ -340,6 +539,11 @@ document.addEventListener('DOMContentLoaded', () => {
         modals.planTransfer.hide();
     });
 
+    // Event listenery dla kontroli schedulerów
+    startSchedulerBtn.addEventListener('click', startScheduler);
+    stopSchedulerBtn.addEventListener('click', stopScheduler);
+    resetSchedulerBtn.addEventListener('click', resetScheduler);
+
     // --- INICJALIZACJA ---
     async function initialLoad() {
         try {
@@ -347,10 +551,48 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!response.ok) throw new Error('Błąd pobierania danych z API');
             const data = await response.json();
             updateUI(data);
+            await loadSchedulerStatus(); // Załaduj status schedulerów
         } catch (error) {
             console.error(error);
             reaktoryContainer.innerHTML = '<p class="text-danger">Nie udało się załadować danych.</p>';
         }
     }
     initialLoad();
+
+    // Funkcja do wyświetlania powiadomień
+    function showToast(message, type = 'info') {
+        // Sprawdź czy Bootstrap Toast jest dostępny
+        if (typeof bootstrap !== 'undefined' && bootstrap.Toast) {
+            // Stwórz dynamicznie toast
+            const toastHTML = `
+                <div class="toast align-items-center text-white bg-${type === 'error' ? 'danger' : type === 'success' ? 'success' : 'info'} border-0" role="alert" aria-live="assertive" aria-atomic="true">
+                    <div class="d-flex">
+                        <div class="toast-body">
+                            ${message}
+                        </div>
+                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                    </div>
+                </div>
+            `;
+            
+            const toastContainer = document.createElement('div');
+            toastContainer.className = 'toast-container position-fixed top-0 end-0 p-3';
+            toastContainer.style.zIndex = '9999';
+            toastContainer.innerHTML = toastHTML;
+            
+            document.body.appendChild(toastContainer);
+            
+            const toastElement = toastContainer.querySelector('.toast');
+            const toast = new bootstrap.Toast(toastElement);
+            toast.show();
+            
+            // Usuń toast po zakończeniu
+            toastElement.addEventListener('hidden.bs.toast', () => {
+                document.body.removeChild(toastContainer);
+            });
+        } else {
+            // Fallback - użyj alert jeśli Bootstrap nie jest dostępny
+            alert(message);
+        }
+    }
 });
