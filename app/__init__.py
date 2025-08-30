@@ -77,31 +77,31 @@ def create_app(config_class=None):
     # scheduler.scheduler.configure(timezone="Europe/Warsaw")
 
     # Funkcje do tworzenia zadań schedulera (muszą być dostępne dla API)
-    # def create_read_sensors_job(seconds=30):
-    #     # Usuń istniejące zadanie o tym samym ID, jeśli istnieje
-    #     existing_job = scheduler.get_job('read_sensors')
-    #     if existing_job:
-    #         scheduler.remove_job('read_sensors')
-    #         print(f"🔄 Usunięto istniejące zadanie read_sensors przed utworzeniem nowego z interwałem {seconds}s")
+    def create_read_sensors_job(seconds=30):
+        # Usuń istniejące zadanie o tym samym ID, jeśli istnieje
+        existing_job = scheduler.get_job('read_sensors')
+        if existing_job:
+            scheduler.remove_job('read_sensors')
+            print(f"🔄 Usunięto istniejące zadanie read_sensors przed utworzeniem nowego z interwałem {seconds}s")
         
-    #     @scheduler.task('interval',     
-    #                    id='read_sensors', 
-    #                    seconds=seconds,
-    #                    max_instances=1,
-    #                    next_run_time=datetime.now(timezone.utc))
-    #     def read_sensors():
-    #         current_time = datetime.now()
-    #         print(f"\n--- SCHEDULER [read_sensors-{seconds}s] Uruchamiam zadanie o {current_time} ---")
-    #         with app.app_context():
-    #             try:
-    #                 sensor_service.read_sensors()
-    #             except Exception as e:
-    #                 print(f"Błąd podczas odczytu czujników: {str(e)}")
+        @scheduler.task('interval',     
+                       id='read_sensors', 
+                       seconds=seconds,
+                       max_instances=1,
+                       next_run_time=datetime.now(timezone.utc))
+        def read_sensors():
+            current_time = datetime.now()
+            print(f"\n--- SCHEDULER [read_sensors-{seconds}s] Uruchamiam zadanie o {current_time} ---")
+            with app.app_context():
+                try:
+                    sensor_service.read_sensors()
+                except Exception as e:
+                    print(f"Błąd podczas odczytu czujników: {str(e)}")
         
-    #     # Zapisz referencję do zadania
-    #     scheduler_jobs['read_sensors'] = read_sensors
-    #     print(f"✅ Utworzono nowe zadanie read_sensors z interwałem {seconds}s")
-    #     return read_sensors
+        # Zapisz referencję do zadania
+        scheduler_jobs['read_sensors'] = read_sensors
+        print(f"✅ Utworzono nowe zadanie read_sensors z interwałem {seconds}s")
+        return read_sensors
 
     def create_check_alarms_job(seconds=5):
         # Usuń istniejące zadanie o tym samym ID, jeśli istnieje
@@ -162,7 +162,7 @@ def create_app(config_class=None):
             cleanup_existing_jobs()
             
             # Utwórz początkowe zadania
-            #create_read_sensors_job(5)
+            create_read_sensors_job(5)
             create_check_alarms_job(5)
             
             # Uruchom scheduler
@@ -239,7 +239,8 @@ def create_app(config_class=None):
         
         return {
             'jobs': jobs, 
-            'scheduler_running': scheduler.running,
+            'scheduler_state': scheduler.state,
+            'scheduler_state_text': {0: 'STOPPED', 1: 'RUNNING', 2: 'PAUSED'}.get(scheduler.state, 'UNKNOWN'),
             'total_jobs': len(jobs),
             'active_jobs': len([j for j in jobs if j['active']]),
             'api_pid': os.getpid()
@@ -260,10 +261,11 @@ def create_app(config_class=None):
             if job.next_run_time is None:
                 # Włącz zadanie - utwórz nowe z domyślnym interwałem
                 if job_id == 'read_sensors':
-                    #create_read_sensors_job(5)  # Domyślnie 5 sekund
-                    pass
+                    create_read_sensors_job(5)  # Domyślnie 5 sekund
                 elif job_id == 'check_alarms':
                     create_check_alarms_job(5)  # Domyślnie 5 sekund
+                else:
+                    return {'error': f'Nieznane zadanie: {job_id}'}, 400
                 return {'message': f'Zadanie {job_id} zostało włączone', 'status': 'active'}
             else:
                 # Wyłącz zadanie - usuń je całkowicie
@@ -293,8 +295,7 @@ def create_app(config_class=None):
             
             # Utwórz nowe zadanie z nowym interwałem
             if job_id == 'read_sensors':
-                #create_read_sensors_job(new_seconds)
-                pass
+                create_read_sensors_job(new_seconds)
             elif job_id == 'check_alarms':
                 create_check_alarms_job(new_seconds)
             
@@ -305,37 +306,43 @@ def create_app(config_class=None):
 
     @app.route('/api/scheduler/start', methods=['POST'])
     def start_scheduler():
-        """Uruchamia scheduler"""
+        """Uruchamia lub wznawia scheduler"""
         print(f"--- [PID: {os.getpid()}] Zapytanie API: /api/scheduler/start ---")
         if app.config.get('TESTING'):
             return {'error': 'Scheduler niedostępny w trybie testowym'}, 400
             
         try:
-            if not scheduler.running:
-                scheduler.start()
-                return {'message': 'Scheduler został uruchomiony', 'status': 'running'}
-            else:
+            if scheduler.state == 2:  # STATE_PAUSED
+                scheduler.resume()
+                print(f"--- [PID: {os.getpid()}] Scheduler został wznowiony (RESUMED). ---")
+                return {'message': 'Scheduler został wznowiony', 'status': 'running'}
+            elif scheduler.state == 1:  # STATE_RUNNING
                 return {'message': 'Scheduler już działa', 'status': 'running'}
+            elif scheduler.state == 0: # STATE_STOPPED
+                return {'message': 'Scheduler został trwale zatrzymany (shutdown). Użyj Reset, aby go zrestartować.', 'status': 'stopped'}
+            else:
+                return {'message': f'Scheduler w nieznanym stanie: {scheduler.state}', 'status': 'unknown'}
         except Exception as e:
-            print(f"Błąd w [PID: {os.getpid()}] podczas uruchamiania schedulera: {str(e)}")
-            return {'error': f'Błąd podczas uruchamiania schedulera: {str(e)}'}, 500
+            print(f"Błąd w [PID: {os.getpid()}] podczas wznawiania schedulera: {str(e)}")
+            return {'error': f'Błąd podczas wznawiania schedulera: {str(e)}'}, 500
 
     @app.route('/api/scheduler/stop', methods=['POST'])
     def stop_scheduler():
-        """Zatrzymuje scheduler"""
+        """Zatrzymuje (pauzuje) scheduler"""
         print(f"--- [PID: {os.getpid()}] Zapytanie API: /api/scheduler/stop ---")
         if app.config.get('TESTING'):
             return {'error': 'Scheduler niedostępny w trybie testowym'}, 400
-            
         try:
-            if scheduler.running:
-                scheduler.shutdown()
-                return {'message': 'Scheduler został zatrzymany', 'status': 'stopped'}
+            if scheduler.state == 1:  # STATE_RUNNING
+                scheduler.pause()
+                print(f"--- [PID: {os.getpid()}] Scheduler został wstrzymany (PAUSED). ---")
+                return {'message': 'Scheduler został wstrzymany', 'status': 'paused'}
             else:
-                return {'message': 'Scheduler już jest zatrzymany', 'status': 'stopped'}
+                # Obejmuje stany PAUSED i STOPPED
+                return {'message': 'Scheduler nie jest w stanie uruchomienia', 'status': 'paused'}
         except Exception as e:
-            print(f"Błąd w [PID: {os.getpid()}] podczas zatrzymywania schedulera: {str(e)}")
-            return {'error': f'Błąd podczas zatrzymywania schedulera: {str(e)}'}, 500
+            print(f"Błąd w [PID: {os.getpid()}] podczas pauzowania schedulera: {str(e)}")
+            return {'error': f'Błąd podczas pauzowania schedulera: {str(e)}'}, 500
 
     @app.route('/api/scheduler/reset', methods=['POST'])
     def reset_scheduler():
@@ -343,23 +350,20 @@ def create_app(config_class=None):
         print(f"--- [PID: {os.getpid()}] Zapytanie API: /api/scheduler/reset ---")
         if app.config.get('TESTING'):
             return {'error': 'Scheduler niedostępny w trybie testowym'}, 400
-            
         try:
-            # Zatrzymaj scheduler
-            if scheduler.running:
-                scheduler.shutdown()
-            
-            # Usuń wszystkie istniejące zadania
-            for job in scheduler.get_jobs():
-                scheduler.remove_job(job.id)
-            
+            # Miękki reset: usuń wszystkie zadania, ale nie zatrzymuj samego schedulera
+            scheduler.remove_all_jobs()
+            print(f"--- [PID: {os.getpid()}] Wszystkie zadania usunięte w ramach resetu. ---")
+
             # Utwórz nowe zadania z domyślnymi ustawieniami
-            #create_read_sensors_job(5)
+            create_read_sensors_job(5)
             create_check_alarms_job(5)
             
-            # Uruchom scheduler
-            scheduler.start()
-            
+            # Jeśli scheduler był wstrzymany, wznow go, aby nowe zadanie mogło działać.
+            if scheduler.state == 2: # PAUSED
+                scheduler.resume()
+                print(f"--- [PID: {os.getpid()}] Scheduler wznowiony po resecie. ---")
+
             return {'message': 'Scheduler został zresetowany z domyślnymi ustawieniami', 'status': 'reset'}
         except Exception as e:
             print(f"Błąd w [PID: {os.getpid()}] podczas resetowania schedulera: {str(e)}")

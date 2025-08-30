@@ -314,6 +314,33 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Dodaj event listenery dla nowych przycisków
         addSchedulerEventListeners();
+
+        // Aktualizuj status główny schedulera
+        const schedulerStatusDiv = document.querySelector('#scheduler-status-container .card-body p');
+        let schedulerStatusText;
+        let schedulerStatusClass;
+
+        switch (data.scheduler_state) {
+            case 1: // RUNNING
+                schedulerStatusText = 'DZIAŁA';
+                schedulerStatusClass = 'text-success';
+                break;
+            case 2: // PAUSED
+                schedulerStatusText = 'WSTRZYMANY';
+                schedulerStatusClass = 'text-warning';
+                break;
+            case 0: // STOPPED
+                schedulerStatusText = 'ZATRZYMANY';
+                schedulerStatusClass = 'text-danger';
+                break;
+            default:
+                schedulerStatusText = 'NIEZNANY';
+                schedulerStatusClass = 'text-muted';
+        }
+        
+        if (schedulerStatusDiv) {
+            schedulerStatusDiv.innerHTML = `Status główny: <strong class="${schedulerStatusClass}">${schedulerStatusText}</strong> <br> Zadania: ${data.active_jobs}/${data.total_jobs} aktywne`;
+        }
     }
 
     function addSchedulerEventListeners() {
