@@ -3,6 +3,7 @@
 document.addEventListener('DOMContentLoaded', () => {
     
     // --- ELEMENTY DOM, MODALE, FORMULARZE ---
+    let latestDashboardData = {}; // Globalne przechowywanie danych
     const reaktoryContainer = document.getElementById('reaktory-container');
     const pusteReaktoryContainer = document.getElementById('puste-reaktory-container');
     const beczkiBrudneContainer = document.getElementById('beczki-brudne-container');
@@ -21,11 +22,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const modals = {
         planTransfer: new bootstrap.Modal(document.getElementById('plan-transfer-modal')),
-        startHeating: new bootstrap.Modal(document.getElementById('start-heating-modal'))
+        startHeating: new bootstrap.Modal(document.getElementById('start-heating-modal')),
+        simulationSettings: new bootstrap.Modal(document.getElementById('simulation-settings-modal'))
     };
     const forms = {
         planTransfer: document.getElementById('plan-transfer-form'),
-        startHeating: document.getElementById('start-heating-form')
+        startHeating: document.getElementById('start-heating-form'),
+        simulationSettings: document.getElementById('simulation-settings-form')
     };
     
     // --- SOCKET.IO ---
@@ -34,6 +37,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     socket.on('dashboard_update', (data) => {
         console.log("Otrzymano aktualizację dashboardu:", data);
+        latestDashboardData = data; // Zapisz najnowsze dane
         updateUI(data);
     });
 
@@ -65,6 +69,12 @@ document.addEventListener('DOMContentLoaded', () => {
                         data-sprzet-id="${r.id}"
                         data-sprzet-nazwa="${r.nazwa}">
                     Szczegóły
+                </button>
+                <button class="btn btn-secondary action-btn btn-lg" 
+                        data-action="open-simulation-settings" 
+                        data-sprzet-id="${r.id}"
+                        data-sprzet-nazwa="${r.nazwa}">
+                    Ustawienia
                 </button>
             `;
             
@@ -508,15 +518,19 @@ document.addEventListener('DOMContentLoaded', () => {
     reaktoryContainer.addEventListener('click', (e) => {
         const targetElement = e.target.closest('.action-btn');
         if (!targetElement) return;
+        
         const action = targetElement.dataset.action;
         const sprzetId = targetElement.dataset.sprzetId;
+        const sprzetNazwa = targetElement.dataset.sprzetNazwa;
+
         if (action === 'show-details') {
-            const sprzetNazwa = targetElement.dataset.sprzetNazwa;
             handleShowDetails(sprzetId, sprzetNazwa);
         } else if (action === 'toggle-burner') {
             const isChecked = targetElement.checked;
             const newState = isChecked ? 'WLACZONY' : 'WYLACZONY';
             handleToggleBurner(sprzetId, newState);
+        } else if (action === 'open-simulation-settings') {
+            handleOpenSimulationSettings(sprzetId, sprzetNazwa);
         }
     });
 
@@ -618,6 +632,32 @@ document.addEventListener('DOMContentLoaded', () => {
         modals.planTransfer.hide();
     });
 
+    forms.simulationSettings.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const sprzetId = document.getElementById('simulation-settings-sprzet-id').value;
+        const newHeating = document.getElementById('simulation-heating-speed').value;
+        const newCooling = document.getElementById('simulation-cooling-speed').value;
+
+        try {
+            const response = await fetch(`/api/sprzet/${sprzetId}/simulation-params`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    szybkosc_grzania: newHeating,
+                    szybkosc_chlodzenia: newCooling
+                })
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.error || 'Wystąpił nieznany błąd');
+            
+            showToast('Parametry symulacji zaktualizowane!', 'success');
+            modals.simulationSettings.hide();
+        } catch (error) {
+            console.error('Błąd podczas aktualizacji parametrów symulacji:', error);
+            showToast(`Błąd: ${error.message}`, 'error');
+        }
+    });
+
     // Event listenery dla kontroli schedulerów
     startSchedulerBtn.addEventListener('click', startScheduler);
     stopSchedulerBtn.addEventListener('click', stopScheduler);
@@ -631,6 +671,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const response = await fetch('/api/dashboard/main-status');
             if (!response.ok) throw new Error('Błąd pobierania danych z API');
             const data = await response.json();
+            latestDashboardData = data; // Zapisz najnowsze dane
             updateUI(data);
             await loadSchedulerStatus(); // Załaduj status schedulerów
         } catch (error) {
@@ -639,6 +680,48 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     initialLoad();
+
+    async function handleOpenSimulationSettings(sprzetId, sprzetNazwa) {
+        // Ustaw ID i nazwę w modalu
+        document.getElementById('simulation-settings-sprzet-id').value = sprzetId;
+        document.getElementById('simulation-settings-sprzet-name').textContent = sprzetNazwa;
+        
+        const heatingInput = document.getElementById('simulation-heating-speed');
+        const coolingInput = document.getElementById('simulation-cooling-speed');
+
+        // Pokaż stan ładowania
+        heatingInput.value = 'Ładowanie...';
+        coolingInput.value = 'Ładowanie...';
+        heatingInput.disabled = true;
+        coolingInput.disabled = true;
+
+        // Pokaż modal
+        modals.simulationSettings.show();
+
+        try {
+            // Pobierz aktualne dane prosto z bazy
+            const response = await fetch(`/api/sprzet/${sprzetId}/simulation-params`);
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Błąd pobierania danych');
+            }
+            const data = await response.json();
+
+            // Wypełnij formularz aktualnymi wartościami
+            heatingInput.value = data.szybkosc_grzania || '0.50';
+            coolingInput.value = data.szybkosc_chlodzenia || '0.10';
+
+        } catch (error) {
+            console.error('Błąd podczas pobierania parametrów symulacji:', error);
+            showToast(error.message, 'error');
+            // W przypadku błędu, zamknij modal
+            modals.simulationSettings.hide();
+        } finally {
+            // Zawsze włączaj pola po zakończeniu operacji
+            heatingInput.disabled = false;
+            coolingInput.disabled = false;
+        }
+    }
 
     // Funkcja do wyświetlania powiadomień
     function showToast(message, type = 'info') {

@@ -155,6 +155,33 @@
       </div>
     </div>
   </div>
+  
+  <!-- Modal Ustawień Symulacji -->
+<div class="modal fade" id="simulation-settings-modal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Ustawienia symulacji dla <span class="fw-bold" id="simulation-settings-sprzet-name"></span></h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <form id="simulation-settings-form">
+            <input type="hidden" id="simulation-settings-sprzet-id">
+            <div class="mb-3">
+              <label for="simulation-heating-speed" class="form-label">Szybkość grzania (°C/min):</label>
+              <input type="number" class="form-control" id="simulation-heating-speed" step="0.01" required>
+            </div>
+            <div class="mb-3">
+              <label for="simulation-cooling-speed" class="form-label">Szybkość chłodzenia (°C/min):</label>
+              <input type="number" class="form-control" id="simulation-cooling-speed" step="0.01" required>
+            </div>
+            <button type="submit" class="btn btn-primary">Zapisz zmiany</button>
+          </form>
+        </div>
+      </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}

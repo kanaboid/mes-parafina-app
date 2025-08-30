@@ -419,3 +419,56 @@ def start_heating_endpoint(sprzet_id):
         import traceback
         traceback.print_exc()
         return jsonify({'error': f'Wystąpił błąd serwera: {e}'}), 500
+
+@sprzet_bp.route('/<int:sprzet_id>/simulation-params', methods=['POST'])
+def set_simulation_params_endpoint(sprzet_id):
+    """
+    Endpoint API do zmiany parametrów symulacji (prędkości grzania/chłodzenia).
+    Oczekuje JSON: {"szybkosc_grzania": "0.5", "szybkosc_chlodzenia": "0.1"}
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Brak danych w ciele żądania.'}), 400
+
+    try:
+        # Pobieramy i walidujemy dane wejściowe
+        szybkosc_grzania = Decimal(data['szybkosc_grzania']) if 'szybkosc_grzania' in data else None
+        szybkosc_chlodzenia = Decimal(data['szybkosc_chlodzenia']) if 'szybkosc_chlodzenia' in data else None
+
+        if szybkosc_grzania is None or szybkosc_chlodzenia is None:
+            return jsonify({'error': 'Wymagane są pola "szybkosc_grzania" i "szybkosc_chlodzenia".'}), 400
+
+        # Wywołanie logiki z serwisu
+        SprzetService.set_simulation_params(sprzet_id, szybkosc_grzania, szybkosc_chlodzenia)
+        
+        # Odśwież dashboard
+        broadcast_dashboard_update()
+        
+        return jsonify({'message': f'Pomyślnie zaktualizowano parametry symulacji dla sprzętu ID {sprzet_id}.'}), 200
+
+    except InvalidOperation:
+        return jsonify({'error': 'Nieprawidłowy format liczby.'}), 400
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Wystąpił błąd serwera: {e}'}), 500
+
+@sprzet_bp.route('/<int:sprzet_id>/simulation-params', methods=['GET'])
+def get_simulation_params_endpoint(sprzet_id):
+    """
+    Endpoint API do pobierania parametrów symulacji (prędkości grzania/chłodzenia).
+    """
+    try:
+        params = SprzetService.get_simulation_params(sprzet_id)
+        # Konwertuj Decimal na string, aby zapewnić serializację do JSON
+        params['szybkosc_grzania'] = str(params['szybkosc_grzania']) if params['szybkosc_grzania'] is not None else None
+        params['szybkosc_chlodzenia'] = str(params['szybkosc_chlodzenia']) if params['szybkosc_chlodzenia'] is not None else None
+        return jsonify(params), 200
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 404
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Wystąpił błąd serwera: {e}'}), 500

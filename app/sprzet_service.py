@@ -108,3 +108,43 @@ class SprzetService:
         except Exception as e:
             db.session.rollback()
             raise e
+
+    @staticmethod
+    def set_simulation_params(sprzet_id: int, szybkosc_grzania: Decimal, szybkosc_chlodzenia: Decimal):
+        """
+        Ustawia nowe prędkości symulacji dla danego sprzętu.
+        """
+        sprzet = db.session.get(Sprzet, sprzet_id)
+
+        if not sprzet:
+            raise ValueError(f"Nie znaleziono sprzętu o ID {sprzet_id}.")
+        
+        if sprzet.typ_sprzetu != 'reaktor':
+            raise ValueError(f"Sprzęt '{sprzet.nazwa_unikalna}' nie jest reaktorem.")
+
+        sprzet.szybkosc_grzania_c_na_minute = szybkosc_grzania
+        sprzet.szybkosc_chlodzenia_c_na_minute = szybkosc_chlodzenia
+        
+        db.session.commit()
+        
+        print(f"Zaktualizowano parametry symulacji dla '{sprzet.nazwa_unikalna}': Grzanie={szybkosc_grzania}, Chłodzenie={szybkosc_chlodzenia}")
+        
+        return sprzet
+
+    @staticmethod
+    def get_simulation_params(sprzet_id: int):
+        """
+        Pobiera aktualne parametry symulacji dla danego sprzętu.
+        """
+        sprzet = db.session.get(Sprzet, sprzet_id)
+
+        if not sprzet:
+            raise ValueError(f"Nie znaleziono sprzętu o ID {sprzet_id}.")
+        
+        if sprzet.typ_sprzetu != 'reaktor':
+            raise ValueError(f"Sprzęt '{sprzet.nazwa_unikalna}' nie jest reaktorem.")
+
+        return {
+            "szybkosc_grzania": sprzet.szybkosc_grzania_c_na_minute,
+            "szybkosc_chlodzenia": sprzet.szybkosc_chlodzenia_c_na_minute
+        }
