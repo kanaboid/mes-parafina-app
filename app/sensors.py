@@ -58,24 +58,24 @@ class SensorService:
 
     def _calculate_new_temperature(self, reaktor: Sprzet) -> Decimal:
         """Czysta funkcja obliczeniowa z dodatkowym logowaniem."""
-        #print(f"    [CALC] --- Rozpoczynam obliczenia dla: {reaktor.nazwa_unikalna} ---")
+        print(f"    [CALC] --- Rozpoczynam obliczenia dla: {reaktor.nazwa_unikalna} ---")
         
         base_temperature = reaktor.temperatura_aktualna or Decimal('20.0')
-        #print(f"    [CALC] Temperatura bazowa (aktualna): {base_temperature}°C")
+        print(f"    [CALC] Temperatura bazowa (aktualna): {base_temperature}°C")
         
         last_update_time = reaktor.ostatnia_aktualizacja or datetime.now(timezone.utc)
         if last_update_time.tzinfo is None:
             last_update_time = last_update_time.replace(tzinfo=timezone.utc)
-        #print(f"    [CALC] Czas ostatniej aktualizacji: {last_update_time}")
+        print(f"    [CALC] Czas ostatniej aktualizacji: {last_update_time}")
 
         current_time = datetime.now(timezone.utc)
-        #print(f"    [CALC] Obecny czas: {current_time}")
+        print(f"    [CALC] Obecny czas: {current_time}")
         
         minutes_passed = Decimal((current_time - last_update_time).total_seconds()) / Decimal(60)
-        #print(f"    [CALC] Minut od ostatniej aktualizacji: {minutes_passed:.4f}")
+        print(f"    [CALC] Minut od ostatniej aktualizacji: {minutes_passed:.4f}")
         
         if minutes_passed <= 0:
-            #print(f"    [CALC] Czas < 0. Zwracam temperaturę bazową: {base_temperature}°C")
+            print(f"    [CALC] Czas < 0. Zwracam temperaturę bazową: {base_temperature}°C")
             return base_temperature
 
         if reaktor.stan_palnika == 'WLACZONY':
@@ -84,15 +84,15 @@ class SensorService:
             temp_docelowa = reaktor.temperatura_docelowa or Decimal('120.0')
             przyrost = minutes_passed * szybkosc_grzania
             new_temperature = min(temp_docelowa, base_temperature + przyrost)
-            #print(f"    [CALC] Szybkość grzania: {szybkosc_grzania}°C/min, Przyrost: {przyrost:.4f}°C, Nowa temp: {new_temperature:.4f}°C")
+            print(f"    [CALC] Szybkość grzania: {szybkosc_grzania}°C/min, Przyrost: {przyrost:.4f}°C, Nowa temp: {new_temperature:.4f}°C")
         else:
-            #print(f"    [CALC] Stan palnika: {reaktor.stan_palnika}. Obliczam chłodzenie.")
+            print(f"    [CALC] Stan palnika: {reaktor.stan_palnika}. Obliczam chłodzenie.")
             szybkosc_chlodzenia = reaktor.szybkosc_chlodzenia_c_na_minute or Decimal('0.1')
             spadek = minutes_passed * szybkosc_chlodzenia
             new_temperature = max(Decimal('20.0'), base_temperature - spadek)
-            #print(f"    [CALC] Szybkość chłodzenia: {szybkosc_chlodzenia}°C/min, Spadek: {spadek:.4f}°C, Nowa temp: {new_temperature:.4f}°C")
+            print(f"    [CALC] Szybkość chłodzenia: {szybkosc_chlodzenia}°C/min, Spadek: {spadek:.4f}°C, Nowa temp: {new_temperature:.4f}°C")
 
-        #print(f"    [CALC] --- Koniec obliczeń dla {reaktor.nazwa_unikalna}. Zwracam: {new_temperature} ---")
+        print(f"    [CALC] --- Koniec obliczeń dla {reaktor.nazwa_unikalna}. Zwracam: {new_temperature} ---")
         return new_temperature
 
     def read_sensors(self):
@@ -107,17 +107,16 @@ class SensorService:
             print(equipment_list)
             pomiary_do_dodania = []
             
+            # KROK 1: Oblicz wszystkie nowe wartości w pętli
             for item in equipment_list:
-                #print(f"\n[DEBUG] Przetwarzam: {item.nazwa_unikalna}")
-                db.session.refresh(item)
-                #print(f"  -> Stan z bazy PRZED obliczeniami: Temp={item.temperatura_aktualna}, Palnik={item.stan_palnika}, OstatniaAkt={item.ostatnia_aktualizacja}")
-                
                 nowa_temperatura = item.temperatura_aktualna
                 if item.typ_sprzetu == 'reaktor':
+                    # Obliczenia bazują na stanie obiektu z poprzedniej iteracji w pamięci
                     nowa_temperatura = self._calculate_new_temperature(item)
                 
                 nowe_cisnienie = self._simulate_pressure(item.typ_sprzetu)
 
+                # Zaktualizuj stan obiektu w pamięci sesji
                 item.temperatura_aktualna = nowa_temperatura
                 item.cisnienie_aktualne = nowe_cisnienie
                 item.ostatnia_aktualizacja = current_time
@@ -125,13 +124,12 @@ class SensorService:
                 pomiary_do_dodania.append(
                     HistoriaPomiarow(id_sprzetu=item.id, temperatura=nowa_temperatura, cisnienie=nowe_cisnienie, czas_pomiaru=current_time)
                 )
-                #print(f"  -> Stan PO obliczeniach: NowaTemp={nowa_temperatura:.2f}°C, NoweCiśnienie={nowe_cisnienie}bar")
 
+            # KROK 2: Zapisz wszystkie zmiany do bazy w jednej transakcji
             if pomiary_do_dodania:
                 db.session.add_all(pomiary_do_dodania)
 
             db.session.commit()
-            #print(pomiary_do_dodania)
             print(f"\n[{current_time}] Pomiary zapisane do bazy.")
             
         except Exception as e:
