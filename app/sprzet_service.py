@@ -4,6 +4,7 @@ from .extensions import db
 from .models import Sprzet, TankMixes
 from decimal import Decimal
 from datetime import datetime, timezone
+from .models import OperatorTemperatures
 
 class SprzetService:
     @staticmethod
@@ -148,3 +149,34 @@ class SprzetService:
             "szybkosc_grzania": sprzet.szybkosc_grzania_c_na_minute,
             "szybkosc_chlodzenia": sprzet.szybkosc_chlodzenia_c_na_minute
         }
+
+    @staticmethod
+    def set_temperatures(sprzet_id: int, temperatura: Decimal, target: str):
+        """
+        Ustawia temperaturę aktualną i/lub docelową dla danego sprzętu.
+        """
+        sprzet = db.session.get(Sprzet, sprzet_id)
+        if not sprzet:
+            raise ValueError(f"Nie znaleziono sprzętu o ID {sprzet_id}.")
+
+        current_time = datetime.now(timezone.utc)
+        
+        if target == 'current' or target == 'both':
+            sprzet.temperatura_aktualna = temperatura
+        
+        if target == 'both':
+            sprzet.temperatura_docelowa = temperatura
+        
+        sprzet.ostatnia_aktualizacja = current_time
+
+        # Dodaj wpis do historii OperatorTemperatures, jeśli ustawiono docelową
+        if target == 'both':
+            history_entry = OperatorTemperatures(
+                id_sprzetu=sprzet_id, 
+                temperatura=temperatura, 
+                czas_ustawienia=current_time
+            )
+            db.session.add(history_entry)
+
+        db.session.commit()
+        return sprzet
