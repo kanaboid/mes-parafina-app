@@ -6,12 +6,15 @@ from .pathfinder_service import PathFinder
 from .monitoring import MonitoringService
 from .sensors import SensorService
 from flask_apscheduler import APScheduler
+import logging
+import os
+import atexit
 from datetime import datetime, timezone
 from flask_sqlalchemy import SQLAlchemy
 from .extensions import db, socketio
 from flask_admin import Admin
 from flask_admin.contrib.sqla import ModelView
-import logging
+from logging.handlers import RotatingFileHandler
 
 
 # ... instancje pathfinder, monitoring, sensor_service, scheduler ...
@@ -63,31 +66,46 @@ def create_app(config_class=Config): # ZMIANA: Dodajemy opcjonalny argument
     # scheduler.scheduler.configure(timezone="Europe/Warsaw")
 
     # Funkcje do tworzenia zadań schedulera (muszą być dostępne dla API)
-    def create_read_sensors_job(seconds=5):
-        @scheduler.task('interval',     
-                       id='read_sensors', 
-                       seconds=seconds,
-                       max_instances=1,
-                       next_run_time=datetime.now(timezone.utc))
-        def read_sensors():
-            print(f"\n--- SCHEDULER: Uruchamiam zadanie read_sensors o {datetime.now()} ---\n")
-            with app.app_context():
-                try:
-                    sensor_service.read_sensors()
-                except Exception as e:
-                    print(f"Błąd podczas odczytu czujników: {str(e)}")
+    # def create_read_sensors_job(seconds=30):
+    #     # Usuń istniejące zadanie o tym samym ID, jeśli istnieje
+    #     existing_job = scheduler.get_job('read_sensors')
+    #     if existing_job:
+    #         scheduler.remove_job('read_sensors')
+    #         print(f"🔄 Usunięto istniejące zadanie read_sensors przed utworzeniem nowego z interwałem {seconds}s")
         
-        # Zapisz referencję do zadania
-        scheduler_jobs['read_sensors'] = read_sensors
-        return read_sensors
+    #     @scheduler.task('interval',     
+    #                    id='read_sensors', 
+    #                    seconds=seconds,
+    #                    max_instances=1,
+    #                    next_run_time=datetime.now(timezone.utc))
+    #     def read_sensors():
+    #         current_time = datetime.now()
+    #         print(f"\n--- SCHEDULER [read_sensors-{seconds}s] Uruchamiam zadanie o {current_time} ---")
+    #         with app.app_context():
+    #             try:
+    #                 sensor_service.read_sensors()
+    #             except Exception as e:
+    #                 print(f"Błąd podczas odczytu czujników: {str(e)}")
+        
+    #     # Zapisz referencję do zadania
+    #     scheduler_jobs['read_sensors'] = read_sensors
+    #     print(f"✅ Utworzono nowe zadanie read_sensors z interwałem {seconds}s")
+    #     return read_sensors
 
     def create_check_alarms_job(seconds=5):
+        # Usuń istniejące zadanie o tym samym ID, jeśli istnieje
+        existing_job = scheduler.get_job('check_alarms')
+        if existing_job:
+            scheduler.remove_job('check_alarms')
+            print(f"🔄 Usunięto istniejące zadanie check_alarms przed utworzeniem nowego z interwałem {seconds}s")
+        
         @scheduler.task('interval', 
                        id='check_alarms', 
                        seconds=seconds,
                        max_instances=1)
         def check_alarms():
-            print(f"\n--- SCHEDULER: Uruchamiam zadanie check_alarms o {datetime.now()} ---\n")
+            current_time = datetime.now()
+            print(f"\n--- SCHEDULER [check_alarms-{seconds}s] Uruchamiam zadanie o {current_time} ---")
             with app.app_context():
                 monitoring.check_equipment_status()
                 from .sockets import broadcast_dashboard_update
@@ -95,16 +113,76 @@ def create_app(config_class=Config): # ZMIANA: Dodajemy opcjonalny argument
         
         # Zapisz referencję do zadania
         scheduler_jobs['check_alarms'] = check_alarms
+        print(f"✅ Utworzono nowe zadanie check_alarms z interwałem {seconds}s")
         return check_alarms
 
-    # ZMIANA: Cały blok dodawania zadań i uruchamiania schedulera
-    # umieszczamy w warunku, który sprawdza, czy NIE jesteśmy w trybie testowym.
-    if not app.config.get('TESTING'):
-        # Utwórz początkowe zadania
-        create_read_sensors_job(5)
-        create_check_alarms_job(5)
+    def cleanup_existing_jobs():
+        """Usuwa wszystkie istniejące zadania schedulera przed inicjalizacją"""
+        existing_jobs = scheduler.get_jobs()
+        if existing_jobs:
+            print(f"🧹 Znaleziono {len(existing_jobs)} istniejących zadań - usuwam...")
+            for job in existing_jobs:
+                scheduler.remove_job(job.id)
+                print(f"🗑️ Usunięto zadanie: {job.id}")
+        else:
+            print("✨ Brak istniejących zadań do usunięcia")
 
-        scheduler.start()
+    def get_job_real_status(job_id):
+        """Sprawdza rzeczywisty status zadania - czy jest aktywne czy nie"""
+        job = scheduler.get_job(job_id)
+        if not job:
+            return False, "Zadanie nie istnieje"
+        
+        # Sprawdź czy zadanie ma następny czas uruchomienia
+        is_active = job.next_run_time is not None
+        status_text = "AKTYWNE" if is_active else "WYŁĄCZONE"
+        
+        return is_active, status_text
+
+    # ZMIANA: Cały blok dodawania zadań i uruchamiania schedulera
+    if not app.config.get('TESTING'):
+        # OSTATECZNE ROZWIĄZANIE: Mechanizm blokady plikowej (file lock)
+        # Gwarantuje, że tylko jeden proces (nawet przy reloaderze) uruchomi scheduler.
+        lock_file_path = os.path.join(app.instance_path, 'scheduler.lock')
+        
+        def cleanup_lock_file():
+            """Funkcja do usunięcia pliku blokady przy zamknięciu aplikacji."""
+            try:
+                if os.path.exists(lock_file_path):
+                    os.remove(lock_file_path)
+                    print("🧹 Usunięto plik blokady schedulera.")
+            except OSError as e:
+                print(f"Błąd podczas usuwania pliku blokady: {e}")
+
+        # W trybie debug, reloader może tworzyć wiele procesów.
+        # Tylko ten, który pierwszy utworzy plik .lock, uruchomi scheduler.
+        if app.debug:
+            try:
+                # O_CREAT | O_EXCL to operacja atomowa - zapobiega race conditions.
+                lock_fd = os.open(lock_file_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                os.close(lock_fd)
+                
+                print("🔒 Zdobyto blokadę schedulera. Ten proces będzie nim zarządzał.")
+                atexit.register(cleanup_lock_file)  # Zarejestruj sprzątanie przy wyjściu
+
+                # Uruchomienie logiki schedulera
+                print("🚀 Uruchamiam scheduler w docelowym procesie aplikacji...")
+                cleanup_existing_jobs()
+                create_check_alarms_job(5)
+                if not scheduler.running:
+                    scheduler.start()
+                    print("✅ Scheduler został uruchomiony.")
+
+            except FileExistsError:
+                print("ℹ️ Blokada schedulera jest już aktywna w innym procesie. Pomijam.")
+        else:
+            # W trybie produkcyjnym (bez debug) uruchamiamy normalnie.
+            print("🚀 Uruchamiam scheduler w trybie produkcyjnym...")
+            cleanup_existing_jobs()
+            create_check_alarms_job(5)
+            if not scheduler.running:
+                scheduler.start()
+                print("✅ Scheduler został uruchomiony.")
 
     # Rejestrujemy blueprinty
     from . import routes
@@ -152,8 +230,8 @@ def create_app(config_class=Config): # ZMIANA: Dodajemy opcjonalny argument
             
         jobs = []
         for job in scheduler.get_jobs():
-            # Sprawdź czy zadanie jest aktywne (ma następny czas uruchomienia)
-            is_active = job.next_run_time is not None
+            # Użyj nowej funkcji do sprawdzenia rzeczywistego statusu
+            is_active, status_text = get_job_real_status(job.id)
             
             jobs.append({
                 'id': job.id,
@@ -161,7 +239,8 @@ def create_app(config_class=Config): # ZMIANA: Dodajemy opcjonalny argument
                 'func': job.func.__name__ if hasattr(job.func, '__name__') else str(job.func),
                 'trigger': str(job.trigger),
                 'next_run_time': job.next_run_time.isoformat() if job.next_run_time else None,
-                'active': is_active
+                'active': is_active,
+                'status_text': status_text
             })
         
         return {
@@ -183,12 +262,16 @@ def create_app(config_class=Config): # ZMIANA: Dodajemy opcjonalny argument
                 return {'error': f'Zadanie {job_id} nie istnieje'}, 404
                 
             if job.next_run_time is None:
-                # Włącz zadanie - ustaw następny czas uruchomienia
-                scheduler.resume_job(job_id)
+                # Włącz zadanie - utwórz nowe z domyślnym interwałem
+                if job_id == 'read_sensors':
+                    #create_read_sensors_job(5)  # Domyślnie 5 sekund
+                    pass
+                elif job_id == 'check_alarms':
+                    create_check_alarms_job(5)  # Domyślnie 5 sekund
                 return {'message': f'Zadanie {job_id} zostało włączone', 'status': 'active'}
             else:
-                # Wyłącz zadanie - usuń następny czas uruchomienia
-                scheduler.pause_job(job_id)
+                # Wyłącz zadanie - usuń je całkowicie
+                scheduler.remove_job(job_id)
                 return {'message': f'Zadanie {job_id} zostało wyłączone', 'status': 'paused'}
         except Exception as e:
             return {'error': f'Błąd podczas przełączania zadania: {str(e)}'}, 500
@@ -212,7 +295,8 @@ def create_app(config_class=Config): # ZMIANA: Dodajemy opcjonalny argument
             
             # Utwórz nowe zadanie z nowym interwałem
             if job_id == 'read_sensors':
-                create_read_sensors_job(new_seconds)
+                #create_read_sensors_job(new_seconds)
+                pass
             elif job_id == 'check_alarms':
                 create_check_alarms_job(new_seconds)
             
@@ -266,7 +350,7 @@ def create_app(config_class=Config): # ZMIANA: Dodajemy opcjonalny argument
                 scheduler.remove_job(job.id)
             
             # Utwórz nowe zadania z domyślnymi ustawieniami
-            create_read_sensors_job(5)
+            #create_read_sensors_job(5)
             create_check_alarms_job(5)
             
             # Uruchom scheduler
@@ -275,5 +359,63 @@ def create_app(config_class=Config): # ZMIANA: Dodajemy opcjonalny argument
             return {'message': 'Scheduler został zresetowany z domyślnymi ustawieniami', 'status': 'reset'}
         except Exception as e:
             return {'error': f'Błąd podczas resetowania schedulera: {str(e)}'}, 500
+
+    @app.route('/api/scheduler/debug', methods=['GET'])
+    def debug_scheduler():
+        """Endpoint do debugowania schedulera - pokazuje szczegółowe informacje o wszystkich zadaniach"""
+        if app.config.get('TESTING'):
+            return {'error': 'Scheduler niedostępny w trybie testowym'}, 400
+            
+        try:
+            jobs = []
+            for job in scheduler.get_jobs():
+                jobs.append({
+                    'id': job.id,
+                    'name': job.name,
+                    'func': job.func.__name__ if hasattr(job.func, '__name__') else str(job.func),
+                    'trigger': str(job.trigger),
+                    'next_run_time': job.next_run_time.isoformat() if job.next_run_time else None,
+                    'active': job.next_run_time is not None,
+                    'max_instances': job.max_instances,
+                    'misfire_grace_time': job.misfire_grace_time,
+                    'coalesce': job.coalesce
+                })
+            
+            return {
+                'scheduler_running': scheduler.running,
+                'total_jobs': len(jobs),
+                'active_jobs': len([j for j in jobs if j['active']]),
+                'jobs': jobs,
+                'scheduler_jobs_keys': list(scheduler_jobs.keys())
+            }
+        except Exception as e:
+            return {'error': f'Błąd podczas debugowania: {str(e)}'}, 500
+
+    @app.route('/api/scheduler/force-stop-all', methods=['POST'])
+    def force_stop_all_jobs():
+        """Wymusza wyłączenie wszystkich zadań schedulera"""
+        if app.config.get('TESTING'):
+            return {'error': 'Scheduler niedostępny w trybie testowym'}, 400
+            
+        try:
+            # Zatrzymaj scheduler
+            if scheduler.running:
+                scheduler.shutdown()
+            
+            # Usuń wszystkie zadania
+            existing_jobs = scheduler.get_jobs()
+            removed_count = 0
+            for job in existing_jobs:
+                scheduler.remove_job(job.id)
+                removed_count += 1
+                print(f"🛑 Wymuszenie wyłączenia zadania: {job.id}")
+            
+            return {
+                'message': f'Wymuszenie wyłączenia {removed_count} zadań', 
+                'status': 'stopped',
+                'removed_jobs': removed_count
+            }
+        except Exception as e:
+            return {'error': f'Błąd podczas wymuszenia wyłączenia: {str(e)}'}, 500
 
     return app

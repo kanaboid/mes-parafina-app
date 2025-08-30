@@ -16,6 +16,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const startSchedulerBtn = document.getElementById('start-scheduler-btn');
     const stopSchedulerBtn = document.getElementById('stop-scheduler-btn');
     const resetSchedulerBtn = document.getElementById('reset-scheduler-btn');
+    const debugSchedulerBtn = document.getElementById('debug-scheduler-btn');
+    const forceStopAllBtn = document.getElementById('force-stop-all-btn');
 
     const modals = {
         planTransfer: new bootstrap.Modal(document.getElementById('plan-transfer-modal')),
@@ -425,6 +427,56 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    async function debugScheduler() {
+        try {
+            const response = await fetch('/api/scheduler/debug');
+            if (!response.ok) throw new Error('Błąd pobierania debug schedulera');
+            const data = await response.json();
+            
+            // Wyświetl debug info w konsoli
+            console.log('=== DEBUG SCHEDULER ===');
+            console.log('Status:', data);
+            console.log('=======================');
+            
+            // Pokaż toast z informacją
+            showToast(`Debug: ${data.total_jobs} zadań, ${data.active_jobs} aktywne`, 'info');
+            
+            // Opcjonalnie: wyświetl szczegóły w UI
+            if (data.jobs && data.jobs.length > 0) {
+                let debugInfo = `Zadania (${data.total_jobs}):\n`;
+                data.jobs.forEach(job => {
+                    debugInfo += `- ${job.id}: ${job.active ? 'AKTYWNE' : 'WYŁĄCZONE'} (${job.trigger})\n`;
+                });
+                alert(debugInfo);
+            }
+        } catch (error) {
+            console.error('Błąd podczas debugowania schedulera:', error);
+            showToast(error.message, 'error');
+        }
+    }
+
+    async function forceStopAll() {
+        if (!confirm('Czy na pewno chcesz wymusić wyłączenie wszystkich zadań? To może przerwać procesy produkcyjne!')) {
+            return;
+        }
+        
+        try {
+            const response = await fetch('/api/scheduler/force-stop-all', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            const result = await response.json();
+            
+            if (!response.ok) throw new Error(result.error);
+            
+            showToast(`Wymuszenie wyłączenia: ${result.removed_jobs} zadań zostało zatrzymanych`, 'warning');
+            await loadSchedulerStatus(); // Odśwież status
+        } catch (error) {
+            console.error('Błąd podczas wymuszenia wyłączenia:', error);
+            showToast(error.message, 'error');
+        }
+    }
+
     // --- OBSŁUGA ZDARZEŃ ---
     reaktoryContainer.addEventListener('click', (e) => {
         const targetElement = e.target.closest('.action-btn');
@@ -543,6 +595,8 @@ document.addEventListener('DOMContentLoaded', () => {
     startSchedulerBtn.addEventListener('click', startScheduler);
     stopSchedulerBtn.addEventListener('click', stopScheduler);
     resetSchedulerBtn.addEventListener('click', resetScheduler);
+    debugSchedulerBtn.addEventListener('click', debugScheduler);
+    forceStopAllBtn.addEventListener('click', forceStopAll);
 
     // --- INICJALIZACJA ---
     async function initialLoad() {
