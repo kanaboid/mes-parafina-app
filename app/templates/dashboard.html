@@ -161,13 +161,11 @@
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title">Ustawienia dla <span class="fw-bold" id="simulation-settings-sprzet-name"></span></h5>
+          <h5 class="modal-title">Ustawienia symulacji dla <span class="fw-bold" id="simulation-settings-sprzet-name"></span></h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body">
-          <!-- Sekcja Prędkości Symulacji -->
           <form id="simulation-settings-form">
-            <h6 class="text-muted">Parametry Symulacji</h6>
             <input type="hidden" id="simulation-settings-sprzet-id">
             <div class="mb-3">
               <label for="simulation-heating-speed" class="form-label">Szybkość grzania (°C/min):</label>
@@ -177,22 +175,7 @@
               <label for="simulation-cooling-speed" class="form-label">Szybkość chłodzenia (°C/min):</label>
               <input type="number" class="form-control" id="simulation-cooling-speed" step="0.01" required>
             </div>
-            <button type="submit" class="btn btn-primary">Zapisz prędkości</button>
-          </form>
-          
-          <hr class="my-4">
-
-          <!-- Sekcja Ręcznego Ustawiania Temperatury -->
-          <form id="manual-temperature-form">
-            <h6 class="text-muted">Ręczna Zmiana Temperatury</h6>
-            <div class="mb-3">
-                <label for="manual-temperature-value" class="form-label">Nowa temperatura (°C):</label>
-                <input type="number" class="form-control" id="manual-temperature-value" step="0.1" required>
-            </div>
-            <div class="d-grid gap-2 d-md-flex justify-content-md-end">
-                <button type="button" class="btn btn-secondary" id="set-current-temp-btn">Ustaw tylko aktualną</button>
-                <button type="button" class="btn btn-warning" id="set-both-temps-btn">Ustaw aktualną i docelową</button>
-            </div>
+            <button type="submit" class="btn btn-primary">Zapisz zmiany</button>
           </form>
         </div>
       </div>

@@ -657,47 +657,14 @@ document.addEventListener('DOMContentLoaded', () => {
             showToast(`Błąd: ${error.message}`, 'error');
         }
     });
-    
-    // Obsługa przycisków ręcznej zmiany temperatury
-    document.getElementById('set-current-temp-btn').addEventListener('click', () => {
-        handleSetTemperature('current');
-    });
 
-    document.getElementById('set-both-temps-btn').addEventListener('click', () => {
-        handleSetTemperature('both');
-    });
+    // Event listenery dla kontroli schedulerów
+    startSchedulerBtn.addEventListener('click', startScheduler);
+    stopSchedulerBtn.addEventListener('click', stopScheduler);
+    resetSchedulerBtn.addEventListener('click', resetScheduler);
+    debugSchedulerBtn.addEventListener('click', debugScheduler);
+    forceStopAllBtn.addEventListener('click', forceStopAll);
 
-    async function handleSetTemperature(target) {
-        const sprzetId = document.getElementById('simulation-settings-sprzet-id').value;
-        const tempValueInput = document.getElementById('manual-temperature-value');
-        const tempValue = tempValueInput.value;
-
-        if (!tempValue) {
-            showToast('Proszę podać wartość temperatury.', 'error');
-            tempValueInput.focus();
-            return;
-        }
-
-        try {
-            const response = await fetch(`/api/sprzet/${sprzetId}/set-temperatures`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    temperatura: tempValue,
-                    target: target
-                })
-            });
-            const result = await response.json();
-            if (!response.ok) throw new Error(result.error || 'Wystąpił nieznany błąd');
-            
-            showToast(result.message, 'success');
-            modals.simulationSettings.hide();
-        } catch (error) {
-            console.error('Błąd podczas ustawiania temperatury:', error);
-            showToast(`Błąd: ${error.message}`, 'error');
-        }
-    }
-    
     // --- INICJALIZACJA ---
     async function initialLoad() {
         try {
@@ -743,10 +710,6 @@ document.addEventListener('DOMContentLoaded', () => {
             // Wypełnij formularz aktualnymi wartościami
             heatingInput.value = data.szybkosc_grzania || '0.50';
             coolingInput.value = data.szybkosc_chlodzenia || '0.10';
-            
-            // Wypełnij pole temperatury aktualną wartością
-            const currentTemp = latestDashboardData.reaktory_w_procesie?.find(r => r.id == sprzetId)?.temperatura_aktualna;
-            document.getElementById('manual-temperature-value').value = currentTemp ? parseFloat(currentTemp).toFixed(1) : '';
 
         } catch (error) {
             console.error('Błąd podczas pobierania parametrów symulacji:', error);

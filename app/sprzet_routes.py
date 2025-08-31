@@ -472,38 +472,3 @@ def get_simulation_params_endpoint(sprzet_id):
         import traceback
         traceback.print_exc()
         return jsonify({'error': f'Wystąpił błąd serwera: {e}'}), 500
-
-@sprzet_bp.route('/<int:sprzet_id>/set-temperatures', methods=['POST'])
-def set_temperatures_endpoint(sprzet_id):
-    """
-    Ustawia temperatury (aktualną, docelową lub obie) dla danego sprzętu.
-    Oczekuje JSON: {"temperatura": 80.5, "target": "current" | "both"}
-    """
-    data = request.get_json()
-    if not data or 'temperatura' not in data or 'target' not in data:
-        return jsonify({'error': 'Brak wymaganych pól: "temperatura" i "target".'}), 400
-
-    try:
-        temperatura = Decimal(data['temperatura'])
-        target = data['target']
-
-        if target not in ['current', 'both']:
-            return jsonify({'error': 'Nieprawidłowa wartość pola "target". Dozwolone: "current", "both".'}), 400
-
-        updated_sprzet = SprzetService.set_temperatures(sprzet_id, temperatura, target)
-        
-        broadcast_dashboard_update()
-        
-        return jsonify({
-            'message': f"Pomyślnie zaktualizowano temperatury dla '{updated_sprzet.nazwa_unikalna}'.",
-            'sprzet_id': updated_sprzet.id
-        }), 200
-
-    except InvalidOperation:
-        return jsonify({'error': 'Nieprawidłowy format temperatury.'}), 400
-    except ValueError as e:
-        return jsonify({'error': str(e)}), 404
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return jsonify({'error': f'Wystąpił błąd serwera: {e}'}), 500
