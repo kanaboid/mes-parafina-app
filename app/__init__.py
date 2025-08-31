@@ -150,32 +150,49 @@ def create_app(config_class=None):
         
         return is_active, status_text
 
-    # ZMIANA: Całkowite zastąpienie logiki blokady plikowej kanoniczną metodą Flaska
+    # ZMIANA: Cały blok dodawania zadań i uruchamiania schedulera
     if not app.config.get('TESTING'):
-        # Ten warunek jest kluczowy w trybie debugowania.
-        # Kod wewnątrz wykona się tylko w procesie potomnym (workerze),
-        # który faktycznie obsługuje aplikację. Proces-matka (monitorujący pliki)
-        # pominie ten blok, zapobiegając duplikacji.
-        # W trybie produkcyjnym (gdy DEBUG=False), warunek również jest spełniony.
-        if os.environ.get('WERKZEUG_RUN_MAIN') == 'true' or not app.config.get("DEBUG"):
-            print(f"🚀 [PID: {os.getpid()}] Główny proces roboczy. Inicjalizuję scheduler.")
-            cleanup_existing_jobs()
+        # OSTATECZNE ROZWIĄZANIE: Mechanizm blokady plikowej (file lock)
+        # Gwarantuje, że tylko jeden proces (nawet przy reloaderze lub wielu workerach Gunicorna) uruchomi scheduler.
+        
+        # Utwórz folder 'instance', jeśli nie istnieje
+        try:
+            os.makedirs(app.instance_path, exist_ok=True)
+        except OSError as e:
+            app.logger.error(f"Błąd podczas tworzenia folderu instance: {e}")
+
+        lock_file_path = os.path.join(app.instance_path, 'scheduler.lock')
+        
+        try:
+            # O_CREAT | O_EXCL to operacja atomowa - zapobiega race conditions.
+            lock_fd = os.open(lock_file_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.close(lock_fd)
             
-            # Utwórz początkowe zadania
+            print(f"🔒 [PID: {os.getpid()}] Zdobyto blokadę. Ten proces będzie zarządzał schedulerem.")
+            
+            def cleanup_lock_file():
+                """Funkcja do usunięcia pliku blokady przy zamknięciu aplikacji."""
+                try:
+                    if os.path.exists(lock_file_path):
+                        os.remove(lock_file_path)
+                        print(f"🧹 [PID: {os.getpid()}] Usunięto plik blokady schedulera.")
+                except OSError as e:
+                    print(f"Błąd podczas usuwania pliku blokady: {e}")
+            
+            atexit.register(cleanup_lock_file)
+
+            # Uruchomienie logiki schedulera
+            print(f"🚀 [PID: {os.getpid()}] Uruchamiam scheduler...")
+            cleanup_existing_jobs()
             create_read_sensors_job(5)
             create_check_alarms_job(5)
             
-            # Uruchom scheduler
-            try:
-                if not scheduler.running:
-                    scheduler.start()
-                    print(f"✅ [PID: {os.getpid()}] Scheduler został uruchomiony.")
-                else:
-                    print(f"ℹ️ [PID: {os.getpid()}] Scheduler już działa.")
-            except Exception as e:
-                print(f"❌ [PID: {os.getpid()}] Błąd podczas uruchamiania schedulera: {e}")
-        else:
-            print(f"🔍 [PID: {os.getpid()}] Proces-matka reloadera. Pomijam inicjalizację schedulera.")
+            if not scheduler.running:
+                scheduler.start()
+                print(f"✅ [PID: {os.getpid()}] Scheduler został uruchomiony.")
+
+        except FileExistsError:
+            print(f"ℹ️ [PID: {os.getpid()}] Blokada schedulera jest już aktywna w innym procesie. Ten proces pomija uruchomienie schedulera.")
 
     # Rejestrujemy blueprinty
     from . import routes
