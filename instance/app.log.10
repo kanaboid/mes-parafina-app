@@ -1,0 +1,92 @@
+2025-08-31 03:32:11,773 INFO: --- Aplikacja MES Parafina startuje --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:55]
+2025-08-31 03:32:12,691 INFO: --- [PID: 13048] Œcie¿ka pliku blokady: C:\Users\user\Documents\Projekty\mes-parafina-app\instance\scheduler.lock --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:178]
+2025-08-31 03:32:14,257 INFO: --- Aplikacja MES Parafina startuje --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:55]
+2025-08-31 03:32:15,198 INFO: --- [PID: 21972] Œcie¿ka pliku blokady: C:\Users\user\Documents\Projekty\mes-parafina-app\instance\scheduler.lock --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:178]
+2025-08-31 03:33:01,444 INFO: --- [PID: 21972] Zapytanie API: /api/scheduler/status --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:252]
+2025-08-31 03:33:08,469 INFO: --- [PID: 21972] Zapytanie API: /api/scheduler/debug --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:406]
+2025-08-31 03:35:35,711 INFO: --- Aplikacja MES Parafina startuje --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:55]
+2025-08-31 03:35:37,255 INFO: 
+--- SCHEDULER [read_sensors-5s] Uruchamiam zadanie o 2025-08-31 03:35:37.255717 --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:107]
+2025-08-31 03:35:41,991 INFO: 
+--- SCHEDULER [read_sensors-5s] Uruchamiam zadanie o 2025-08-31 03:35:41.991349 --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:107]
+2025-08-31 03:35:42,039 INFO: 
+--- [PID: 18296] SCHEDULER [check_alarms-5s] Uruchamiam zadanie o 2025-08-31 03:35:42.039423 --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:132]
+2025-08-31 03:35:48,257 INFO: --- Aplikacja MES Parafina startuje --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:55]
+2025-08-31 03:35:49,454 INFO: 
+--- SCHEDULER [read_sensors-5s] Uruchamiam zadanie o 2025-08-31 03:35:49.454215 --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:107]
+2025-08-31 03:35:54,231 INFO: 
+--- SCHEDULER [read_sensors-5s] Uruchamiam zadanie o 2025-08-31 03:35:54.231168 --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:107]
+2025-08-31 03:35:54,279 INFO: 
+--- [PID: 22192] SCHEDULER [check_alarms-5s] Uruchamiam zadanie o 2025-08-31 03:35:54.279335 --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:132]
+2025-08-31 03:35:59,302 INFO: 
+--- SCHEDULER [read_sensors-5s] Uruchamiam zadanie o 2025-08-31 03:35:59.302269 --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:107]
+2025-08-31 03:35:59,375 INFO: 
+--- [PID: 22192] SCHEDULER [check_alarms-5s] Uruchamiam zadanie o 2025-08-31 03:35:59.375263 --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:132]
+2025-08-31 03:36:04,234 INFO: 
+--- SCHEDULER [read_sensors-5s] Uruchamiam zadanie o 2025-08-31 03:36:04.234928 --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:107]
+2025-08-31 03:36:04,304 INFO: 
+--- [PID: 22192] SCHEDULER [check_alarms-5s] Uruchamiam zadanie o 2025-08-31 03:36:04.304723 --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:132]
+2025-08-31 03:36:09,235 INFO: 
+--- SCHEDULER [read_sensors-5s] Uruchamiam zadanie o 2025-08-31 03:36:09.235026 --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:107]
+2025-08-31 03:36:09,294 INFO: 
+--- [PID: 22192] SCHEDULER [check_alarms-5s] Uruchamiam zadanie o 2025-08-31 03:36:09.294659 --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:132]
+2025-08-31 03:36:14,238 INFO: 
+--- SCHEDULER [read_sensors-5s] Uruchamiam zadanie o 2025-08-31 03:36:14.238686 --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:107]
+2025-08-31 03:36:14,304 INFO: 
+--- [PID: 22192] SCHEDULER [check_alarms-5s] Uruchamiam zadanie o 2025-08-31 03:36:14.304477 --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:132]
+2025-08-31 03:36:19,234 INFO: 
+--- SCHEDULER [read_sensors-5s] Uruchamiam zadanie o 2025-08-31 03:36:19.234832 --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:107]
+2025-08-31 03:36:19,305 INFO: 
+--- [PID: 22192] SCHEDULER [check_alarms-5s] Uruchamiam zadanie o 2025-08-31 03:36:19.305374 --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:132]
+2025-08-31 03:36:24,236 INFO: 
+--- SCHEDULER [read_sensors-5s] Uruchamiam zadanie o 2025-08-31 03:36:24.236394 --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:107]
+2025-08-31 03:36:24,277 INFO: 
+--- [PID: 22192] SCHEDULER [check_alarms-5s] Uruchamiam zadanie o 2025-08-31 03:36:24.277782 --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:132]
+2025-08-31 03:36:29,236 INFO: 
+--- SCHEDULER [read_sensors-5s] Uruchamiam zadanie o 2025-08-31 03:36:29.236264 --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:107]
+2025-08-31 03:36:29,284 INFO: 
+--- [PID: 22192] SCHEDULER [check_alarms-5s] Uruchamiam zadanie o 2025-08-31 03:36:29.284164 --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:132]
+2025-08-31 03:36:34,221 INFO: 
+--- SCHEDULER [read_sensors-5s] Uruchamiam zadanie o 2025-08-31 03:36:34.221622 --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:107]
+2025-08-31 03:36:34,282 INFO: 
+--- [PID: 22192] SCHEDULER [check_alarms-5s] Uruchamiam zadanie o 2025-08-31 03:36:34.282779 --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:132]
+2025-08-31 03:36:39,251 INFO: 
+--- SCHEDULER [read_sensors-5s] Uruchamiam zadanie o 2025-08-31 03:36:39.250903 --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:107]
+2025-08-31 03:36:39,319 INFO: 
+--- [PID: 22192] SCHEDULER [check_alarms-5s] Uruchamiam zadanie o 2025-08-31 03:36:39.319071 --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:132]
+2025-08-31 03:36:44,238 INFO: 
+--- SCHEDULER [read_sensors-5s] Uruchamiam zadanie o 2025-08-31 03:36:44.238266 --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:107]
+2025-08-31 03:36:44,283 INFO: 
+--- [PID: 22192] SCHEDULER [check_alarms-5s] Uruchamiam zadanie o 2025-08-31 03:36:44.283841 --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:132]
+2025-08-31 03:36:49,230 INFO: 
+--- SCHEDULER [read_sensors-5s] Uruchamiam zadanie o 2025-08-31 03:36:49.230801 --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:107]
+2025-08-31 03:36:49,292 INFO: 
+--- [PID: 22192] SCHEDULER [check_alarms-5s] Uruchamiam zadanie o 2025-08-31 03:36:49.292599 --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:132]
+2025-08-31 03:36:54,246 INFO: 
+--- SCHEDULER [read_sensors-5s] Uruchamiam zadanie o 2025-08-31 03:36:54.245760 --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:107]
+2025-08-31 03:36:54,292 INFO: 
+--- [PID: 22192] SCHEDULER [check_alarms-5s] Uruchamiam zadanie o 2025-08-31 03:36:54.292506 --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:132]
+2025-08-31 03:36:59,240 INFO: 
+--- SCHEDULER [read_sensors-5s] Uruchamiam zadanie o 2025-08-31 03:36:59.240655 --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:107]
+2025-08-31 03:36:59,284 INFO: 
+--- [PID: 22192] SCHEDULER [check_alarms-5s] Uruchamiam zadanie o 2025-08-31 03:36:59.282887 --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:132]
+2025-08-31 03:37:04,295 INFO: 
+--- SCHEDULER [read_sensors-5s] Uruchamiam zadanie o 2025-08-31 03:37:04.295634 --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:107]
+2025-08-31 03:37:04,340 INFO: 
+--- [PID: 22192] SCHEDULER [check_alarms-5s] Uruchamiam zadanie o 2025-08-31 03:37:04.340964 --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:132]
+2025-08-31 03:37:09,231 INFO: 
+--- SCHEDULER [read_sensors-5s] Uruchamiam zadanie o 2025-08-31 03:37:09.231630 --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:107]
+2025-08-31 03:37:09,289 INFO: 
+--- [PID: 22192] SCHEDULER [check_alarms-5s] Uruchamiam zadanie o 2025-08-31 03:37:09.289434 --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:132]
+2025-08-31 03:37:10,965 INFO: --- [PID: 22192] Zapytanie API: /api/scheduler/status --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:234]
+2025-08-31 03:37:14,242 INFO: 
+--- SCHEDULER [read_sensors-5s] Uruchamiam zadanie o 2025-08-31 03:37:14.242795 --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:107]
+2025-08-31 03:37:14,292 INFO: 
+--- [PID: 22192] SCHEDULER [check_alarms-5s] Uruchamiam zadanie o 2025-08-31 03:37:14.292464 --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:132]
+2025-08-31 03:37:16,149 INFO: --- [PID: 22192] Zapytanie API: /api/scheduler/job/check_alarms/toggle --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:265]
+2025-08-31 03:37:16,157 INFO: --- [PID: 22192] Zapytanie API: /api/scheduler/status --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:234]
+2025-08-31 03:37:17,426 INFO: --- [PID: 22192] Zapytanie API: /api/scheduler/job/read_sensors/toggle --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:265]
+2025-08-31 03:37:17,433 INFO: --- [PID: 22192] Zapytanie API: /api/scheduler/status --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:234]
+2025-08-31 03:38:14,397 INFO: --- [PID: 22192] Zapytanie API: /api/scheduler/reset --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:363]
+2025-08-31 03:38:14,397 INFO: --- [PID: 22192] Wszystkie zadania usuniête w ramach resetu. --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:369]
+2025-08-31 03:38:14,517 INFO: --- [PID: 22192] Zapytanie API: /api/scheduler/status --- [in C:\Users\user\Documents\Projekty\mes-parafina-app\app\__init__.py:234]

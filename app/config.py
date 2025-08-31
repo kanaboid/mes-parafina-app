@@ -8,7 +8,7 @@ load_dotenv()
 class Config:
     """Konfiguracja produkcyjna / deweloperska"""
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'trudne-do-zgadniecia-haslo'
-    DEBUG = True  # OSTATECZNA POPRAWKA: Jawne włączenie trybu debug
+    DEBUG = os.environ.get('FLASK_DEBUG', 'True').lower() in ('true', '1', 't')
 
     # Dane do połączenia z bazą danych MySQL
     MYSQL_HOST = os.environ.get('MYSQLHOST', 'localhost')
@@ -27,6 +27,12 @@ class Config:
     )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     TESTING = False
+
+class ProdConfig(Config):
+    """Konfiguracja produkcyjna"""
+    DEBUG = False
+    TESTING = False
+    ENVIRONMENT = 'production'
 
 class TestConfig(Config):
     TESTING = True

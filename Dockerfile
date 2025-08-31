@@ -14,6 +14,6 @@ COPY . .
 ENV ENVIRONMENT=production
 ENV FLASK_ENV=production
 
-# Uruchom aplikację używając Gunicorna
-# Załóżmy, że plik startowy to "run.py", a obiekt aplikacji to "app"
-CMD ["gunicorn", "--worker-class", "eventlet", "-w", "1", "--bind", "0.0.0.0:5000", "run:app"]
+# Uruchom aplikację używając Gunicorna z opcją --preload
+# --preload zapewnia, że scheduler jest inicjowany tylko raz w procesie master
+CMD ["gunicorn", "--worker-class", "eventlet", "-w", "1", "--bind", "0.0.0.0:5000", "--preload", "run:app"]
