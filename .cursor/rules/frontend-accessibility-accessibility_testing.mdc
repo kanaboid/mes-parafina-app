@@ -1,0 +1,38 @@
+---
+alwaysApply: true
+---
+
+## FRONTEND
+
+### Guidelines for ACCESSIBILITY
+
+#### ACCESSIBILITY_TESTING
+
+- Test keyboard navigation to verify all interactive elements are operable without a mouse
+- Verify screen reader compatibility with NVDA, JAWS, and VoiceOver for {{critical_user_journeys}}
+- Use automated testing tools like Axe, WAVE, or Lighthouse to identify common accessibility issues
+- Check color contrast using tools like Colour Contrast Analyzer for all text and UI components
+- Test with page zoomed to 200% to ensure content remains usable and visible
+- Perform manual accessibility audits using WCAG 2.2 checklist for key user flows
+- Test with voice recognition software like Dragon NaturallySpeaking for voice navigation
+- Validate form inputs have proper labels, instructions, and error handling mechanisms
+- Conduct usability testing with disabled users representing various disability types
+- Implement accessibility unit tests for UI components to prevent regression
+
+## FRONTEND
+
+### Guidelines for ACCESSIBILITY
+
+#### ACCESSIBILITY_TESTING
+
+- Test keyboard navigation to verify all interactive elements are operable without a mouse
+- Verify screen reader compatibility with NVDA, JAWS, and VoiceOver for {{critical_user_journeys}}
+- Use automated testing tools like Axe, WAVE, or Lighthouse to identify common accessibility issues
+- Check color contrast using tools like Colour Contrast Analyzer for all text and UI components
+- Test with page zoomed to 200% to ensure content remains usable and visible
+- Perform manual accessibility audits using WCAG 2.2 checklist for key user flows
+- Test with voice recognition software like Dragon NaturallySpeaking for voice navigation
+- Validate form inputs have proper labels, instructions, and error handling mechanisms
+- Conduct usability testing with disabled users representing various disability types
+- Implement accessibility unit tests for UI components to prevent regression
+

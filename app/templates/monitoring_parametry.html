@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitoring Parametrów - Temperatura i Ciśnienie</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        h2 {
+            color: #2c5aa0;
+            border-bottom: 2px solid #2c5aa0;
+            padding-bottom: 5px;
+        }
+        .controls {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .filter-group {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        select, input {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            padding: 8px 16px;
+            background-color: #2c5aa0;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #1e3d6f;
+        }
+        .auto-refresh {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .status-legend {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 14px;
+        }
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+        .status-ok { background-color: #4CAF50; }
+        .status-warning { background-color: #FF9800; }
+        .status-error { background-color: #F44336; }
+        .status-no-data { background-color: #9E9E9E; }
+        .status-outdated { background-color: #FFEB3B; color: #333; }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 30px;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+            position: sticky;
+            top: 0;
+        }
+        tr:hover {
+            background-color: #f5f5f5;
+            cursor: pointer;
+        }
+        .temp-cell, .pressure-cell {
+            font-weight: bold;
+        }
+        .temp-ok, .pressure-ok { color: #4CAF50; }
+        .temp-warning, .pressure-warning { color: #FF9800; }
+        .temp-error, .pressure-error { color: #F44336; }
+        .no-data { color: #9E9E9E; font-style: italic; }
+        
+        .alarm-section {
+            background-color: #fff3e0;
+            padding: 15px;
+            border-radius: 4px;
+            border-left: 4px solid #FF9800;
+            margin-bottom: 20px;
+        }
+        .alarm-item {
+            background-color: white;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 4px;
+            border-left: 3px solid #F44336;
+        }
+        .alarm-high { border-left-color: #F44336; }
+        .alarm-medium { border-left-color: #FF9800; }
+        
+        .last-update {
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+            margin-top: 20px;
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+        .modal-content {
+            background-color: white;
+            margin: 5% auto;
+            padding: 20px;
+            border-radius: 8px;
+            width: 80%;
+            max-width: 600px;
+            max-height: 80%;
+            overflow-y: auto;
+        }
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .close:hover {
+            color: black;
+        }
+        .detail-item {
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+        }
+        .detail-label {
+            font-weight: bold;
+            color: #555;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+        .error {
+            background-color: #ffebee;
+            color: #c62828;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌡️ Monitoring Parametrów Sprzętu</h1>
+        
+        <div class="controls">
+            <div class="filter-group">
+                <label>Typ sprzętu:</label>
+                <select id="filterType">
+                    <option value="">Wszystkie</option>
+                    <option value="reaktor">Reaktor</option>
+                    <option value="filtr">Filtr</option>
+                    <option value="beczka_brudna">Beczka brudna</option>
+                    <option value="beczka_czysta">Beczka czysta</option>
+                    <option value="apollo">Apollo</option>
+                </select>
+            </div>
+            
+            <div class="filter-group">
+                <label>Status:</label>
+                <select id="filterStatus">
+                    <option value="">Wszystkie</option>
+                    <option value="OK">OK</option>
+                    <option value="PRZEKROCZENIE_TEMP">Przekroczenie temperatury</option>
+                    <option value="PRZEKROCZENIE_CISN">Przekroczenie ciśnienia</option>
+                    <option value="BRAK_DANYCH">Brak danych</option>
+                </select>
+            </div>
+            
+            <div class="filter-group">
+                <label>Szukaj:</label>
+                <input type="text" id="searchInput" placeholder="Nazwa sprzętu...">
+            </div>
+            
+            <button onclick="loadData()">🔄 Odśwież</button>
+            
+            <div class="auto-refresh">
+                <input type="checkbox" id="autoRefresh" checked>
+                <label for="autoRefresh">Auto-odświeżanie (30s)</label>
+            </div>
+        </div>
+
+        <div class="status-legend">
+            <div class="status-item">
+                <div class="status-dot status-ok"></div>
+                <span>OK - Parametry w normie</span>
+            </div>
+            <div class="status-item">
+                <div class="status-dot status-warning"></div>
+                <span>Ostrzeżenie - Zbliżanie do limitu</span>
+            </div>
+            <div class="status-item">
+                <div class="status-dot status-error"></div>
+                <span>Alarm - Przekroczenie limitu</span>
+            </div>
+            <div class="status-item">
+                <div class="status-dot status-no-data"></div>
+                <span>Brak danych</span>
+            </div>
+            <div class="status-item">
+                <div class="status-dot status-outdated"></div>
+                <span>Dane nieaktualne</span>
+            </div>
+        </div>
+
+        <!-- Sekcja alarmów -->
+        <div id="alarmSection" style="display: none;">
+            <h2>🚨 Aktywne Alarmy Parametryczne</h2>
+            <div id="alarmList"></div>
+        </div>
+
+        <!-- Główna tabela -->
+        <h2>📊 Parametry Sprzętu</h2>
+        <div id="loadingIndicator" class="loading">Ładowanie danych...</div>
+        <div id="errorMessage" style="display: none;"></div>
+        
+        <table id="equipmentTable" style="display: none;">
+            <thead>
+                <tr>
+                    <th>Nazwa</th>
+                    <th>Typ</th>
+                    <th>Stan</th>
+                    <th>Temperatura °C</th>
+                    <th>Ciśnienie bar</th>
+                    <th>Poziom %</th>
+                    <th>Status</th>
+                    <th>Ostatnia aktualizacja</th>
+                </tr>
+            </thead>
+            <tbody id="equipmentTableBody">
+            </tbody>
+        </table>
+
+        <div class="last-update">
+            Ostatnie odświeżenie: <span id="lastUpdateTime">-</span>
+        </div>
+    </div>
+
+    <!-- Modal dla szczegółów sprzętu -->
+    <div id="detailModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2 id="modalTitle">Szczegóły sprzętu</h2>
+            <div id="modalContent"></div>
+        </div>
+    </div>
+
+    <script>
+        let equipmentData = [];
+        let filteredData = [];
+        let autoRefreshInterval;
+
+        // Inicjalizacja
+        document.addEventListener('DOMContentLoaded', function() {
+            loadData();
+            setupEventListeners();
+            setupAutoRefresh();
+        });
+
+        function setupEventListeners() {
+            // Filtry
+            document.getElementById('filterType').addEventListener('change', applyFilters);
+            document.getElementById('filterStatus').addEventListener('change', applyFilters);
+            document.getElementById('searchInput').addEventListener('input', applyFilters);
+            
+            // Auto-refresh checkbox
+            document.getElementById('autoRefresh').addEventListener('change', setupAutoRefresh);
+            
+            // Modal
+            document.querySelector('.close').addEventListener('click', closeModal);
+            window.addEventListener('click', function(event) {
+                const modal = document.getElementById('detailModal');
+                if (event.target === modal) {
+                    closeModal();
+                }
+            });
+        }
+
+        function setupAutoRefresh() {
+            const checkbox = document.getElementById('autoRefresh');
+            
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+            }
+            
+            if (checkbox.checked) {
+                autoRefreshInterval = setInterval(loadData, 30000); // 30 sekund
+            }
+        }
+
+        async function loadData() {
+            try {
+                showLoading();
+                
+                // Pobierz dane o parametrach sprzętu
+                const response = await fetch('/api/monitoring/parametry');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                equipmentData = await response.json();
+                
+                // Pobierz alarmy parametryczne
+                const alarmResponse = await fetch('/api/monitoring/alarmy-parametryczne');
+                let alarmData = [];
+                if (alarmResponse.ok) {
+                    alarmData = await alarmResponse.json();
+                }
+                
+                displayAlarms(alarmData);
+                applyFilters();
+                updateLastUpdateTime();
+                hideLoading();
+                
+            } catch (error) {
+                console.error('Błąd ładowania danych:', error);
+                showError('Błąd ładowania danych: ' + error.message);
+            }
+        }
+
+        function displayAlarms(alarms) {
+            const alarmSection = document.getElementById('alarmSection');
+            const alarmList = document.getElementById('alarmList');
+            
+            if (alarms.length === 0) {
+                alarmSection.style.display = 'none';
+                return;
+            }
+            
+            alarmSection.style.display = 'block';
+            alarmList.innerHTML = '';
+            
+            alarms.forEach(alarm => {
+                const alarmDiv = document.createElement('div');
+                alarmDiv.className = 'alarm-item alarm-high';
+                
+                const przekroczenie = parseFloat(alarm.przekroczenie_wartosci).toFixed(2);
+                const typ = alarm.typ_alarmu === 'TEMPERATURA_PRZEKROCZONA' ? 'Temperatura' : 'Ciśnienie';
+                const jednostka = alarm.typ_alarmu === 'TEMPERATURA_PRZEKROCZONA' ? '°C' : 'bar';
+                
+                alarmDiv.innerHTML = `
+                    <strong>${alarm.nazwa_unikalna}</strong> (${alarm.typ_sprzetu})<br>
+                    <span style="color: #F44336;">${typ} przekroczony o ${przekroczenie} ${jednostka}</span><br>
+                    <small>Ostatnia aktualizacja: ${alarm.ostatnia_aktualizacja || 'Brak danych'}</small>
+                `;
+                
+                alarmList.appendChild(alarmDiv);
+            });
+        }
+
+        function applyFilters() {
+            const typeFilter = document.getElementById('filterType').value;
+            const statusFilter = document.getElementById('filterStatus').value;
+            const searchFilter = document.getElementById('searchInput').value.toLowerCase();
+            
+            filteredData = equipmentData.filter(item => {
+                const matchesType = !typeFilter || item.typ_sprzetu === typeFilter;
+                const matchesStatus = !statusFilter || item.status_parametrow === statusFilter;
+                const matchesSearch = !searchFilter || item.nazwa_unikalna.toLowerCase().includes(searchFilter);
+                
+                return matchesType && matchesStatus && matchesSearch;
+            });
+            
+            displayTable();
+        }
+
+        function displayTable() {
+            const tableBody = document.getElementById('equipmentTableBody');
+            tableBody.innerHTML = '';
+            
+            filteredData.forEach(item => {
+                const row = document.createElement('tr');
+                row.onclick = () => showDetails(item.id);
+                
+                const tempClass = getParameterClass(item.temperatura_aktualna, item.temperatura_max, 'temp');
+                const pressureClass = getParameterClass(item.cisnienie_aktualne, item.cisnienie_max, 'pressure');
+                
+                row.innerHTML = `
+                    <td><strong>${item.nazwa_unikalna}</strong></td>
+                    <td>${item.typ_sprzetu}</td>
+                    <td>${item.stan_sprzetu || 'Brak danych'}</td>
+                    <td class="temp-cell ${tempClass}">
+                        ${formatTemperature(item.temperatura_aktualna, item.temperatura_docelowa, item.temperatura_max)}
+                    </td>
+                    <td class="pressure-cell ${pressureClass}">
+                        ${formatPressure(item.cisnienie_aktualne, item.cisnienie_max)}
+                    </td>
+                    <td>${item.poziom_aktualny_procent ? item.poziom_aktualny_procent + '%' : 'Brak danych'}</td>
+                    <td>${getStatusBadge(item.status_parametrow, item.status_danych)}</td>
+                    <td>${item.ostatnia_aktualizacja || 'Brak danych'}</td>
+                `;
+                
+                tableBody.appendChild(row);
+            });
+        }
+
+        function getParameterClass(current, max, type) {
+            if (current === null || current === undefined) return 'no-data';
+            if (current > max) return `${type}-error`;
+            if (current > max * 0.9) return `${type}-warning`;
+            return `${type}-ok`;
+        }
+
+        function formatTemperature(current, target, max) {
+            if (current === null || current === undefined) return 'Brak danych';
+            
+            let result = `${current}°C`;
+            if (target) {
+                result += ` (cel: ${target}°C)`;
+            }
+            result += ` / ${max}°C`;
+            return result;
+        }
+
+        function formatPressure(current, max) {
+            if (current === null || current === undefined) return 'Brak danych';
+            return `${current} / ${max} bar`;
+        }
+
+        function getStatusBadge(paramStatus, dataStatus) {
+            let badgeClass = 'status-ok';
+            let text = 'OK';
+            
+            if (paramStatus === 'PRZEKROCZENIE_TEMP' || paramStatus === 'PRZEKROCZENIE_CISN') {
+                badgeClass = 'status-error';
+                text = 'ALARM';
+            } else if (paramStatus === 'BRAK_DANYCH') {
+                badgeClass = 'status-no-data';
+                text = 'BRAK DANYCH';
+            } else if (dataStatus === 'NIEAKTUALNE') {
+                badgeClass = 'status-outdated';
+                text = 'NIEAKTUALNE';
+            }
+            
+            return `<span class="status-dot ${badgeClass}"></span> ${text}`;
+        }
+
+        async function showDetails(equipmentId) {
+            try {
+                const response = await fetch(`/api/monitoring/parametry/${equipmentId}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                
+                document.getElementById('modalTitle').textContent = `Szczegóły: ${data.nazwa_unikalna}`;
+                
+                let content = `
+                    <div class="detail-item">
+                        <div class="detail-label">Podstawowe informacje:</div>
+                        <div>ID: ${data.id}</div>
+                        <div>Typ: ${data.typ_sprzetu}</div>
+                        <div>Stan: ${data.stan_sprzetu || 'Brak danych'}</div>
+                        <div>Pojemność: ${data.pojemnosc_kg || 'Brak danych'} kg</div>
+                    </div>
+                    
+                    <div class="detail-item">
+                        <div class="detail-label">Parametry aktualne:</div>
+                        <div>Temperatura: ${data.temperatura_aktualna || 'Brak danych'} °C</div>
+                        <div>Ciśnienie: ${data.cisnienie_aktualne || 'Brak danych'} bar</div>
+                        <div>Poziom: ${data.poziom_aktualny_procent || 'Brak danych'} %</div>
+                    </div>
+                    
+                    <div class="detail-item">
+                        <div class="detail-label">Limity:</div>
+                        <div>Temperatura docelowa: ${data.temperatura_docelowa || 'Nie ustawiona'} °C</div>
+                        <div>Temperatura maksymalna: ${data.temperatura_max || 'Brak danych'} °C</div>
+                        <div>Ciśnienie maksymalne: ${data.cisnienie_max || 'Brak danych'} bar</div>
+                    </div>
+                    
+                    <div class="detail-item">
+                        <div class="detail-label">Status i aktualizacja:</div>
+                        <div>Status parametrów: ${data.status_parametrow}</div>
+                        <div>Status danych: ${data.status_danych || 'Brak informacji'}</div>
+                        <div>Ostatnia aktualizacja: ${data.ostatnia_aktualizacja || 'Brak danych'}</div>
+                        <div>Minuty od aktualizacji: ${data.minuty_od_aktualizacji || 'Brak danych'}</div>
+                    </div>
+                `;
+                
+                if (data.partia) {
+                    content += `
+                        <div class="detail-item">
+                            <div class="detail-label">Partia w sprzęcie:</div>
+                            <div>Kod: ${data.partia.unikalny_kod}</div>
+                            <div>Typ surowca: ${data.partia.typ_surowca}</div>
+                            <div>Waga: ${data.partia.waga_aktualna_kg} kg</div>
+                            <div>Status: ${data.partia.status_partii}</div>
+                        </div>
+                    `;
+                }
+                
+                document.getElementById('modalContent').innerHTML = content;
+                document.getElementById('detailModal').style.display = 'block';
+                
+            } catch (error) {
+                alert('Błąd pobierania szczegółów: ' + error.message);
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('detailModal').style.display = 'none';
+        }
+
+        function showLoading() {
+            document.getElementById('loadingIndicator').style.display = 'block';
+            document.getElementById('equipmentTable').style.display = 'none';
+            document.getElementById('errorMessage').style.display = 'none';
+        }
+
+        function hideLoading() {
+            document.getElementById('loadingIndicator').style.display = 'none';
+            document.getElementById('equipmentTable').style.display = 'table';
+        }
+
+        function showError(message) {
+            document.getElementById('loadingIndicator').style.display = 'none';
+            document.getElementById('equipmentTable').style.display = 'none';
+            const errorDiv = document.getElementById('errorMessage');
+            errorDiv.innerHTML = `<div class="error">${message}</div>`;
+            errorDiv.style.display = 'block';
+        }
+
+        function updateLastUpdateTime() {
+            document.getElementById('lastUpdateTime').textContent = new Date().toLocaleString('pl-PL');
+        }
+    </script>
+</body>
+</html>

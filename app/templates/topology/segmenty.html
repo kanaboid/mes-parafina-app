@@ -1,0 +1,555 @@
+{% extends "base.html" %}
+
+{% block title %}Zarządzanie Segmentami - Topologia{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1><i class="fas fa-route"></i> Zarządzanie Segmentami Rurociągu</h1>
+                <div>
+                    <a href="{{ url_for('topology.topology_index') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left"></i> Powrót
+                    </a>
+                    <button type="button" class="btn btn-success" onclick="showAddSegmentModal()">
+                        <i class="fas fa-plus"></i> Dodaj Segment
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtry -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="input-group">
+                <div class="input-group-prepend">
+                    <span class="input-group-text"><i class="fas fa-search"></i></span>
+                </div>
+                <input type="text" class="form-control" id="searchInput" placeholder="Wyszukaj segment...">
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="row">
+                <div class="col-6">
+                    <div class="text-center">
+                        <h4 class="text-primary" id="totalSegments">{{ segmenty|length }}</h4>
+                        <small>Segmentów</small>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="text-center">
+                        <h4 class="text-success" id="activeSegments">-</h4>
+                        <small>Aktywnych</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabela segmentów -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Lista Segmentów</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover" id="segmentsTable">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Nazwa Segmentu</th>
+                                    <th>Typ Rurociągu</th>
+                                    <th>Węzeł Startowy</th>
+                                    <th>Węzeł Końcowy</th>
+                                    <th>Zawór</th>
+                                    <th>Stan</th>
+                                    <th>Akcje</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for segment in segmenty %}
+                                <tr data-id="{{ segment.id }}" data-name="{{ segment.nazwa_segmentu|lower }}">
+                                    <td>{{ segment.id }}</td>
+                                    <td>
+                                        <strong>{{ segment.nazwa_segmentu }}</strong>
+                                        {% if segment.typ_rurociagu %}
+                                            <br><small class="text-muted">{{ segment.typ_rurociagu }}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ segment.typ_rurociagu or '-' }}</td>
+                                    <td>
+                                        {% if segment.port_startowy %}
+                                            <span class="badge bg-info">{{ segment.port_startowy }}</span>
+                                        {% elif segment.wezel_startowy %}
+                                            <span class="badge bg-primary">{{ segment.wezel_startowy }}</span>
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if segment.port_koncowy %}
+                                            <span class="badge bg-info">{{ segment.port_koncowy }}</span>
+                                        {% elif segment.wezel_koncowy %}
+                                            <span class="badge bg-primary">{{ segment.wezel_koncowy }}</span>
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if segment.nazwa_zaworu %}
+                                            <span class="badge bg-secondary">{{ segment.nazwa_zaworu }}</span>
+                                        {% else %}
+                                            <span class="text-muted">Brak</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if segment.stan_zaworu %}
+                                            {% if segment.stan_zaworu == 'OTWARTY' %}
+                                                <span class="badge bg-success">
+                                                    <i class="fas fa-lock-open"></i> Otwarty
+                                                </span>
+                                            {% else %}
+                                                <span class="badge bg-danger">
+                                                    <i class="fas fa-lock"></i> Zamknięty
+                                                </span>
+                                            {% endif %}
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <div class="btn-group" role="group">
+                                            <button type="button" class="btn btn-sm btn-outline-info" 
+                                                    onclick="viewSegmentDetails({{ segment.id }})" 
+                                                    title="Szczegóły">
+                                                <i class="fas fa-eye"></i>
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-outline-primary" 
+                                                    onclick="editSegment({{ segment.id }})" 
+                                                    title="Edytuj">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-outline-danger" 
+                                                    onclick="deleteSegment({{ segment.id }})" 
+                                                    title="Usuń">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal dodawania/edycji segmentu -->
+<div class="modal fade" id="segmentModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="segmentModalTitle">Dodaj Segment</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="segmentForm">
+                    <input type="hidden" id="segmentId">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="segmentName" class="form-label">Nazwa Segmentu *</label>
+                                <input type="text" class="form-control" id="segmentName" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="segmentType" class="form-label">Typ Rurociągu</label>
+                                <input type="text" class="form-control" id="segmentType">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="startNode" class="form-label">Węzeł Startowy</label>
+                                <select class="form-select" id="startNode">
+                                    <option value="">Wybierz węzeł...</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="endNode" class="form-label">Węzeł Końcowy</label>
+                                <select class="form-select" id="endNode">
+                                    <option value="">Wybierz węzeł...</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="startPort" class="form-label">Port Startowy (Wyjściowy)</label>
+                                <select class="form-select" id="startPort">
+                                    <option value="">Wybierz port wyjściowy...</option>
+                                </select>
+                                <div class="form-text">Port z którego wychodzi segment</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="endPort" class="form-label">Port Końcowy (Wejściowy)</label>
+                                <select class="form-select" id="endPort">
+                                    <option value="">Wybierz port wejściowy...</option>
+                                </select>
+                                <div class="form-text">Port do którego dochodzi segment</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-12">
+                            <div class="mb-3">
+                                <label for="valveSelect" class="form-label">Zawór</label>
+                                <select class="form-select" id="valveSelect">
+                                    <option value="">Brak zaworu</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Anuluj</button>
+                <button type="button" class="btn btn-primary" onclick="saveSegment()">Zapisz</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal szczegółów segmentu -->
+<div class="modal fade" id="segmentDetailsModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-xl" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Szczegóły Segmentu</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="segmentDetailsContent">
+                <!-- Treść zostanie załadowana dynamicznie -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Zamknij</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+$(document).ready(function() {
+    // Inicjalizacja filtrów
+    $('#searchInput').on('keyup', filterTable);
+    
+    // Policz aktywne segmenty
+    updateActiveSegmentsCount();
+    
+    // Ładuj dane do selectów
+    loadNodes();
+    loadValves();
+});
+
+function filterTable() {
+    const searchTerm = $('#searchInput').val().toLowerCase();
+    
+    $('#segmentsTable tbody tr').each(function() {
+        const name = $(this).data('name');
+        const matchesSearch = name.includes(searchTerm);
+        $(this).toggle(matchesSearch);
+    });
+    
+    updateVisibleCount();
+}
+
+function updateVisibleCount() {
+    const visibleCount = $('#segmentsTable tbody tr:visible').length;
+    $('#totalSegments').text(visibleCount);
+}
+
+function updateActiveSegmentsCount() {
+    let activeCount = 0;
+    $('#segmentsTable tbody tr').each(function() {
+        const hasOpenValve = $(this).find('.badge.bg-success').length > 0;
+        if (hasOpenValve) {
+            activeCount++;
+        }
+    });
+    $('#activeSegments').text(activeCount);
+}
+
+function loadNodes() {
+    $.get('/topology/api/wezly', function(data) {
+        if (data.success) {
+            const nodes = data.data;
+            let options = '<option value="">Wybierz węzeł...</option>';
+            nodes.forEach(node => {
+                options += `<option value="${node.id}">${node.nazwa_wezla}</option>`;
+            });
+            $('#startNode, #endNode').html(options);
+        }
+    });
+}
+
+function loadValves() {
+    $.get('/topology/api/zawory', function(data) {
+        if (data.success) {
+            const valves = data.data;
+            let options = '<option value="">Brak zaworu</option>';
+            valves.forEach(valve => {
+                options += `<option value="${valve.id}">${valve.nazwa_zaworu}</option>`;
+            });
+            $('#valveSelect').html(options);
+        }
+    });
+}
+
+function loadPorts() {
+    loadStartPorts();
+    loadEndPorts();
+}
+
+function loadStartPorts() {
+    $.get('/topology/api/porty', function(data) {
+        if (data.success) {
+            const ports = data.data;
+            let options = '<option value="">Wybierz port wyjściowy...</option>';
+            // Filtruj porty wyjściowe (OUT)
+            ports.filter(port => port.typ_portu === 'OUT').forEach(port => {
+                options += `<option value="${port.id}">${port.nazwa_portu} (${port.nazwa_unikalna})</option>`;
+            });
+            $('#startPort').html(options);
+        }
+    });
+}
+
+function loadEndPorts() {
+    $.get('/topology/api/porty', function(data) {
+        if (data.success) {
+            const ports = data.data;
+            let options = '<option value="">Wybierz port wejściowy...</option>';
+            // Filtruj porty wejściowe (IN)
+            ports.filter(port => port.typ_portu === 'IN').forEach(port => {
+                options += `<option value="${port.id}">${port.nazwa_portu} (${port.nazwa_unikalna})</option>`;
+            });
+            $('#endPort').html(options);
+        }
+    });
+}
+
+function showAddSegmentModal() {
+    $('#segmentModalTitle').text('Dodaj Segment');
+    $('#segmentForm')[0].reset();
+    $('#segmentId').val('');
+    loadNodes();
+    loadValves();
+    loadPorts();
+    const modal = new bootstrap.Modal(document.getElementById('segmentModal'));
+    modal.show();
+}
+
+function editSegment(id) {
+    $.get(`/topology/api/segmenty/${id}`, function(data) {
+        if (data.success) {
+            const segment = data.data;
+            $('#segmentModalTitle').text('Edytuj Segment');
+            $('#segmentId').val(segment.id);
+            $('#segmentName').val(segment.nazwa_segmentu);
+            $('#segmentType').val(segment.typ_rurociagu || '');
+            $('#startNode').val(segment.id_wezla_startowego || '');
+            $('#endNode').val(segment.id_wezla_koncowego || '');
+            $('#startPort').val(segment.id_portu_startowego || '');
+            $('#endPort').val(segment.id_portu_koncowego || '');
+            $('#valveSelect').val(segment.id_zaworu || '');
+            
+            loadNodes();
+            loadValves();
+            loadPorts();
+            
+            const modal = new bootstrap.Modal(document.getElementById('segmentModal'));
+            modal.show();
+        } else {
+            alert('Błąd podczas pobierania danych segmentu');
+        }
+    });
+}
+
+function saveSegment() {
+    const id = $('#segmentId').val();
+    const isEdit = id !== '';
+    
+    const data = {
+        nazwa_segmentu: $('#segmentName').val(),
+        typ_rurociagu: $('#segmentType').val() || null,
+        id_wezla_startowego: $('#startNode').val() || null,
+        id_wezla_koncowego: $('#endNode').val() || null,
+        id_portu_startowego: $('#startPort').val() || null,
+        id_portu_koncowego: $('#endPort').val() || null,
+        id_zaworu: $('#valveSelect').val() || null
+    };
+    
+    const url = isEdit ? `/topology/api/segmenty/${id}` : '/topology/api/segmenty';
+    const method = isEdit ? 'PUT' : 'POST';
+    
+    $.ajax({
+        url: url,
+        method: method,
+        contentType: 'application/json',
+        data: JSON.stringify(data),
+        success: function(response) {
+            if (response.success) {
+                const modal = bootstrap.Modal.getInstance(document.getElementById('segmentModal'));
+                modal.hide();
+                location.reload();
+            } else {
+                alert('Błąd: ' + response.message);
+            }
+        },
+        error: function() {
+            alert('Błąd podczas zapisywania segmentu');
+        }
+    });
+}
+
+function viewSegmentDetails(id) {
+    $.get(`/topology/api/segmenty/${id}`, function(data) {
+        if (data.success) {
+            const segment = data.data;
+            let content = `
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <h6>Informacje podstawowe:</h6>
+                        <table class="table table-sm">
+                            <tr><td><strong>ID:</strong></td><td>${segment.id}</td></tr>
+                            <tr><td><strong>Nazwa:</strong></td><td>${segment.nazwa_segmentu}</td></tr>
+                            <tr><td><strong>Typ rurociągu:</strong></td><td>${segment.typ_rurociagu || '-'}</td></tr>
+                        </table>
+                    </div>
+                </div>
+                <div class="row mb-4">
+                    <div class="col-6">
+                        <h6>Punkt startowy:</h6>
+                        <table class="table table-sm">
+                            <tr><td><strong>Węzeł:</strong></td><td>${segment.wezel_startowy || '-'}</td></tr>
+                            <tr><td><strong>Port:</strong></td><td>${segment.port_startowy || '-'}</td></tr>
+                        </table>
+                    </div>
+                    <div class="col-6">
+                        <h6>Punkt końcowy:</h6>
+                        <table class="table table-sm">
+                            <tr><td><strong>Węzeł:</strong></td><td>${segment.wezel_koncowy || '-'}</td></tr>
+                            <tr><td><strong>Port:</strong></td><td>${segment.port_koncowy || '-'}</td></tr>
+                        </table>
+                    </div>
+                </div>
+            `;
+            
+            if (segment.nazwa_zaworu) {
+                const stateClass = segment.stan_zaworu === 'OTWARTY' ? 'success' : 'danger';
+                const stateIcon = segment.stan_zaworu === 'OTWARTY' ? 'lock-open' : 'lock';
+                content += `
+                    <div class="row">
+                        <div class="col-12">
+                            <h6>Zawór kontrolujący:</h6>
+                            <div class="card">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <h6 class="mb-1">${segment.nazwa_zaworu}</h6>
+                                            <span class="badge bg-${stateClass}">
+                                                <i class="fas fa-${stateIcon}"></i> ${segment.stan_zaworu}
+                                            </span>
+                                        </div>
+                                        <div class="btn-group">
+                                            <button type="button" class="btn btn-sm btn-outline-${segment.stan_zaworu === 'OTWARTY' ? 'danger' : 'success'}"
+                                                    onclick="toggleValve(${segment.id_zaworu}, '${segment.stan_zaworu}')">
+                                                <i class="fas fa-${segment.stan_zaworu === 'OTWARTY' ? 'lock' : 'lock-open'}"></i>
+                                                ${segment.stan_zaworu === 'OTWARTY' ? 'Zamknij' : 'Otwórz'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } else {
+                content += `
+                    <div class="row">
+                        <div class="col-12">
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle"></i> Segment nie ma przypisanego zaworu
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            $('#segmentDetailsContent').html(content);
+            const modal = new bootstrap.Modal(document.getElementById('segmentDetailsModal'));
+            modal.show();
+        } else {
+            alert('Błąd podczas pobierania szczegółów segmentu');
+        }
+    });
+}
+
+function deleteSegment(id) {
+    if (confirm('Czy na pewno chcesz usunąć ten segment? Tej operacji nie można cofnąć.')) {
+        $.ajax({
+            url: `/topology/api/segmenty/${id}`,
+            method: 'DELETE',
+            success: function(response) {
+                if (response.success) {
+                    location.reload();
+                } else {
+                    alert('Błąd: ' + response.message);
+                }
+            },
+            error: function() {
+                alert('Błąd podczas usuwania segmentu');
+            }
+        });
+    }
+}
+
+function toggleValve(valveId, currentState) {
+    const newState = currentState === 'OTWARTY' ? 'ZAMKNIETY' : 'OTWARTY';
+    const action = newState === 'OTWARTY' ? 'otworzyć' : 'zamknąć';
+    
+    if (confirm(`Czy na pewno chcesz ${action} zawór?`)) {
+        $.ajax({
+            url: `/topology/api/zawory/${valveId}`,
+            method: 'PUT',
+            contentType: 'application/json',
+            data: JSON.stringify({ stan: newState }),
+            success: function(response) {
+                if (response.success) {
+                    location.reload();
+                } else {
+                    alert('Błąd: ' + response.message);
+                }
+            },
+            error: function() {
+                alert('Błąd podczas zmiany stanu zaworu');
+            }
+        });
+    }
+}
+</script>
+{% endblock %}

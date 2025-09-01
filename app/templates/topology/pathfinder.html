@@ -1,0 +1,803 @@
+<!-- app/templates/topology/pathfinder.html -->
+{% extends "base.html" %}
+
+{% block title %}PathFinder Tester{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1><i class="fas fa-search"></i> PathFinder Tester</h1>
+                <div>
+                    <a href="{{ url_for('topology.topology_index') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left"></i> Powrót
+                    </a>
+                    <button type="button" class="btn btn-info" onclick="refreshTestData()">
+                        <i class="fas fa-sync"></i> Odśwież
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Panele testów -->
+    <div class="row">
+        <!-- Test połączenia -->
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-route"></i> Test Połączenia
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <form id="connectionTestForm">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="startPoint">Punkt Startowy *</label>
+                                    <select class="form-control" id="startPoint" required>
+                                        <option value="">Wybierz punkt...</option>
+                                        {% for punkt in punkty %}
+                                        <option value="{{ punkt.punkt }}" data-type="{{ punkt.typ }}">
+                                            {{ punkt.punkt }} ({{ punkt.typ }})
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="endPoint">Punkt Końcowy *</label>
+                                    <select class="form-control" id="endPoint" required>
+                                        <option value="">Wybierz punkt...</option>
+                                        {% for punkt in punkty %}
+                                        <option value="{{ punkt.punkt }}" data-type="{{ punkt.typ }}">
+                                            {{ punkt.punkt }} ({{ punkt.typ }})
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="useCustomValves">
+                                <label class="form-check-label" for="useCustomValves">
+                                    Użyj niestandardowych stanów zaworów
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div id="customValvesSection" style="display: none;">
+                            <div class="form-group">
+                                <label>Stany Zaworów:</label>
+                                <div id="valveStatesContainer">
+                                    <!-- Będzie wypełnione dynamicznie -->
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <button type="button" class="btn btn-primary" onclick="testConnection()">
+                                <i class="fas fa-play"></i> Testuj Połączenie
+                            </button>
+                            <button type="button" class="btn btn-success" onclick="findAllPaths()">
+                                <i class="fas fa-search"></i> Znajdź Wszystkie Ścieżki
+                            </button>
+                        </div>
+                    </form>
+                    
+                    <!-- Wyniki testu -->
+                    <div id="connectionResult" style="display: none;">
+                        <hr>
+                        <h6>Wyniki Testu:</h6>
+                        <div id="connectionResultContent"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Symulacja zaworów -->
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="mb-0">
+                        <i class="fas fa-cogs"></i> Symulacja Zaworów
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="form-group">
+                        <label>Dodaj Test Zaworu:</label>
+                        <div class="input-group mb-2">
+                            <select class="form-control" id="valveSelect">
+                                <option value="">Wybierz zawór...</option>
+                                {% for zawor in zawory %}
+                                <option value="{{ zawor.nazwa_zaworu }}" data-current-state="{{ zawor.stan }}">
+                                    {{ zawor.nazwa_zaworu }} ({{ zawor.stan }})
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <select class="form-control" id="newStateSelect">
+                                <option value="OTWARTY">OTWARTY</option>
+                                <option value="ZAMKNIETY">ZAMKNIĘTY</option>
+                            </select>
+                            <div class="input-group-append">
+                                <button type="button" class="btn btn-outline-primary" onclick="addValveTest()">
+                                    <i class="fas fa-plus"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Testy do Wykonania:</label>
+                        <div id="valveTestsList" class="border rounded p-2" style="min-height: 100px; background-color: #f8f9fa;">
+                            <small class="text-muted">Brak testów. Dodaj test używając formularza powyżej.</small>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <button type="button" class="btn btn-warning" onclick="runValveSimulation()">
+                            <i class="fas fa-play"></i> Uruchom Symulację
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" onclick="clearValveTests()">
+                            <i class="fas fa-trash"></i> Wyczyść
+                        </button>
+                    </div>
+                    
+                    <!-- Wyniki symulacji -->
+                    <div id="simulationResult" style="display: none;">
+                        <hr>
+                        <h6>Wyniki Symulacji:</h6>
+                        <div id="simulationResultContent"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Analiza krytycznych zaworów -->
+    <div class="row">
+        <div class="col-12 mb-4">
+            <div class="card shadow">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-exclamation-triangle"></i> Analiza Krytycznych Zaworów
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <p>Identyfikuje zawory, których zamknięcie może zablokować największą liczbę tras w systemie.</p>
+                            <button type="button" class="btn btn-danger" onclick="analyzeCriticalValves()">
+                                <i class="fas fa-search"></i> Analizuj Krytyczne Zawory
+                            </button>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-center">
+                                <h4 class="text-danger" id="criticalValvesCount">-</h4>
+                                <small>Krytycznych Zaworów</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div id="criticalValvesResult" style="display: none;">
+                        <hr>
+                        <h6>Wyniki Analizy:</h6>
+                        <div id="criticalValvesContent"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Historia testów -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-history"></i> Historia Testów
+                        <span class="float-right">
+                            <button type="button" class="btn btn-sm btn-outline-light" onclick="refreshTestHistory()">
+                                <i class="fas fa-sync"></i> Odśwież
+                            </button>
+                        </span>
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover" id="testHistoryTable">
+                            <thead>
+                                <tr>
+                                    <th>Data/Czas</th>
+                                    <th>Typ Testu</th>
+                                    <th>Start → Cel</th>
+                                    <th>Wynik</th>
+                                    <th>Czas Wykonania</th>
+                                    <th>Akcje</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for test in test_history %}
+                                <tr class="{% if test.success %}table-success{% else %}table-danger{% endif %}">
+                                    <td>{{ test.created_at.strftime('%Y-%m-%d %H:%M:%S') if test.created_at else '-' }}</td>
+                                    <td>{{ test.test_type }}</td>
+                                    <td>
+                                        {% if test.start_point and test.end_point %}
+                                            {{ test.start_point }} → {{ test.end_point }}
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge badge-{% if test.success %}success{% else %}danger{% endif %}">
+                                            {% if test.success %}Sukces{% else %}Błąd{% endif %}
+                                        </span>
+                                    </td>
+                                    <td>{{ test.execution_time_ms }}ms</td>
+                                    <td>
+                                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="viewTestDetails({{ test.id }})">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    {% if not test_history %}
+                    <div class="text-center text-muted">
+                        <i class="fas fa-inbox fa-3x mb-3"></i>
+                        <p>Brak historii testów</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal szczegółów testu -->
+<div class="modal fade" id="testDetailsModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Szczegóły Testu</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="testDetailsContent">
+                <!-- Treść zostanie załadowana dynamicznie -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Zamknij</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let valveTests = [];
+
+$(document).ready(function() {
+    console.log('PathFinder page loaded, jQuery available:', typeof $);
+    console.log('Initial valve options count:', $('#valveSelect option').length);
+    
+    // Sprawdź czy zawory są załadowane z backendu
+    if ($('#valveSelect option').length <= 1) {
+        console.log('No valves loaded from backend, loading via AJAX...');
+        loadValveOptions();
+    }
+    
+    // Obsługa przełączania niestandardowych zaworów
+    $('#useCustomValves').on('change', function() {
+        if (this.checked) {
+            loadCustomValveStates();
+            $('#customValvesSection').show();
+        } else {
+            $('#customValvesSection').hide();
+        }
+    });
+});
+
+function loadValveOptions() {
+    console.log('Loading valve options...');
+    console.log('valveSelect element exists:', $('#valveSelect').length > 0);
+    
+    $.ajax({
+        url: '/topology/api/zawory',
+        type: 'GET',
+        success: function(data) {
+            console.log('Valve data received:', data);
+            if (data.success) {
+                let options = '<option value="">Wybierz zawór...</option>';
+                data.data.forEach(valve => {
+                    options += `<option value="${valve.nazwa_zaworu}" data-current-state="${valve.stan}">
+                        ${valve.nazwa_zaworu} (${valve.stan})
+                    </option>`;
+                });
+                console.log('Setting HTML for valveSelect:', options);
+                $('#valveSelect').html(options);
+                console.log('Valve options loaded successfully, count:', data.data.length);
+                console.log('valveSelect options after update:', $('#valveSelect option').length);
+            } else {
+                console.error('Failed to load valve options:', data.message);
+            }
+        },
+        error: function(xhr, status, error) {
+            console.error('Error loading valve options:', status, error, xhr.responseText);
+        }
+    });
+}
+
+function loadCustomValveStates() {
+    console.log('Loading custom valve states...');
+    $.ajax({
+        url: '/topology/api/zawory',
+        type: 'GET',
+        success: function(data) {
+            console.log('Custom valve states data received:', data);
+            if (data.success) {
+                let content = '';
+                data.data.forEach(valve => {
+                    content += `
+                        <div class="form-check form-check-inline mr-3">
+                            <input class="form-check-input" type="checkbox" 
+                                   id="valve_${valve.id}" value="${valve.nazwa_zaworu}"
+                                   data-current-state="${valve.stan}">
+                            <label class="form-check-label" for="valve_${valve.id}">
+                                ${valve.nazwa_zaworu}
+                            </label>
+                            <select class="form-control form-control-sm mt-1" id="state_${valve.id}">
+                                <option value="OTWARTY" ${valve.stan === 'OTWARTY' ? 'selected' : ''}>OTWARTY</option>
+                                <option value="ZAMKNIETY" ${valve.stan === 'ZAMKNIETY' ? 'selected' : ''}>ZAMKNIĘTY</option>
+                            </select>
+                        </div>
+                    `;
+                });
+                $('#valveStatesContainer').html(content);
+                console.log('Custom valve states loaded successfully, count:', data.data.length);
+            } else {
+                console.error('Failed to load custom valve states:', data.message);
+            }
+        },
+        error: function(xhr, status, error) {
+            console.error('Error loading custom valve states:', status, error, xhr.responseText);
+        }
+    });
+}
+
+function testConnection() {
+    const startPoint = $('#startPoint').val();
+    const endPoint = $('#endPoint').val();
+    
+    if (!startPoint || !endPoint) {
+        alert('Wybierz punkt startowy i końcowy');
+        return;
+    }
+    
+    if (startPoint === endPoint) {
+        alert('Punkt startowy i końcowy muszą być różne');
+        return;
+    }
+    
+    const testData = {
+        start_point: startPoint,
+        end_point: endPoint
+    };
+    
+    // Dodaj niestandardowe stany zaworów jeśli zaznaczone
+    if ($('#useCustomValves').is(':checked')) {
+        const valveStates = {};
+        $('#valveStatesContainer input:checked').each(function() {
+            const valveName = $(this).val();
+            const valveId = $(this).attr('id').split('_')[1];
+            const newState = $(`#state_${valveId}`).val();
+            valveStates[valveName] = newState;
+        });
+        if (Object.keys(valveStates).length > 0) {
+            testData.valve_states = valveStates;
+        }
+    }
+    
+    showConnectionResult('Testowanie połączenia...', 'info');
+    
+    $.ajax({
+        url: '/topology/api/pathfinder/test-connection',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify(testData),
+        success: function(response) {
+            if (response.success) {
+                displayConnectionResult(response.data, response.execution_time_ms);
+            } else {
+                showConnectionResult('Błąd: ' + response.message, 'danger');
+            }
+        },
+        error: function(xhr, status, error) {
+            console.error('PathFinder API Error:', status, error, xhr.responseText);
+            showConnectionResult('Błąd podczas komunikacji z serwerem: ' + error, 'danger');
+        }
+    });
+}
+
+function findAllPaths() {
+    const startPoint = $('#startPoint').val();
+    const endPoint = $('#endPoint').val();
+    
+    if (!startPoint || !endPoint) {
+        alert('Wybierz punkt startowy i końcowy');
+        return;
+    }
+    
+    if (startPoint === endPoint) {
+        alert('Punkt startowy i końcowy muszą być różne');
+        return;
+    }
+    
+    showConnectionResult('Szukanie wszystkich ścieżek...', 'info');
+    
+    $.ajax({
+        url: '/topology/api/pathfinder/find-paths',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({
+            start_point: startPoint,
+            end_point: endPoint,
+            max_paths: 5
+        }),
+        success: function(response) {
+            if (response.success) {
+                displayAllPathsResult(response.data, response.execution_time_ms);
+            } else {
+                showConnectionResult('Błąd: ' + response.message, 'danger');
+            }
+        },
+        error: function(xhr, status, error) {
+            console.error('PathFinder Find Paths API Error:', status, error, xhr.responseText);
+            showConnectionResult('Błąd podczas komunikacji z serwerem: ' + error, 'danger');
+        }
+    });
+}
+
+function displayConnectionResult(result, executionTime) {
+    let content = `
+        <div class="alert alert-${result.available ? 'success' : 'warning'}">
+            <h6><i class="fas fa-${result.available ? 'check' : 'times'}"></i> ${result.message}</h6>
+    `;
+    
+    if (result.available && result.path) {
+        content += `
+            <p><strong>Ścieżka:</strong> ${result.path.join(' → ')}</p>
+            <p><strong>Długość:</strong> ${result.path_length} segmentów</p>
+        `;
+        
+        if (result.segments_used && result.segments_used.length > 0) {
+            content += '<p><strong>Używane segmenty:</strong></p><ul>';
+            result.segments_used.forEach(segment => {
+                content += `<li>${segment.segment_name} (zawór: ${segment.valve_name} - ${segment.valve_state})</li>`;
+            });
+            content += '</ul>';
+        }
+    }
+    
+    content += `</div><p><small>Czas wykonania: ${executionTime}ms</small></p>`;
+    
+    showConnectionResult(content, null);
+}
+
+function displayAllPathsResult(result, executionTime) {
+    let content = `
+        <div class="alert alert-info">
+            <h6><i class="fas fa-route"></i> ${result.message}</h6>
+        </div>
+    `;
+    
+    if (result.paths && result.paths.length > 0) {
+        content += '<div class="accordion" id="pathsAccordion">';
+        
+        result.paths.forEach((pathInfo, index) => {
+            const isFirst = index === 0;
+            content += `
+                <div class="card">
+                    <div class="card-header" id="heading${index}">
+                        <h2 class="mb-0">
+                            <button class="btn btn-link ${isFirst ? '' : 'collapsed'}" type="button" 
+                                    data-bs-toggle="collapse" data-bs-target="#collapse${index}">
+                                Ścieżka ${index + 1} (${pathInfo.length} segmentów, koszt: ${pathInfo.estimated_cost})
+                            </button>
+                        </h2>
+                    </div>
+                    <div id="collapse${index}" class="collapse ${isFirst ? 'show' : ''}" 
+                         data-parent="#pathsAccordion">
+                        <div class="card-body">
+                            <p><strong>Ścieżka:</strong> ${pathInfo.path.join(' → ')}</p>
+                            <p><strong>Segmenty:</strong></p>
+                            <ul>
+            `;
+            
+            pathInfo.segments.forEach(segment => {
+                content += `<li>${segment.segment_name} (${segment.valve_name} - ${segment.valve_state})</li>`;
+            });
+            
+            content += `
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        
+        content += '</div>';
+    }
+    
+    content += `<p><small>Czas wykonania: ${executionTime}ms</small></p>`;
+    
+    showConnectionResult(content, null);
+}
+
+function showConnectionResult(content, alertType) {
+    if (alertType) {
+        content = `<div class="alert alert-${alertType}">${content}</div>`;
+    }
+    
+    $('#connectionResultContent').html(content);
+    $('#connectionResult').show();
+}
+
+function addValveTest() {
+    console.log('Adding valve test...');
+    const valveName = $('#valveSelect').val();
+    const newState = $('#newStateSelect').val();
+    
+    console.log('Selected valve:', valveName, 'New state:', newState);
+    console.log('Available valve options:', $('#valveSelect option').length);
+    
+    if (!valveName) {
+        alert('Wybierz zawór');
+        console.log('No valve selected');
+        return;
+    }
+    
+    // Sprawdź czy test już istnieje dla tego zaworu
+    if (valveTests.find(test => test.valve_name === valveName)) {
+        alert('Test dla tego zaworu już istnieje');
+        return;
+    }
+    
+    valveTests.push({
+        valve_name: valveName,
+        new_state: newState,
+        test_routes: [
+            // Dodaj kilka typowych tras do testowania
+            { start: $('#startPoint').val() || 'R1_IN', end: $('#endPoint').val() || 'R2_IN' }
+        ]
+    });
+    
+    console.log('Valve test added successfully:', valveTests);
+    updateValveTestsList();
+    
+    // Wyczyść formularz
+    $('#valveSelect').val('');
+}
+
+function updateValveTestsList() {
+    if (valveTests.length === 0) {
+        $('#valveTestsList').html('<small class="text-muted">Brak testów. Dodaj test używając formularza powyżej.</small>');
+        return;
+    }
+    
+    let content = '';
+    valveTests.forEach((test, index) => {
+        content += `
+            <div class="border-bottom pb-2 mb-2">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <strong>${test.valve_name}</strong> → <span class="badge badge-info">${test.new_state}</span>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeValveTest(${index})">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+        `;
+    });
+    
+    $('#valveTestsList').html(content);
+}
+
+function removeValveTest(index) {
+    valveTests.splice(index, 1);
+    updateValveTestsList();
+}
+
+function clearValveTests() {
+    valveTests = [];
+    updateValveTestsList();
+}
+
+function runValveSimulation() {
+    if (valveTests.length === 0) {
+        alert('Dodaj przynajmniej jeden test zaworu');
+        return;
+    }
+    
+    showSimulationResult('Uruchamianie symulacji...', 'info');
+    
+    $.ajax({
+        url: '/topology/api/pathfinder/simulate-valves',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({
+            valve_changes: valveTests
+        }),
+        success: function(response) {
+            if (response.success) {
+                displaySimulationResult(response.data, response.execution_time_ms);
+            } else {
+                showSimulationResult('Błąd: ' + response.message, 'danger');
+            }
+        },
+        error: function(xhr, status, error) {
+            console.error('PathFinder Simulation API Error:', status, error, xhr.responseText);
+            showSimulationResult('Błąd podczas komunikacji z serwerem: ' + error, 'danger');
+        }
+    });
+}
+
+function displaySimulationResult(result, executionTime) {
+    let content = `
+        <div class="alert alert-info">
+            <h6><i class="fas fa-cogs"></i> ${result.message}</h6>
+        </div>
+    `;
+    
+    if (result.simulation_results && result.simulation_results.length > 0) {
+        content += '<div class="table-responsive">';
+        content += '<table class="table table-striped table-sm">';
+        content += '<thead><tr><th>Zmiana Zaworu</th><th>Wpływ</th><th>Szczegóły</th></tr></thead><tbody>';
+        
+        result.simulation_results.forEach(simResult => {
+            const impactClass = {
+                'brak_wpływu': 'success',
+                'umiarkowany_wpływ': 'warning',
+                'duży_wpływ': 'danger'
+            }[simResult.overall_impact] || 'info';
+            
+            content += `
+                <tr class="table-${impactClass}">
+                    <td>${simResult.valve_change}</td>
+                    <td><span class="badge badge-${impactClass}">${simResult.overall_impact.replace('_', ' ')}</span></td>
+                    <td>
+            `;
+            
+            if (simResult.route_results && simResult.route_results.length > 0) {
+                content += '<ul class="mb-0">';
+                simResult.route_results.forEach(route => {
+                    content += `<li>${route.route}: ${route.available ? 'Dostępne' : 'Zablokowane'}</li>`;
+                });
+                content += '</ul>';
+            }
+            
+            content += '</td></tr>';
+        });
+        
+        content += '</tbody></table></div>';
+    }
+    
+    content += `<p><small>Czas wykonania: ${executionTime}ms</small></p>`;
+    
+    showSimulationResult(content, null);
+}
+
+function showSimulationResult(content, alertType) {
+    if (alertType) {
+        content = `<div class="alert alert-${alertType}">${content}</div>`;
+    }
+    
+    $('#simulationResultContent').html(content);
+    $('#simulationResult').show();
+}
+
+function analyzeCriticalValves() {
+    showCriticalValvesResult('Analizowanie krytycznych zaworów...', 'info');
+    
+    $.ajax({
+        url: '/topology/api/pathfinder/critical-valves',
+        type: 'GET',
+        success: function(response) {
+            if (response.success) {
+                displayCriticalValvesResult(response.data, response.execution_time_ms);
+            } else {
+                showCriticalValvesResult('Błąd: ' + response.message, 'danger');
+            }
+        },
+        error: function(xhr, status, error) {
+            console.error('PathFinder Critical Valves API Error:', status, error, xhr.responseText);
+            showCriticalValvesResult('Błąd podczas komunikacji z serwerem: ' + error, 'danger');
+        }
+    });
+}
+
+function displayCriticalValvesResult(result, executionTime) {
+    const criticalCount = result.critical_valves.filter(v => v.is_critical).length;
+    $('#criticalValvesCount').text(criticalCount);
+    
+    let content = `
+        <div class="alert alert-info">
+            <h6><i class="fas fa-search"></i> ${result.message}</h6>
+        </div>
+    `;
+    
+    if (result.critical_valves && result.critical_valves.length > 0) {
+        content += '<div class="table-responsive">';
+        content += '<table class="table table-striped">';
+        content += '<thead><tr><th>Zawór</th><th>Zablokowane Trasy</th><th>Krytyczność</th><th>Przykładowe Trasy</th></tr></thead><tbody>';
+        
+        result.critical_valves.slice(0, 15).forEach(valve => {
+            const criticalityClass = valve.is_critical ? 'danger' : 'success';
+            
+            content += `
+                <tr class="table-${criticalityClass}">
+                    <td><strong>${valve.valve_name}</strong></td>
+                    <td>${valve.blocked_routes_count}</td>
+                    <td>
+                        <span class="badge badge-${criticalityClass}">
+                            ${valve.is_critical ? 'KRYTYCZNY' : 'Bezpieczny'}
+                        </span>
+                    </td>
+                    <td>
+            `;
+            
+            if (valve.affected_routes && valve.affected_routes.length > 0) {
+                content += '<ul class="mb-0">';
+                valve.affected_routes.forEach(route => {
+                    content += `<li><small>${route}</small></li>`;
+                });
+                content += '</ul>';
+            } else {
+                content += '<small class="text-muted">Brak dotkniętych tras</small>';
+            }
+            
+            content += '</td></tr>';
+        });
+        
+        content += '</tbody></table></div>';
+    }
+    
+    content += `<p><small>Czas wykonania: ${executionTime}ms</small></p>`;
+    
+    showCriticalValvesResult(content, null);
+}
+
+function showCriticalValvesResult(content, alertType) {
+    if (alertType) {
+        content = `<div class="alert alert-${alertType}">${content}</div>`;
+    }
+    
+    $('#criticalValvesContent').html(content);
+    $('#criticalValvesResult').show();
+}
+
+function refreshTestHistory() {
+    location.reload();
+}
+
+function refreshTestData() {
+    loadValveOptions();
+    if ($('#useCustomValves').is(':checked')) {
+        loadCustomValveStates();
+    }
+}
+
+function viewTestDetails(testId) {
+    // Implementacja szczegółów testu
+    $('#testDetailsContent').html('<div class="alert alert-info">Szczegóły testu będą dostępne w przyszłej wersji</div>');
+    showModalSafely('testDetailsModal');
+}
+</script>
+{% endblock %}

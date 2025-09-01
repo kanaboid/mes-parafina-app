@@ -1,0 +1,14 @@
+Field,Type,Null,Key,Default,Extra
+id,int,NO,PRI,NULL,auto_increment
+nazwa_unikalna,varchar(20),NO,UNI,NULL,
+typ_sprzetu,"enum('reaktor','filtr','beczka_brudna','beczka_czysta','apollo')",NO,,NULL,
+pojemnosc_kg,"decimal(10,2)",YES,,NULL,
+stan_sprzetu,varchar(50),YES,,NULL,
+temperatura_aktualna,"decimal(5,2)",YES,,NULL,
+cisnienie_aktualne,"decimal(5,2)",YES,,NULL,
+poziom_aktualny_procent,"decimal(5,2)",YES,,NULL,
+ostatnia_aktualizacja,datetime,YES,,NULL,
+temperatura_max,"decimal(5,2)",YES,,120.00,
+cisnienie_max,"decimal(5,2)",YES,,6.00,
+id_partii_surowca,int,YES,,NULL,
+temperatura_docelowa,"decimal(5,2)",YES,,NULL,

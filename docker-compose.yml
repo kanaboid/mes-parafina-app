@@ -1,0 +1,78 @@
+
+
+services:
+  web:
+    build: .
+    container_name: mes-parafina-app-compose
+    restart: always
+    command: gunicorn --worker-class eventlet -w 1 --bind 0.0.0.0:5000 --reload --preload "run:app"
+    ports:
+      - "8080:5000" # Aplikacja webowa
+    volumes:
+      - .:/app
+    environment:
+      - SECRET_KEY=${SECRET_KEY}
+      - MYSQLUSER=${MYSQLUSER}
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - MYSQLHOST=db # Hostem jest nazwa usługi bazy danych
+      - TZ=UTC
+      - FLASK_ENV=production
+    networks:
+      - mes-parafina-net
+    depends_on:
+      - db
+
+  db:
+    image: mysql:8.0
+    container_name: mes-parafina-mysql-db-compose
+    restart: always
+    # === DODANA SEKCJA ===
+    ports:
+      # Mapuj port 3306 na hoście (Twój komputer) do portu 3306 w kontenerze
+      - "3306:3306"
+    # ===================
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - MYSQL_DATABASE=mes_parafina_db
+      - MYSQL_USER=${MYSQLUSER}
+      # Uwaga: obraz MySQL używa MYSQL_PASSWORD do ustawienia hasła dla nowo tworzonego użytkownika
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD_FOR_USER}
+      - TZ=UTC
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - mes-parafina-net
+
+  redis:
+    image: "redis:alpine"
+    container_name: mes-parafina-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    networks:
+      - mes-parafina-net
+
+  celery-worker:
+    build: .
+    restart: always
+    command: ["celery", "-A", "celery_app.celery", "worker", "-B", "-l", "info"]
+    environment:
+      - SECRET_KEY=${SECRET_KEY}
+      - MYSQLUSER=${MYSQLUSER}
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - MYSQLHOST=db
+    networks:
+      - mes-parafina-net
+    depends_on:
+      - web
+      - redis
+
+# Definicja sieci
+networks:
+  mes-parafina-net:
+    driver: bridge
+
+# Definicja wolumenu
+volumes:
+  mysql_data:
+    driver: local

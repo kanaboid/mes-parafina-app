@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+
+{% block title %}Panel Główny - System MES{% endblock %}
+
+{% block content %}
+
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MES - Panel Sterowania Produkcją</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <header>
+        <h1>System Zarządzania Produkcją Parafiny</h1>
+    </header>    <main>
+        
+         <!-- NOWA SEKCJA: Aktywne Operacje -->
+        <section id="active-operations-section">
+            <h2>Aktywne Operacje</h2>
+            <table id="operations-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Typ Operacji</th>
+                        <th>ID Partii</th>
+                        <th>Czas Rozpoczęcia</th>
+                        <th>Opis</th>
+                        <th>Akcja</th>
+                    </tr>
+                </thead>
+                <tbody id="operations-table-body">
+                    <!-- JavaScript wstawi tutaj wiersze -->
+                </tbody>
+            </table>
+        </section>
+        <!-- Sekcja statusu sprzętu (bez zmian) -->
+        <section><!-- Add this new section -->
+        <div class="alarm-section">
+        <h2>Alarmy</h2>
+        <div id="alarm-container" class="alarm-container"></div>
+        </div></section>
+        
+        <section id="status-section">
+            <h2>Aktualny Stan Sprzętu</h2>
+            <div id="sprzet-container" class="grid-container">
+                <p>Ładowanie stanu sprzętu...</p>
+            </div>
+        </section>
+
+         <!-- NOWA SEKCJA WIZUALIZACJI -->
+        <section id="visualization-section">
+            <h2>Wizualizacja Instalacji</h2>
+            <div class="mermaid">
+                
+            </div>
+        </section>
+
+        <section id="flowchart-section">
+            <h2>Wizualizacja Instalacji (Flowchart)</h2>
+            <div id="flowchart-container" class="mermaid">
+                <!-- Flowchart będzie tutaj -->
+            </div>
+        </section>
+
+        <!-- NOWA SEKCJA: Stan Zaworów -->
+        <section id="valves-section">
+            <h2>Stan Zaworów</h2>
+            <div id="valves-container" class="grid-container">
+                <p>Ładowanie stanu zaworów...</p>
+            </div>
+        </section>
+
+       
+
+        <!-- Sekcja uruchamiania operacji i logów (bez zmian) -->
+        <!-- app/templates/index.html -->
+
+        <!-- SEKCJA URUCHAMIANIA OPERACJI (NOWA WERSJA) -->
+        <section id="operations-section">
+            <h2>Uruchom Nową Operację</h2>
+            <form id="route-form" class="operation-form">
+                <div class="form-group">
+                    <label for="start-point">Start:</label>
+                    <select id="start-point" required></select>
+                </div>
+                <div class="form-group">
+                    <label for="intermediate-point">Sprzęt pośredni (opcjonalnie):</label>
+                    <select id="intermediate-point">
+                        <option value="">-- Brak --</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="end-point">Cel:</label>
+                    <select id="end-point" required></select>
+                </div>
+                
+                <button type="submit">1. Znajdź Trasę i Zawory</button>
+            </form>
+<!-- app/templates/index.html -->
+            <hr style="margin: 2rem 0;">
+            <h3>Dobielanie</h3>
+            <form id="bleaching-form" class="operation-form">
+                <div class="form-group">
+                    <label for="bleach-reactor">Reaktor:</label>
+                    <select id="bleach-reactor" required></select>
+                </div>
+                <div class="form-group">
+                    <label for="bleach-bags">Ilość worków:</label>
+                    <input type="number" id="bleach-bags" value="6" required>
+                </div>
+                 <div class="form-group">
+                    <label for="bleach-weight">Waga worka (kg):</label>
+                    <input type="number" id="bleach-weight" value="25" required>
+                </div>
+                <button type="submit">Dodaj Ziemię</button>
+            </form>
+             <!-- NOWY FORMULARZ DO TANKOWANIA -->
+            <h3>Nowe Tankowanie</h3>
+            <form id="tanking-form" class="operation-form">
+                <div class="form-group">
+                    <label for="tanking-source">Źródło:</label>
+                    <select id="tanking-source" required></select>
+                </div>
+                <div class="form-group">
+                    <label for="tanking-dest">Reaktor Docelowy:</label>
+                    <select id="tanking-dest" required></select>
+                </div>
+                <div class="form-group">
+                    <label for="tanking-type">Typ Surowca:</label>
+                    <input type="text" id="tanking-type" required value="T-10">
+                </div>
+                <div class="form-group">
+                    <label for="tanking-weight">Waga (kg):</label>
+                    <input type="number" id="tanking-weight" required value="7500">
+                </div>
+                <button type="submit">Zatankuj</button>
+            </form>
+            
+            <div id="valve-suggestion-container" style="display:none;">
+                <h3>Sugerowane zawory do otwarcia:</h3>
+                <div id="valve-list"></div>
+                <button id="run-operation-btn">2. Uruchom Operację</button>
+            </div>
+
+            
+        </section>
+<section> 
+        <div class="monitoring-controls">
+    <button class="view-btn active" id="charts-btn" data-view="charts">Wykresy</button>
+    <button class="view-btn" id="table-btn" data-view="table">Tabela</button>
+</div>
+<div id="charts-view" class="charts-container">
+    <div id="temperature-charts"></div>
+    <div id="pressure-charts"></div>
+</div>
+<div id="table-view" class="table-container" style="display:none">
+    <table id="measurements-table">
+        <thead>
+            <tr>
+                <th>Urządzenie</th>
+                <th>Temperatura [°C]</th>
+                <th>Ciśnienie [bar]</th>
+                <th>Czas pomiaru</th>
+            </tr>
+        </thead>
+        <tbody id="measurements-tbody"></tbody>
+    </table>
+</div>
+</section>
+<section>
+<div class="temperature-control">
+    <h3>Kontrola temperatury</h3>
+    <form id="temperature-form" class="operation-form">
+        <div class="form-group">
+            <label for="equipment-select">Wybierz sprzęt:</label>
+            <select id="equipment-select" required>
+                <!-- Options will be loaded dynamically -->
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="temperature-input">Temperatura (°C):</label>
+            <input type="number" id="temperature-input" required min="0" max="200" step="0.1">
+        </div>
+        <button type="submit">Ustaw temperaturę</button>
+    </form>
+</div>
+</section>
+
+    </main>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
+
+{% endblock %}
+
+{% block scripts %}
+
+{% endblock %}

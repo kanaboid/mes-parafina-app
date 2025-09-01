@@ -1,0 +1,257 @@
+{% extends "base.html" %}
+
+{% block title %}Operacje - System MES{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h1>Operacje Produkcyjne</h1>
+    
+    <!-- Tankowanie Brudnego Surowca -->
+    <div class="row mt-4">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header">
+                    <h3><i class="bi bi-droplet-fill"></i> Tankowanie Brudnego Surowca</h3>
+                </div>
+                <div class="card-body">
+                    <form id="tankowanieBrudnegoForm">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="reaktorSelect" class="form-label">Reaktor docelowy:</label>
+                                    <select class="form-select" id="reaktorSelect" name="id_reaktora" required>
+                                        <option value="">Wybierz reaktor...</option>
+                                    </select>
+                                    <div class="form-text">Tylko reaktory w stanie "Pusty"</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="beczkaSelect" class="form-label">Beczka źródłowa:</label>
+                                    <select class="form-select" id="beczkaSelect" name="id_beczki" required>
+                                        <option value="">Wybierz beczkę...</option>
+                                    </select>
+                                    <div class="form-text">Beczki z brudnym surowcem</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="typSurowcaSelect" class="form-label">Typ surowca:</label>
+                                    <select class="form-select" id="typSurowcaSelect" name="typ_surowca" required>
+                                        <option value="">Wybierz typ surowca...</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="wagaInput" class="form-label">Waga (kg):</label>
+                                    <input type="number" class="form-control" id="wagaInput" name="waga_kg" 
+                                           min="1" max="9000" step="0.1" required>
+                                    <div class="form-text">Maksymalnie 9000 kg</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="temperaturaInput" class="form-label">Temperatura początkowa (°C):</label>
+                                    <input type="number" class="form-control" id="temperaturaInput" name="temperatura_surowca" 
+                                           min="-50" max="200" step="0.1" required>
+                                    <div class="form-text">Temperatura surowca w beczce</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                <i class="bi bi-play-fill"></i> Rozpocznij Tankowanie
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Panel informacyjny -->
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="bi bi-info-circle"></i> Informacje</h5>
+                </div>
+                <div class="card-body">
+                    <h6>Proces tankowania:</h6>
+                    <ol class="small">
+                        <li>Wybierz pusty reaktor</li>
+                        <li>Wybierz beczkę z surowcem</li>
+                        <li>Określ typ i wagę surowca</li>
+                        <li>Podaj temperaturę początkową</li>
+                        <li>Zatwierdź operację</li>
+                    </ol>
+                    
+                    <div class="alert alert-warning small mt-3">
+                        <strong>Uwaga:</strong> Po zatankowaniu należy włączyć palnik i sprawdzić temperaturę surowca na reaktorze.
+                    </div>
+                    
+                    <div id="lastOperation" class="alert alert-info small mt-3" style="display: none;">
+                        <strong>Ostatnia operacja:</strong>
+                        <div id="lastOperationDetails"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Status reaktorów -->
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h6><i class="bi bi-diagram-3"></i> Status Reaktorów</h6>
+                </div>
+                <!--<div class="card-body">
+                    <div id="reaktoryStatus">
+                        <div class="text-muted small">Ładowanie...</div>
+                    </div>
+                </div>    -->
+            </div>
+        </div>
+    </div>
+    
+    <!-- Transfer Między Reaktorami -->
+    <div class="row mt-4">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header">
+                    <h3><i class="bi bi-arrow-left-right"></i> Transfer Między Reaktorami</h3>
+                </div>
+                <div class="card-body">
+                    <form id="transferReaktorowForm">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="reaktorZrodlowySelect" class="form-label">Reaktor źródłowy:</label>
+                                    <select class="form-select" id="reaktorZrodlowySelect" name="id_reaktora_zrodlowego" required>
+                                        <option value="">Wybierz reaktor źródłowy...</option>
+                                    </select>
+                                    <div class="form-text">Reaktory z surowcem (stan inny niż "Pusty")</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="reaktorDocelowySelect" class="form-label">Reaktor docelowy:</label>
+                                    <select class="form-select" id="reaktorDocelowySelect" name="id_reaktora_docelowego" required>
+                                        <option value="">Wybierz reaktor docelowy...</option>
+                                    </select>
+                                    <div class="form-text">Tylko reaktory w stanie "Pusty"</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="przezFiltrCheck" name="przez_filtr">
+                                        <label class="form-check-label" for="przezFiltrCheck">
+                                            Transfer przez filtr
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="filtrSelect" class="form-label">Filtr:</label>
+                                    <select class="form-select" id="filtrSelect" name="id_filtra" disabled>
+                                        <option value="">Wybierz filtr...</option>
+                                    </select>
+                                    <div class="form-text">Dostępne filtry (FZ, FN)</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="mb-3">
+                                    <button type="button" class="btn btn-outline-secondary me-2" id="podgladTrasyBtn">
+                                        <i class="bi bi-eye"></i> Podgląd Trasy
+                                    </button>
+                                    <div class="form-text">Sprawdź trasę i wymagane zawory przed rozpoczęciem transferu</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div id="podgladTrasy" class="alert alert-info mt-3" style="display: none;">
+                            <h6><i class="bi bi-route"></i> Podgląd Trasy:</h6>
+                            <div id="podgladTrasyTresc"></div>
+                        </div>
+                        
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <button type="submit" class="btn btn-success btn-lg">
+                                <i class="bi bi-arrow-right"></i> Rozpocznij Transfer
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Panel informacyjny transferu -->
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="bi bi-info-circle"></i> Transfer - Informacje</h5>
+                </div>
+                <div class="card-body">
+                    <h6>Proces transferu:</h6>
+                    <ol class="small">
+                        <li>Wybierz reaktor z surowcem</li>
+                        <li>Wybierz pusty reaktor docelowy</li>
+                        <li>Opcjonalnie: wybierz filtr</li>
+                        <li>Sprawdź podgląd trasy</li>
+                        <li>Rozpocznij transfer</li>
+                    </ol>
+                    
+                    <div class="alert alert-info small mt-3">
+                        <strong>Transfer bezpośredni:</strong> Szybki transfer surowca między reaktorami.
+                    </div>
+                    
+                    <div class="alert alert-warning small mt-3">
+                        <strong>Transfer przez filtr:</strong> Filtracja surowca podczas transferu. Proces trwa dłużej, ale oczyszcza surowiec.
+                    </div>
+                    
+                    <div id="lastTransfer" class="alert alert-success small mt-3" style="display: none;">
+                        <strong>Ostatni transfer:</strong>
+                        <div id="lastTransferDetails"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal komunikatu operatorskiego -->
+<div class="modal fade" id="komunikatModal" tabindex="-1" aria-labelledby="komunikatModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title" id="komunikatModalLabel">
+                    <i class="bi bi-check-circle"></i> Operacja Zakończona
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="komunikatTresc" class="text-center">
+                    <!-- Treść komunikatu zostanie wstawiona tutaj -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-success" data-bs-dismiss="modal">Rozumiem</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/operacje.js') }}"></script>
+{% endblock %}

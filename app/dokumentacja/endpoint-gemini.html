@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <title>Lista Endpointów API</title>
+    <style>
+        body { font-family: sans-serif; line-height: 1.6; margin: 2em; }
+        h1, h2 { border-bottom: 2px solid #eee; padding-bottom: 5px; }
+        code { background-color: #f4f4f4; padding: 2px 6px; border-radius: 4px; }
+        li { margin-bottom: 10px; }
+        a { color: #007bff; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .post { color: #888; }
+        .param { color: #888; }
+    </style>
+</head>
+<body>
+
+    <h1>Lista Endpointów API</h1>
+    <p>Serwer działa pod adresem: <code>http://localhost:5000</code></p>
+    <p>Kliknij na linki, aby otworzyć endpointy typu <strong>GET</strong> w nowej karcie i zobaczyć ich odpowiedź (zazwyczaj w formacie JSON).</p>
+    <p><b>Uwaga:</b> Endpointy typu <b>POST</b> nie mogą być wywołane przez proste kliknięcie linku (które zawsze wykonuje zapytanie GET). Są one wymienione dla kompletności, ale do ich przetestowania potrzebne jest narzędzie takie jak Postman, curl, lub interfejs frontendowy aplikacji, który wysyła odpowiednie dane.</p>
+
+    <h2>I. Strony HTML (Frontend)</h2>
+    <ul>
+        <li><strong>GET /</strong> - Serwuje główną stronę aplikacji. <a href="http://localhost:5000/" target="_blank">Otwórz</a></li>
+        <li><strong>GET /alarms</strong> - Wyświetla stronę z historią wszystkich alarmów. <a href="http://localhost:5000/alarms" target="_blank">Otwórz</a></li>
+        <li><strong>GET /operacje</strong> - Wyświetla stronę z operacjami tankowania. <a href="http://localhost:5000/operacje" target="_blank">Otwórz</a></li>
+        <li><strong>GET /filtry</strong> - Renderuje stronę z panelem monitoringu filtrów. <a href="http://localhost:5000/filtry" target="_blank">Otwórz</a></li>
+        <li><strong>GET /cykle-monitor</strong> - Serwuje stronę monitoringu cykli filtracyjnych. <a href="http://localhost:5000/cykle-monitor" target="_blank">Otwórz</a></li>
+        <li><strong>GET /aktywne-partie</strong> - Serwuje stronę zarządzania aktywnymi partiami. <a href="http://localhost:5000/aktywne-partie" target="_blank">Otwórz</a></li>
+    </ul>
+
+    <h2>II. API - Sprzęt, Topologia i Zasoby</h2>
+    <ul>
+        <li><strong>GET /api/sprzet</strong> - Zwraca listę całego sprzętu WRAZ z informacją o znajdującej się w nim partii. <a href="http://localhost:5000/api/sprzet" target="_blank">Zobacz JSON</a></li>
+        <li><strong>GET /api/zawory</strong> - Zwraca listę wszystkich zaworów i ich aktualny stan. <a href="http://localhost:5000/api/zawory" target="_blank">Zobacz JSON</a></li>
+        <li><strong>GET /api/punkty_startowe</strong> - Zwraca listę wszystkich portów wyjściowych (OUT). <a href="http://localhost:5000/api/punkty_startowe" target="_blank">Zobacz JSON</a></li>
+        <li><strong>GET /api/punkty_docelowe</strong> - Zwraca listę wszystkich portów wejściowych (IN). <a href="http://localhost:5000/api/punkty_docelowe" target="_blank">Zobacz JSON</a></li>
+        <li><strong>GET /api/sprzet/filtry</strong> - Zwraca listę filtrów. <a href="http://localhost:5000/api/sprzet/filtry" target="_blank">Zobacz JSON</a></li>
+        <li><strong>GET /api/topologia</strong> - Zwraca pełną listę połączeń (segmentów) do wizualizacji. <a href="http://localhost:5000/api/topologia" target="_blank">Zobacz JSON</a></li>
+        <li><strong>GET /api/typy-surowca</strong> - Zwraca listę dostępnych typów surowca. <a href="http://localhost:5000/api/typy-surowca" target="_blank">Zobacz JSON</a></li>
+        <li><strong>GET /api/sprzet/beczki-brudne</strong> - Zwraca listę beczek brudnych dostępnych do tankowania. <a href="http://localhost:5000/api/sprzet/beczki-brudne" target="_blank">Zobacz JSON</a></li>
+        <li><strong>GET /api/sprzet/reaktory-puste</strong> - Zwraca listę reaktorów w stanie 'Pusty'. <a href="http://localhost:5000/api/sprzet/reaktory-puste" target="_blank">Zobacz JSON</a></li>
+        <li><strong>GET /api/sprzet/reaktory-z-surowcem</strong> - Zwraca listę reaktorów zawierających surowiec. <a href="http://localhost:5000/api/sprzet/reaktory-z-surowcem" target="_blank">Zobacz JSON</a></li>
+        <!-- Dodaj tę linię do pliku api_lista.html -->
+        <li><strong>GET /api/sprzet/pomiary</strong> - Zwraca listę sprzętu z ostatnimi odczytami temperatury i ciśnienia. <a href="http://localhost:5000/api/sprzet/pomiary" target="_blank">Zobacz JSON</a></li>
+    </ul>
+
+    <h2>III. API - Główne Operacje i Procesy</h2>
+    <ul>
+        <li class="post"><strong>POST /api/operacje/tankowanie</strong> - Tworzy nową partię przez tankowanie. (Wymaga danych, testuj przez Postman)</li>
+        <li class="post"><strong>POST /api/operacje/rozpocznij_trase</strong> - Rozpoczyna operację transferu surowca. (Wymaga danych, testuj przez Postman)</li>
+        <li class="post"><strong>POST /api/operacje/zakoncz</strong> - Kończy aktywną operację transferu. (Wymaga danych, testuj przez Postman)</li>
+        <li class="post"><strong>POST /api/zawory/zmien_stan</strong> - Zmienia stan pojedynczego zaworu. (Wymaga danych, testuj przez Postman)</li>
+        <li class="post"><strong>POST /api/trasy/sugeruj</strong> - Sugeruje najkrótszą trasę, ignorując stan zaworów. (Wymaga danych, testuj przez Postman)</li>
+        <li class="post"><strong>POST /api/operacje/dobielanie</strong> - Rejestruje operację dobielania partii. (Wymaga danych, testuj przez Postman)</li>
+        <li class="post"><strong>POST /api/operacje/tankowanie-brudnego</strong> - Tankowanie brudnego surowca z beczki do reaktora. (Wymaga danych, testuj przez Postman)</li>
+        <li class="post"><strong>POST /api/operacje/transfer-reaktorow</strong> - Transfer surowca z reaktora do reaktora. (Wymaga danych, testuj przez Postman)</li>
+    </ul>
+
+    <h2>IV. API - Monitoring i Status</h2>
+    <ul>
+        <li><strong>GET /api/operacje/aktywne</strong> - Zwraca listę wszystkich aktywnych operacji. <a href="http://localhost:5000/api/operacje/aktywne" target="_blank">Zobacz JSON</a></li>
+        <li><strong>GET /api/filtry/status</strong> - Zwraca aktualny status dla każdego filtra. <a href="http://localhost:5000/api/filtry/status" target="_blank">Zobacz JSON</a></li>
+        <li><strong>GET /api/filtry/szczegolowy-status</strong> - Pobiera szczegółowy status filtrów z informacjami o partiach i cyklach. <a href="http://localhost:5000/api/filtry/szczegolowy-status" target="_blank">Zobacz JSON</a></li>
+        <li><strong>GET /api/alarmy/aktywne</strong> - Zwraca listę aktywnych alarmów. <a href="http://localhost:5000/api/alarmy/aktywne" target="_blank">Zobacz JSON</a></li>
+        <li><strong>GET /api/pomiary/historia</strong> - Pobiera historię pomiarów z ostatnich 24 godzin. <a href="http://localhost:5000/api/pomiary/historia" target="_blank">Zobacz JSON</a></li>
+    </ul>
+    
+    <h2>V. API - Zarządzanie Partiami i Cyklami</h2>
+    <ul>
+        <li><strong>GET /api/partie/aktualny-stan</strong> - Pobiera aktualny stan wszystkich partii w systemie. <a href="http://localhost:5000/api/partie/aktualny-stan" target="_blank">Zobacz JSON</a></li>
+        <li><strong>GET /api/partie/aktywne</strong> - Pobiera listę wszystkich aktywnych partii w systemie z pełnymi szczegółami. <a href="http://localhost:5000/api/partie/aktywne" target="_blank">Zobacz JSON</a></li>
+        <li class="param"><strong>GET /api/cykle-filtracyjne/&lt;id_partii&gt;</strong> - Pobiera historię cykli dla danej partii. (Wymaga podania ID partii w URL)</li>
+        <li class="param"><strong>GET /api/partie/szczegoly/&lt;partia_id&gt;</strong> - Pobiera szczegółowe informacje o konkretnej partii. (Wymaga podania ID partii w URL)</li>
+        <li class="post"><strong>POST /api/cykle/rozpocznij</strong> - Rozpoczyna nowy cykl filtracyjny dla partii. (Wymaga danych, testuj przez Postman)</li>
+        <li class="post"><strong>POST /api/cykle/zakoncz</strong> - Kończy aktualny cykl filtracyjny. (Wymaga danych, testuj przez Postman)</li>
+        <li class="post"><strong>POST /api/partie/aktualizuj-status</strong> - Aktualizuje status partii. (Wymaga danych, testuj przez Postman)</li>
+    </ul>
+
+    <h2>VI. API - Endpointy Testowe i Kontrolne</h2>
+    <ul>
+        <li class="post"><strong>POST /api/alarmy/potwierdz</strong> - Potwierdza aktywny alarm. (Wymaga danych, testuj przez Postman)</li>
+        <li class="post"><strong>POST /api/test/sensors</strong> - Wymusza odczyt czujników. (Nie wymaga danych, ale jest typu POST)</li>
+        <li class="post"><strong>POST /api/test/alarm</strong> - Wymusza testowy alarm dla sprzętu. (Wymaga danych, testuj przez Postman)</li>
+        <li class="param"><strong>POST /api/sprzet/&lt;sprzet_id&gt;/temperatura</strong> - Ustawia docelową temperaturę dla sprzętu. (Wymaga ID sprzętu i danych, testuj przez Postman)</li>
+    </ul>
+
+</body>
+</html>

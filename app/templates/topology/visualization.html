@@ -1,0 +1,740 @@
+<!-- app/templates/topology/visualization.html -->
+{% extends "base.html" %}
+
+{% block title %}Wizualizacja Topologii{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1><i class="fas fa-sitemap"></i> Wizualizacja Topologii</h1>
+                <div>
+                    <a href="{{ url_for('topology.topology_index') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left"></i> Powrót
+                    </a>
+                    <button type="button" class="btn btn-info" onclick="refreshVisualization()">
+                        <i class="fas fa-sync"></i> Odśwież
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Opcje wizualizacji -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-cog"></i> Opcje Wizualizacji</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <div class="form-group">
+                                <label>Typ Wizualizacji:</label>
+                                <select class="form-control" id="visualizationType">
+                                    <option value="interactive">Interaktywny Graf</option>
+                                    <option value="text">Opis Tekstowy</option>
+                                    <option value="table">Tabela Połączeń</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="form-group">
+                                <label>Układ Grafu:</label>
+                                <select class="form-control" id="layoutType">
+                                    <option value="force">Siłowy</option>
+                                    <option value="circular">Kołowy</option>
+                                    <option value="hierarchical">Hierarchiczny</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="form-group">
+                                <label>Pokaż:</label>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="showLabels" checked>
+                                    <label class="form-check-label" for="showLabels">Etykiety</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="showValveStates" checked>
+                                    <label class="form-check-label" for="showValveStates">Stany Zaworów</label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="form-group">
+                                <label>Akcje:</label><br>
+                                <button type="button" class="btn btn-sm btn-outline-primary" onclick="zoomToFit()">
+                                    <i class="fas fa-expand-arrows-alt"></i> Dopasuj
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-success" onclick="exportVisualization()">
+                                    <i class="fas fa-download"></i> Eksport
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Główna wizualizacja -->
+    <div class="row">
+        <div class="col-lg-9">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-eye"></i> Mapa Topologii
+                        <span class="float-right">
+                            <small id="lastUpdated">Ładowanie...</small>
+                        </span>
+                    </h5>
+                </div>
+                <div class="card-body" style="height: 600px; position: relative;">
+                    <!-- Interaktywny graf -->
+                    <div id="networkContainer" style="width: 100%; height: 100%; display: none;">
+                        <!-- Graf będzie renderowany tutaj przez vis.js -->
+                    </div>
+                    
+                    <!-- Opis tekstowy -->
+                    <div id="textContainer" style="width: 100%; height: 100%; overflow-y: auto; display: none;">
+                        <pre id="textVisualization" style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; font-size: 12px;"></pre>
+                    </div>
+                    
+                    <!-- Tabela połączeń -->
+                    <div id="tableContainer" style="width: 100%; height: 100%; overflow-y: auto; display: none;">
+                        <table class="table table-striped table-sm" id="connectionsTable">
+                            <thead>
+                                <tr>
+                                    <th>Segment</th>
+                                    <th>Punkt Startowy</th>
+                                    <th>Punkt Końcowy</th>
+                                    <th>Zawór</th>
+                                    <th>Stan</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Dane będą załadowane dynamicznie -->
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <!-- Loading indicator -->
+                    <div id="loadingIndicator" class="text-center" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="sr-only">Ładowanie...</span>
+                        </div>
+                        <div class="mt-2">Ładowanie wizualizacji...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Panel informacji -->
+        <div class="col-lg-3">
+            <div class="card shadow">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0"><i class="fas fa-info-circle"></i> Informacje</h5>
+                </div>
+                <div class="card-body">
+                    <!-- Statystyki -->
+                    <h6>Statystyki:</h6>
+                    <div class="row mb-3">
+                        <div class="col-6">
+                            <div class="text-center">
+                                <h4 class="text-primary" id="nodeCount">-</h4>
+                                <small>Węzłów</small>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="text-center">
+                                <h4 class="text-success" id="edgeCount">-</h4>
+                                <small>Połączeń</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Stan zaworów -->
+                    <h6>Zawory:</h6>
+                    <div class="row mb-3">
+                        <div class="col-6">
+                            <div class="text-center">
+                                <h4 class="text-success" id="openValves">-</h4>
+                                <small>Otwarte</small>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="text-center">
+                                <h4 class="text-secondary" id="closedValves">-</h4>
+                                <small>Zamknięte</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Legenda -->
+                    <h6>Legenda:</h6>
+                    <div class="legend">
+                        <div class="legend-item mb-2">
+                            <span class="legend-symbol" style="background-color: #007bff; width: 15px; height: 15px; border-radius: 50%; display: inline-block;"></span>
+                            <span class="ml-2">Sprzęt</span>
+                        </div>
+                        <div class="legend-item mb-2">
+                            <span class="legend-symbol" style="background-color: #6c757d; width: 15px; height: 15px; border-radius: 50%; display: inline-block;"></span>
+                            <span class="ml-2">Węzeł</span>
+                        </div>
+                        <div class="legend-item mb-2">
+                            <span class="legend-symbol" style="border-top: 3px solid #28a745; width: 20px; display: inline-block;"></span>
+                            <span class="ml-2">Połączenie aktywne</span>
+                        </div>
+                        <div class="legend-item mb-2">
+                            <span class="legend-symbol" style="border-top: 3px solid #6c757d; width: 20px; display: inline-block;"></span>
+                            <span class="ml-2">Połączenie nieaktywne</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Szczegóły wybranego elementu -->
+            <div class="card shadow mt-3" id="selectionCard" style="display: none;">
+                <div class="card-header bg-warning text-dark">
+                    <h6 class="mb-0"><i class="fas fa-cursor"></i> Wybrany Element</h6>
+                </div>
+                <div class="card-body" id="selectionDetails">
+                    <!-- Szczegóły będą pokazane tutaj -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Załaduj jQuery najpierw -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+<!-- Dodaj vis.js library -->
+<script type="text/javascript" src="https://cdn.jsdelivr.net/npm/vis-network@latest/standalone/umd/vis-network.min.js"></script>
+<script>
+// Fallback dla vis.js
+window.addEventListener('load', function() {
+    if (typeof vis === 'undefined') {
+        console.error('vis.js nie załadował się z CDN, próbuję alternatywnego CDN...');
+        const script = document.createElement('script');
+        script.src = 'https://unpkg.com/vis-network/standalone/umd/vis-network.min.js';
+        script.onload = function() {
+            console.log('vis.js załadowany z alternatywnego CDN');
+            // Spróbuj ponownie załadować dane po załadowaniu biblioteki
+            if (typeof loadTopologyData === 'function') {
+                loadTopologyData();
+            }
+        };
+        script.onerror = function() {
+            console.error('Nie udało się załadować vis.js z żadnego CDN');
+            alert('Błąd: Nie można załadować biblioteki wizualizacji. Sprawdź połączenie internetowe.');
+        };
+        document.head.appendChild(script);
+    } else {
+        console.log('vis.js załadowany pomyślnie');
+    }
+});
+</script>
+
+<script>
+// Test czy jQuery jest dostępne
+console.log('Sprawdzanie jQuery...');
+if (typeof jQuery !== 'undefined') {
+    console.log('jQuery dostępne jako jQuery');
+} else {
+    console.log('jQuery NIEDOSTĘPNE jako jQuery');
+}
+
+if (typeof $ !== 'undefined') {
+    console.log('jQuery dostępne jako $');
+} else {
+    console.log('jQuery NIEDOSTĘPNE jako $');
+}
+
+// Zabezpieczenie - jeśli $ nie jest dostępne, spróbuj użyć jQuery
+if (typeof $ === 'undefined' && typeof jQuery !== 'undefined') {
+    window.$ = jQuery;
+    console.log('Ustawiono $ = jQuery');
+}
+
+let network = null;
+let topologyData = null;
+
+$(document).ready(function() {
+    console.log('Document ready, jQuery działa:', typeof $);
+    console.log('Testowanie dostępności vis.js:', typeof vis);
+    
+    // Sprawdź czy jQuery jest dostępne
+    if (typeof $ === 'undefined') {
+        console.error('jQuery nie jest dostępne!');
+        alert('Błąd: jQuery nie załadował się poprawnie');
+        return;
+    }
+    
+    // Inicjalizacja
+    loadTopologyData();
+    
+    // Obsługa zmian opcji
+    $('#visualizationType').on('change', updateVisualization);
+    $('#layoutType').on('change', updateNetworkLayout);
+    $('#showLabels, #showValveStates').on('change', updateNetworkOptions);
+    
+    // Test po 2 sekundach
+    setTimeout(function() {
+        console.log('Test po 2 sekundach - vis.js:', typeof vis);
+        if (typeof vis !== 'undefined') {
+            console.log('vis.js jest dostępne');
+        } else {
+            console.error('vis.js NIE jest dostępne');
+            // Spróbuj ręcznie załadować prostą wizualizację
+            showSimpleVisualization();
+        }
+    }, 2000);
+});
+
+function loadTopologyData() {
+    $('#loadingIndicator').show();
+    
+    console.log('Rozpoczynam ładowanie danych topologii...');
+    
+    $.get('/topology/api/visualization/graph', function(data) {
+        console.log('Otrzymane dane:', data);
+        if (data.success) {
+            topologyData = data.data;
+            console.log('Dane topologii załadowane:', topologyData);
+            updateVisualization();
+            updateStatistics();
+            $('#lastUpdated').text(`Ostatnia aktualizacja: ${new Date().toLocaleString()}`);
+        } else {
+            console.error('Błąd API:', data);
+            alert('Błąd podczas ładowania danych topologii');
+        }
+    }).fail(function(xhr, status, error) {
+        console.error('Błąd AJAX:', status, error);
+        alert('Błąd połączenia z serwerem');
+    }).always(function() {
+        $('#loadingIndicator').hide();
+    });
+}
+
+function updateVisualization() {
+    const type = $('#visualizationType').val();
+    
+    // Ukryj wszystkie kontenery
+    $('#networkContainer, #textContainer, #tableContainer').hide();
+    
+    switch (type) {
+        case 'interactive':
+            showInteractiveGraph();
+            break;
+        case 'text':
+            showTextVisualization();
+            break;
+        case 'table':
+            showTableVisualization();
+            break;
+    }
+}
+
+function showInteractiveGraph() {
+    console.log('Pokazuję interaktywny graf...');
+    $('#networkContainer').show();
+    
+    if (!topologyData) {
+        console.error('Brak danych topologii!');
+        return;
+    }
+    
+    console.log('Przygotowuję dane dla vis.js...');
+    console.log('Węzły:', topologyData.nodes.length);
+    console.log('Krawędzie:', topologyData.edges.length);
+    
+    // Sprawdź czy vis.js jest dostępne
+    if (typeof vis === 'undefined') {
+        console.error('Biblioteka vis.js nie jest załadowana!');
+        alert('Błąd: biblioteka vis.js nie jest dostępna. Sprawdź połączenie internetowe.');
+        return;
+    }
+    
+    // Przygotuj dane dla vis.js
+    const nodes = new vis.DataSet(topologyData.nodes.map(node => ({
+        id: node.id,
+        label: $('#showLabels').is(':checked') ? node.name : '',
+        title: `${node.name} (${node.type})`,
+        color: getNodeColor(node),
+        shape: getNodeShape(node),
+        size: 20
+    })));
+    
+    const edges = new vis.DataSet(topologyData.edges.map(edge => ({
+        id: edge.id,
+        from: edge.source,
+        to: edge.target,
+        label: $('#showValveStates').is(':checked') ? edge.valve_state : '',
+        title: `${edge.name} - ${edge.valve_state}`,
+        color: edge.active ? '#28a745' : '#6c757d',
+        width: edge.active ? 3 : 1,
+        dashes: !edge.active
+    })));
+    
+    const data = { nodes: nodes, edges: edges };
+    console.log('Dane vis.js przygotowane:', data);
+    
+    const options = {
+        layout: getLayoutOptions(),
+        physics: {
+            enabled: $('#layoutType').val() === 'force',
+            stabilization: { iterations: 100 }
+        },
+        interaction: {
+            selectConnectedEdges: false,
+            hover: true
+        },
+        nodes: {
+            borderWidth: 2,
+            font: { size: 12 }
+        },
+        edges: {
+            font: { size: 10 }
+        }
+    };
+    
+    // Utwórz sieć
+    const container = document.getElementById('networkContainer');
+    console.log('Kontener:', container);
+    
+    try {
+        network = new vis.Network(container, data, options);
+        console.log('Sieć vis.js utworzona pomyślnie');
+        
+        // Obsługa wydarzeń
+        network.on('click', function(params) {
+            if (params.nodes.length > 0) {
+                showNodeDetails(params.nodes[0]);
+            } else if (params.edges.length > 0) {
+                showEdgeDetails(params.edges[0]);
+            } else {
+                hideSelection();
+            }
+        });
+        
+        network.on('hoverNode', function(params) {
+            container.style.cursor = 'pointer';
+        });
+        
+        network.on('blurNode', function(params) {
+            container.style.cursor = 'default';
+        });
+    } catch (error) {
+        console.error('Błąd podczas tworzenia sieci vis.js:', error);
+        alert('Błąd podczas tworzenia wizualizacji: ' + error.message);
+    }
+}
+
+function showTextVisualization() {
+    $('#textContainer').show();
+    
+    $.get('/topology/api/visualization/text', function(data) {
+        if (data.success) {
+            $('#textVisualization').text(data.data.text);
+        }
+    });
+}
+
+function showTableVisualization() {
+    $('#tableContainer').show();
+    
+    if (!topologyData) return;
+    
+    let tableContent = '';
+    topologyData.edges.forEach(edge => {
+        const sourceNode = topologyData.nodes.find(n => n.id === edge.source);
+        const targetNode = topologyData.nodes.find(n => n.id === edge.target);
+        
+        tableContent += `
+            <tr class="${edge.active ? 'table-success' : 'table-secondary'}">
+                <td>${edge.name}</td>
+                <td>${sourceNode ? sourceNode.name : edge.source}</td>
+                <td>${targetNode ? targetNode.name : edge.target}</td>
+                <td>${edge.valve_state}</td>
+                <td>
+                    <span class="badge badge-${edge.active ? 'success' : 'secondary'}">
+                        ${edge.active ? 'Aktywne' : 'Nieaktywne'}
+                    </span>
+                </td>
+            </tr>
+        `;
+    });
+    
+    $('#connectionsTable tbody').html(tableContent);
+}
+
+function getNodeColor(node) {
+    switch (node.category) {
+        case 'equipment':
+            return {
+                background: '#007bff',
+                border: '#0056b3'
+            };
+        case 'junction':
+            return {
+                background: '#6c757d',
+                border: '#545b62'
+            };
+        default:
+            return {
+                background: '#17a2b8',
+                border: '#138496'
+            };
+    }
+}
+
+function getNodeShape(node) {
+    switch (node.category) {
+        case 'equipment':
+            return 'box';
+        case 'junction':
+            return 'dot';
+        default:
+            return 'ellipse';
+    }
+}
+
+function getLayoutOptions() {
+    const layoutType = $('#layoutType').val();
+    
+    switch (layoutType) {
+        case 'hierarchical':
+            return {
+                hierarchical: {
+                    direction: 'UD',
+                    sortMethod: 'directed'
+                }
+            };
+        case 'circular':
+            return {
+                randomSeed: 2
+            };
+        default:
+            return {};
+    }
+}
+
+function updateNetworkLayout() {
+    if (network) {
+        const options = {
+            layout: getLayoutOptions(),
+            physics: {
+                enabled: $('#layoutType').val() === 'force'
+            }
+        };
+        network.setOptions(options);
+    }
+}
+
+function updateNetworkOptions() {
+    if (network && topologyData) {
+        // Aktualizuj etykiety węzłów
+        const nodes = topologyData.nodes.map(node => ({
+            id: node.id,
+            label: $('#showLabels').is(':checked') ? node.name : ''
+        }));
+        
+        // Aktualizuj etykiety krawędzi
+        const edges = topologyData.edges.map(edge => ({
+            id: edge.id,
+            label: $('#showValveStates').is(':checked') ? edge.valve_state : ''
+        }));
+        
+        network.setData({
+            nodes: new vis.DataSet(nodes),
+            edges: new vis.DataSet(edges)
+        });
+    }
+}
+
+function updateStatistics() {
+    if (!topologyData) return;
+    
+    $('#nodeCount').text(topologyData.nodes.length);
+    $('#edgeCount').text(topologyData.edges.length);
+    
+    const openValves = topologyData.edges.filter(e => e.active).length;
+    const closedValves = topologyData.edges.length - openValves;
+    
+    $('#openValves').text(openValves);
+    $('#closedValves').text(closedValves);
+}
+
+function showNodeDetails(nodeId) {
+    const node = topologyData.nodes.find(n => n.id === nodeId);
+    if (!node) return;
+    
+    let details = `
+        <h6>${node.name}</h6>
+        <table class="table table-sm">
+            <tr><td><strong>Typ:</strong></td><td>${node.type}</td></tr>
+            <tr><td><strong>Kategoria:</strong></td><td>${node.category}</td></tr>
+    `;
+    
+    if (node.status) {
+        details += `<tr><td><strong>Status:</strong></td><td>${node.status}</td></tr>`;
+    }
+    
+    details += '</table>';
+    
+    // Pokaż połączone krawędzie
+    const connectedEdges = topologyData.edges.filter(e => 
+        e.source === nodeId || e.target === nodeId
+    );
+    
+    if (connectedEdges.length > 0) {
+        details += '<h6>Połączenia:</h6><ul class="list-group list-group-flush">';
+        connectedEdges.forEach(edge => {
+            details += `<li class="list-group-item py-1">
+                <small>${edge.name} - ${edge.valve_state}</small>
+            </li>`;
+        });
+        details += '</ul>';
+    }
+    
+    $('#selectionDetails').html(details);
+    $('#selectionCard').show();
+}
+
+function showEdgeDetails(edgeId) {
+    const edge = topologyData.edges.find(e => e.id === edgeId);
+    if (!edge) return;
+    
+    const sourceNode = topologyData.nodes.find(n => n.id === edge.source);
+    const targetNode = topologyData.nodes.find(n => n.id === edge.target);
+    
+    const details = `
+        <h6>${edge.name}</h6>
+        <table class="table table-sm">
+            <tr><td><strong>Od:</strong></td><td>${sourceNode ? sourceNode.name : edge.source}</td></tr>
+            <tr><td><strong>Do:</strong></td><td>${targetNode ? targetNode.name : edge.target}</td></tr>
+            <tr><td><strong>Stan zaworu:</strong></td><td>
+                <span class="badge badge-${edge.active ? 'success' : 'secondary'}">
+                    ${edge.valve_state}
+                </span>
+            </td></tr>
+            <tr><td><strong>Aktywne:</strong></td><td>${edge.active ? 'Tak' : 'Nie'}</td></tr>
+        </table>
+    `;
+    
+    $('#selectionDetails').html(details);
+    $('#selectionCard').show();
+}
+
+function hideSelection() {
+    $('#selectionCard').hide();
+}
+
+function refreshVisualization() {
+    loadTopologyData();
+}
+
+function zoomToFit() {
+    if (network) {
+        network.fit();
+    }
+}
+
+function showSimpleVisualization() {
+    console.log('Pokazuję prostą wizualizację bez vis.js...');
+    $('#networkContainer').show();
+    
+    if (!topologyData) {
+        console.log('Brak danych topologii dla prostej wizualizacji');
+        return;
+    }
+    
+    let html = '<div style="padding: 20px;">';
+    html += '<h4>Mapa Topologii Rurociągu</h4>';
+    html += '<p><em>Uwaga: Interaktywna wizualizacja niedostępna. Ładowanie CDN vis.js może być zablokowane.</em></p>';
+    
+    html += '<h5>Sprzęt:</h5>';
+    html += '<ul>';
+    topologyData.nodes.filter(n => n.category === 'equipment').forEach(node => {
+        const statusText = node.status ? ` (${node.status})` : '';
+        html += `<li><strong>${node.name}</strong> - ${node.type}${statusText}</li>`;
+    });
+    html += '</ul>';
+    
+    html += '<h5>Węzły:</h5>';
+    html += '<ul>';
+    topologyData.nodes.filter(n => n.category === 'junction').forEach(node => {
+        html += `<li><strong>${node.name}</strong></li>`;
+    });
+    html += '</ul>';
+    
+    html += '<h5>Segmenty:</h5>';
+    html += '<ul>';
+    topologyData.edges.forEach(edge => {
+        const sourceNode = topologyData.nodes.find(n => n.id === edge.source);
+        const targetNode = topologyData.nodes.find(n => n.id === edge.target);
+        const status = edge.valve_state === 'OTWARTY' ? '🟢' : '🔴';
+        html += `<li>${status} <strong>${edge.name}</strong>: ${sourceNode?.name} → ${targetNode?.name} (${edge.valve_state})</li>`;
+    });
+    html += '</ul>';
+    
+    html += '</div>';
+    
+    $('#networkContainer').html(html);
+}
+
+function exportVisualization() {
+    if (!topologyData) return;
+    
+    const exportData = {
+        ...topologyData,
+        export_info: {
+            timestamp: new Date().toISOString(),
+            type: $('#visualizationType').val(),
+            layout: $('#layoutType').val()
+        }
+    };
+    
+    const dataStr = JSON.stringify(exportData, null, 2);
+    const dataBlob = new Blob([dataStr], {type: 'application/json'});
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `topology_visualization_${new Date().toISOString().split('T')[0]}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+}
+</script>
+
+<style>
+#networkContainer {
+    border: 1px solid #dee2e6;
+    border-radius: 0.25rem;
+    min-height: 500px;
+    background-color: #ffffff;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+}
+
+.table-responsive {
+    max-height: 550px;
+}
+
+#textVisualization {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+.spinner-border {
+    width: 3rem;
+    height: 3rem;
+}
+</style>
+{% endblock %}

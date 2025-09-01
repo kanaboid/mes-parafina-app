@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+
+{% block title %}Zarządzanie Apollo{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Panel Zarządzania Apollo</h1>
+        <button id="refresh-apollo-status" class="btn btn-secondary">Odśwież</button>
+    </div>
+
+    <!-- Kontener na statusy poszczególnych Apollo -->
+    <div id="apollo-status-container" class="row g-4">
+        <!-- Karty Apollo będą wstawiane tutaj przez JavaScript -->
+    </div>
+
+    <hr class="my-5">
+
+    <!-- Sekcja aktywnych transferów -->
+    <div class="card">
+        <div class="card-header">
+            <h3>Aktywne transfery z Apollo</h3>
+        </div>
+        <div class="card-body">
+            <div id="active-transfers-container" class="list-group">
+                <p id="no-active-transfers" class="text-muted">Brak aktywnych transferów.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ========= MODALE ========= -->
+
+<!-- Modal: Rozpocznij nową sesję -->
+<div class="modal fade" id="start-session-modal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Rozpocznij nową sesję w <span class="fw-bold" id="start-session-apollo-name"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        
+        <form id="start-session-form">
+          <input type="hidden" id="start-session-apollo-id">
+          <div class="mb-3">
+            <label for="start-session-surowiec-type" class="form-label">Typ surowca:</label>
+            <input type="text" class="form-control" id="start-session-surowiec-type" required>
+          </div>
+          <div class="mb-3">
+            <label for="start-session-waga-kg" class="form-label">Początkowa waga (kg):</label>
+            <input type="number" class="form-control" id="start-session-waga-kg" step="0.01" required>
+          </div>
+          <button type="submit" class="btn btn-primary">Rozpocznij sesję</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Dodaj surowiec -->
+<div class="modal fade" id="add-surowiec-modal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Dodaj surowiec do <span class="fw-bold" id="add-surowiec-apollo-name"></span></h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <form id="add-surowiec-form">
+            <input type="hidden" id="add-surowiec-apollo-id">
+            <div class="mb-3">
+              <label for="add-surowiec-waga-kg" class="form-label">Dodawana waga (kg):</label>
+              <input type="number" class="form-control" id="add-surowiec-waga-kg" step="0.01" required>
+            </div>
+            <button type="submit" class="btn btn-primary">Dodaj</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<!-- Modal: Rozpocznij transfer -->
+<div class="modal fade" id="start-transfer-modal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Nowy transfer z <span class="fw-bold" id="start-transfer-apollo-name"></span></h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          
+          <form id="start-transfer-form">
+            <input type="hidden" id="start-transfer-apollo-id">
+            <div class="mb-3">
+              <label class="form-label">Wybierz cel:</label>
+              <div id="destination-radios-container" class="list-group">
+                <!-- Przyciski radio będą wstawiane tutaj przez JavaScript -->
+              </div>
+            </div>
+            <div id="start-transfer-error" class="alert alert-danger d-none"></div>
+            <button type="submit" class="btn btn-success">Rozpocznij transfer</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<!-- Modal: Zakończ transfer -->
+<div class="modal fade" id="end-transfer-modal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="endTransferModalLabel">Zakończ transfer</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="end-transfer-form">
+          <input type="hidden" id="end-operation-id">
+          <div class="mb-3">
+            <label for="final-weight-input" class="form-label">Rzeczywista waga transferu (kg):</label>
+            <input type="number" class="form-control" id="final-weight-input" step="0.01" required>
+          </div>
+          <button type="submit" class="btn btn-success">Zakończ i zapisz</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Historia roztankowań -->
+<div class="modal fade" id="history-modal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Historia roztankowań dla <span class="fw-bold" id="history-apollo-name"></span></h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+            <table class="table table-striped table-hover">
+                <thead>
+                    <tr>
+                        <th scope="col">Czas zakończenia</th>
+                        <th scope="col">Ilość [kg]</th>
+                        <th scope="col">Cel</th>
+                    </tr>
+                </thead>
+                <tbody id="history-table-body">
+                    <!-- Wiersze historii będą wstawiane tutaj -->
+                </tbody>
+            </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<!-- NOWY MODAL: Historia ZAŁADUNKÓW -->
+<div class="modal fade" id="loading-history-modal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Historia załadunku dla sesji w <span class="fw-bold" id="loading-history-apollo-name"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+          <table class="table table-striped table-hover">
+              <thead>
+                  <tr>
+                      <th scope="col">Czas zdarzenia</th>
+                      <th scope="col">Typ zdarzenia</th>
+                      <th scope="col">Waga [kg]</th>
+                      <th scope="col">Operator</th>
+                      <th scope="col">Uwagi</th>
+                  </tr>
+              </thead>
+              <tbody id="loading-history-table-body">
+                  <!-- Wiersze historii będą wstawiane tutaj -->
+              </tbody>
+          </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/operacje_apollo.js') }}"></script>
+{% endblock %} 

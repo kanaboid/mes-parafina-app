@@ -1,0 +1,396 @@
+{% extends "base.html" %}
+
+{% block title %}Aktywne Partie - System MES{% endblock %}
+
+{% block extra_head %}
+    <style>
+        .partie-container {
+            padding: 20px;
+        }
+        
+        .partie-filters {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .partie-table {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .table-responsive {
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        
+        .status-badge {
+            font-size: 0.8rem;
+            padding: 4px 8px;
+        }
+        
+        .waga-progress {
+            width: 100px;
+            height: 6px;
+            background: #e9ecef;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        
+        .waga-progress-bar {
+            height: 100%;
+            background: linear-gradient(45deg, #28a745, #20c997);
+            transition: width 0.3s ease;
+        }
+        
+        .time-info {
+            font-size: 0.85rem;
+        }
+        
+        .time-info .time-value {
+            font-weight: bold;
+        }
+        
+        .time-warning {
+            color: #fd7e14;
+        }
+        
+        .time-danger {
+            color: #dc3545;
+        }
+        
+        .time-success {
+            color: #28a745;
+        }
+        
+        .partia-row {
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+        
+        .partia-row:hover {
+            background-color: #f8f9fa;
+        }
+        
+        .partia-row.selected {
+            background-color: #e3f2fd;
+        }
+        
+        .action-buttons {
+            display: flex;
+            gap: 5px;
+        }
+        
+        .btn-sm {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.8rem;
+        }
+        
+        .operation-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 5px;
+        }
+        
+        .operation-active {
+            background-color: #28a745;
+            animation: pulse 2s infinite;
+        }
+        
+        .operation-waiting {
+            background-color: #ffc107;
+        }
+        
+        .operation-none {
+            background-color: #6c757d;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        .loading-skeleton {
+            background: linear-gradient(90deg, #f0f0f0 25%, transparent 37%, #f0f0f0 63%);
+            background-size: 400% 100%;
+            animation: loading 1.4s ease-in-out infinite;
+        }
+        
+        @keyframes loading {
+            0% { background-position: 100% 50%; }
+            100% { background-position: -100% 50%; }
+        }
+        
+        .details-panel {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            padding: 20px;
+            margin-top: 20px;
+            display: none;
+        }
+        
+        .details-panel.show {
+            display: block;
+            animation: slideIn 0.3s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .historia-timeline {
+            position: relative;
+            padding-left: 30px;
+        }
+        
+        .historia-timeline::before {
+            content: '';
+            position: absolute;
+            left: 10px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: #dee2e6;
+        }
+        
+        .timeline-item {
+            position: relative;
+            margin-bottom: 20px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 5px;
+        }
+        
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -25px;
+            top: 15px;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #007bff;
+            border: 2px solid white;
+        }
+        
+        .timeline-item.completed::before {
+            background: #28a745;
+        }
+        
+        .timeline-item.active::before {
+            background: #ffc107;
+            animation: pulse 2s infinite;
+        }
+        
+        .search-highlight {
+            background-color: #fff3cd;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+        
+        .stats-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .stats-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        
+        .stats-card .number {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #007bff;
+        }
+        
+        .stats-card .label {
+            font-size: 0.9rem;
+            color: #6c757d;
+            margin-top: 5px;
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+<div class="partie-container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-clipboard-data"></i> Aktywne Partie w Systemie</h2>
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-primary btn-sm" onclick="odswiezPartie()">
+                <i class="bi bi-arrow-clockwise"></i> Odśwież
+            </button>
+            <button class="btn btn-outline-secondary btn-sm" onclick="exportujCSV()">
+                <i class="bi bi-download"></i> Eksport CSV
+            </button>
+        </div>
+    </div>
+
+    <!-- Statystyki -->
+    <div class="stats-cards" id="stats-container">
+        <!-- Statystyki będą tutaj wstawione przez JavaScript -->
+    </div>
+
+    <!-- Filtry -->
+    <div class="partie-filters">
+        <div class="row align-items-end">
+            <div class="col-md-3">
+                <label class="form-label">Wyszukaj partię:</label>
+                <input type="text" class="form-control" id="search-input" placeholder="Kod partii, nazwa, typ surowca...">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Status:</label>
+                <select class="form-select" id="status-filter">
+                    <option value="">Wszystkie</option>
+                    <option value="W magazynie brudnym">W magazynie brudnym</option>
+                    <option value="Surowy w reaktorze">Surowy w reaktorze</option>
+                    <option value="Budowanie placka">Budowanie placka</option>
+                    <option value="Przelewanie">Przelewanie</option>
+                    <option value="Filtrowanie">Filtrowanie</option>
+                    <option value="Oczekiwanie na ocenę">Oczekiwanie na ocenę</option>
+                    <option value="Do ponownej filtracji">Do ponownej filtracji</option>
+                    <option value="Dobielanie">Dobielanie</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Typ surowca:</label>
+                <select class="form-select" id="typ-filter">
+                    <option value="">Wszystkie</option>
+                    <!-- Opcje będą dodane dynamicznie -->
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Lokalizacja:</label>
+                <select class="form-select" id="lokalizacja-filter">
+                    <option value="">Wszystkie</option>
+                    <!-- Opcje będą dodane dynamicznie -->
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Z operacją:</label>
+                <select class="form-select" id="operacja-filter">
+                    <option value="">Wszystkie</option>
+                    <option value="aktywna">Tylko aktywne</option>
+                    <option value="brak">Bez operacji</option>
+                </select>
+            </div>
+            <div class="col-md-1">
+                <button class="btn btn-outline-secondary btn-sm w-100" onclick="wyczyscFiltry()">
+                    <i class="bi bi-x-circle"></i> Wyczyść
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabela partii -->
+    <div class="partie-table">
+        <div class="table-responsive">
+            <table class="table table-hover table-striped mb-0">
+                <thead class="table-dark sticky-top">
+                    <tr>
+                        <th width="5%">
+                            <input type="checkbox" id="select-all" onchange="toggleSelectAll()">
+                        </th>
+                        <th width="12%">Kod Partii</th>
+                        <th width="10%">Nazwa</th>
+                        <th width="8%">Typ Surowca</th>
+                        <th width="12%">Status</th>
+                        <th width="8%">Waga</th>
+                        <th width="10%">Lokalizacja</th>
+                        <th width="10%">Czas w systemie</th>
+                        <th width="10%">Operacja</th>
+                        <th width="15%">Akcje</th>
+                    </tr>
+                </thead>
+                <tbody id="partie-table-body">
+                    <!-- Partie będą wstawione tutaj przez JavaScript -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Panel szczegółów -->
+    <div class="details-panel" id="details-panel">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h4 id="details-title">Szczegóły partii</h4>
+            <button class="btn btn-outline-secondary btn-sm" onclick="zamknijSzczegoly()">
+                <i class="bi bi-x"></i> Zamknij
+            </button>
+        </div>
+        <div id="details-content">
+            <!-- Szczegóły będą tutaj wstawione -->
+        </div>
+    </div>
+</div>
+
+<!-- Modal edycji statusu -->
+<div class="modal fade" id="editStatusModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Zmień Status Partii</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="edit-status-form">
+                    <input type="hidden" id="edit-partia-id">
+                    <div class="mb-3">
+                        <label class="form-label">Aktualny kod partii:</label>
+                        <div id="edit-current-code" class="fw-bold"></div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Nowy status:</label>
+                        <select class="form-select" id="edit-new-status" required>
+                            <option value="">-- Wybierz nowy status --</option>
+                            <option value="W magazynie brudnym">W magazynie brudnym</option>
+                            <option value="Surowy w reaktorze">Surowy w reaktorze</option>
+                            <option value="Budowanie placka">Budowanie placka</option>
+                            <option value="Przelewanie">Przelewanie</option>
+                            <option value="Filtrowanie">Filtrowanie</option>
+                            <option value="Oczekiwanie na ocenę">Oczekiwanie na ocenę</option>
+                            <option value="Do ponownej filtracji">Do ponownej filtracji</option>
+                            <option value="Dobielanie">Dobielanie</option>
+                            <option value="Gotowy do wysłania">Gotowy do wysłania</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Komentarz (opcjonalnie):</label>
+                        <textarea class="form-control" id="edit-comment" rows="3" placeholder="Dodatkowe informacje o zmianie statusu..."></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Anuluj</button>
+                <button type="button" class="btn btn-primary" onclick="zapiszZmianeStatusu()">
+                    <i class="bi bi-check-circle"></i> Zapisz zmiany
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+<script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+<script src="{{ url_for('static', filename='js/aktywne_partie.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,16 @@
+# Virtual Environment
+venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# IDE files
+.vscode/
+.idea/
+*.env
+Camera/
+.dockerignore
+.dockerfile
+node_modules/
+instance/

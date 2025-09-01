@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block title %}Roztankowanie Cystern{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Panel Roztankowania Cystern</h1>
+        <button id="refresh-cysterny-status" class="btn btn-secondary">Odśwież</button>
+    </div>
+
+    <!-- Kontener na statusy poszczególnych cystern -->
+    <div id="cysterny-status-container" class="row g-4">
+        <!-- Karty cystern będą wstawiane tutaj przez JavaScript -->
+    </div>
+
+    <hr class="my-5">
+
+    <!-- Sekcja aktywnych transferów -->
+    <div class="card">
+        <div class="card-header">
+            <h3>Aktywne operacje roztankowania</h3>
+        </div>
+        <div class="card-body">
+            <div id="active-transfers-container" class="list-group">
+                <p id="no-active-transfers" class="text-muted">Brak aktywnych operacji.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ========= MODALE ========= -->
+
+<!-- Modal: Rozpocznij transfer z cysterny -->
+<div class="modal fade" id="start-transfer-modal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Nowe roztankowanie z <span class="fw-bold" id="start-transfer-cysterna-name"></span></h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <form id="start-transfer-form">
+            <input type="hidden" id="start-transfer-cysterna-id">
+            <div class="mb-3">
+              <label class="form-label">Wybierz cel transferu:</label>
+              <div id="destination-radios-container" class="list-group">
+                <!-- Przyciski radio z dostępnymi zbiornikami będą wstawiane tutaj -->
+              </div>
+            </div>
+            <button type="submit" class="btn btn-success">Rozpocznij operację</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<!-- Modal: Zakończ transfer z cysterny -->
+<div class="modal fade" id="end-transfer-modal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="endTransferModalLabel">Zakończ operację roztankowania</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="end-transfer-form">
+          <input type="hidden" id="end-operation-id">
+          <p><strong>Operacja ID:</strong> <span id="end-transfer-operation-id-display"></span></p>
+          <hr>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="end-transfer-typ-surowca" class="form-label">Typ surowca <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="end-transfer-typ-surowca" required>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="end-transfer-waga-netto" class="form-label">Waga netto (kg) <span class="text-danger">*</span></label>
+              <input type="number" class="form-control" id="end-transfer-waga-netto" step="0.01" required>
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="end-transfer-nr-rejestracyjny" class="form-label">Nr. rejestracyjny pojazdu <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="end-transfer-nr-rejestracyjny" required>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="end-transfer-nr-dokumentu" class="form-label">Nr. dokumentu dostawy (WZ/faktura) <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="end-transfer-nr-dokumentu" required>
+            </div>
+          </div>
+          <div class="mb-3">
+            <label for="end-transfer-dostawca" class="form-label">Nazwa dostawcy <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="end-transfer-dostawca" required>
+          </div>
+          <button type="submit" class="btn btn-success">Zakończ i zapisz partię</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="{{ url_for('static', filename='js/operacje_cysterny.js') }}"></script>
+{% endblock %} 

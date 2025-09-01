@@ -1,0 +1,264 @@
+body { font-family: sans-serif; margin: 0; background-color: #f4f4f4; color: #333; overflow-anchor: none; /* <<< DODAJ TĘ LINIĘ >>> */
+}
+header { background-color: #2c3e50; color: white; padding: 1rem; text-align: center; }
+main { padding: 1rem 2rem; }
+section { background-color: white; padding: 1.5rem; margin-bottom: 1.5rem; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+h2 { color: #2980b9; border-bottom: 2px solid #ecf0f1; padding-bottom: 0.5rem; }
+.grid-container { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 1rem; }
+.sprzet-item { border: 1px solid #ddd; padding: 1rem; border-radius: 5px; text-align: center; background-color: #fafafa; }
+.sprzet-item strong { font-size: 1.1rem; color: #34495e; }
+.sprzet-item span { color: #7f8c8d; font-size: 0.9rem; }
+.operation-form button { background-color: #27ae60; color: white; border: none; padding: 0.8rem 1.5rem; font-size: 1rem; border-radius: 5px; cursor: pointer; }
+.operation-form button:hover { background-color: #2ecc71; }
+#log-output { background-color: #333; color: #0f0; font-family: monospace; padding: 1rem; height: 200px; overflow-y: scroll; white-space: pre-wrap; border-radius: 5px; }
+
+
+
+/* Style dla zaworów */
+.valve-item {
+    border: 2px solid #ccc;
+    padding: 1rem;
+    border-radius: 5px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s ease-in-out;
+}
+.valve-item strong { pointer-events: none; } /* Żeby kliknięcie na tekst też działało */
+
+.valve-item.otwarty {
+    background-color: #2ecc71; /* Zielony */
+    color: white;
+    border-color: #27ae60;
+}
+.valve-item.zamkniety {
+    background-color: #e74c3c; /* Czerwony */
+    color: white;
+    border-color: #c0392b;
+}
+.valve-item:hover {
+    transform: scale(1.05);
+}
+
+/* Style dla tabeli operacji */
+#operations-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 1rem;
+}
+#operations-table th, #operations-table td {
+    border: 1px solid #ddd;
+    padding: 0.8rem;
+    text-align: left;
+}
+#operations-table th {
+    background-color: #ecf0f1;
+    color: #34495e;
+}
+#operations-table tr:nth-child(even) {
+    background-color: #f9f9f9;
+}
+.end-operation-btn {
+    background-color: #e74c3c;
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 5px;
+    cursor: pointer;
+}
+.end-operation-btn:hover {
+    background-color: #c0392b;
+}
+
+/* app/static/css/style.css */
+#visualization-section .mermaid svg {
+    max-width: 100%;
+    height: auto;
+}
+
+#visualization-section .mermaid, #flowchart-section .mermaid {
+    min-height: 400px; /* Dostosuj tę wartość w razie potrzeby */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #fdfdfd;
+    border: 1px dashed #ccc;
+    border-radius: 5px;
+}
+
+#visualization-section .mermaid svg, #flowchart-section .mermaid svg {
+    max-width: 100%;
+    height: auto;
+}
+
+/* app/static/css/style.css */
+
+.partia-info {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #eee;
+    font-size: 0.85rem;
+    text-align: left;
+    color: #555;
+}
+.partia-info hr { display: none; } /* Ukrywamy <hr> i używamy border-top */
+.partia-info strong {
+    color: #2c3e50;
+}
+
+.status-tags {
+    font-style: italic;
+    color: #2980b9;
+}
+
+/* Style dla alarmów */
+.alarm-section {
+    margin: 20px;
+    padding: 15px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.alarm-container {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.alarm-item {
+    padding: 10px;
+    border-radius: 4px;
+    display: grid;
+    grid-template-columns: auto 1fr auto auto auto;
+    gap: 10px;
+    align-items: center;
+}
+
+.alarm-item.aktywny {
+    background-color: #ffe0e0;
+    border-left: 4px solid #dc3545;
+}
+
+.alarm-item.potwierdzony {
+    background-color: #fff3cd;
+    border-left: 4px solid #ffc107;
+}
+
+.alarm-item.zakonczony {
+    background-color: #d4edda;
+}
+
+.alarm-item button {
+    padding: 5px 10px;
+    border: none;
+    border-radius: 4px;
+    background: #dc3545;
+    color: white;
+    cursor: pointer;
+}
+
+.alarm-type {
+    font-weight: bold;
+    color: #dc3545;
+}
+
+/* Style dla wykresów */
+.charts-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 20px;
+    padding: 20px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    margin: 20px;
+}
+
+.chart-wrapper {
+    background: white;
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.chart-wrapper h3 {
+    color: #333;
+    margin-bottom: 15px;
+    font-size: 1.1em;
+    border-bottom: 2px solid #eee;
+    padding-bottom: 5px;
+}
+
+/* Style dla kontroli temperatury */
+.temperature-control {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    margin: 20px;
+}
+
+.temperature-control h3 {
+    margin-bottom: 15px;
+    color: #333;
+}
+
+#temperature-form {
+    display: grid;
+    gap: 15px;
+    max-width: 400px;
+}
+
+#temperature-form input[type="number"] {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+#temperature-form button {
+    background: #28a745;
+    color: white;
+    border: none;
+    padding: 10px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+#temperature-form button:hover {
+    background: #218838;
+}
+
+/* Nawigacja główna */
+.main-navigation {
+    background-color: #34495e;
+    padding: 1rem;
+    display: flex;
+    gap: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+}
+
+.nav-link {
+    color: white;
+    text-decoration: none;
+    padding: 0.5rem 1rem;
+    border-radius: 5px;
+    transition: background-color 0.3s ease;
+    font-weight: 500;
+}
+
+.nav-link:hover {
+    background-color: #2c3e50;
+    color: #3498db;
+}
+
+.nav-link:active, .nav-link.active {
+    background-color: #3498db;
+    color: white;
+}
+
+/* Custom Toastify width */
+.info-toast {
+    max-width: 350px;
+    width: 100%;
+}

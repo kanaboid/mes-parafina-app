@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <title>Konsola Administracyjna</title>
+    <style>
+        body { font-family: monospace; background: #282c34; color: #abb2bf; padding: 1em; }
+        #console-output { height: 80vh; overflow-y: scroll; border: 1px solid #3b4048; padding: 1em; margin-bottom: 1em; }
+        #console-input-container { display: flex; }
+        #console-input { flex-grow: 1; background: #3b4048; border: none; color: #abb2bf; padding: 0.5em; }
+        .server-response { color: #61afef; }
+        .client-command { color: #98c379; }
+        .error-response { color: #e06c75; }
+    </style>
+    <!-- Biblioteka Socket.IO z CDN -->
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+</head>
+<body>
+    <div id="console-output"></div>
+    <div id="console-input-container">
+        <span>&gt;&nbsp;</span>
+        <input type="text" id="console-input" autofocus>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const output = document.getElementById('console-output');
+            const input = document.getElementById('console-input');
+            
+            const socket = io();
+    
+            function logToConsole(message, className = 'server-response') {
+                const pre = document.createElement('pre'); // Używamy <pre> dla zachowania formatowania
+                pre.textContent = message;
+                pre.className = className;
+                output.appendChild(pre);
+                output.scrollTop = output.scrollHeight;
+            }
+    
+            socket.on('connect', () => {
+                console.log('Połączono z serwerem Socket.IO!');
+            });
+    
+            // Obsługa wiadomości z serwera
+            socket.on('response', (msg) => {
+                // Sprawdzamy, czy serwer oznaczył wiadomość jako błąd
+                const className = msg.is_error ? 'error-response' : 'server-response';
+                logToConsole(msg.data, className);
+            });
+    
+            // Obsługa wysyłania komend
+            input.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter' && input.value.trim() !== '') {
+                    const command = input.value;
+                    logToConsole(`> ${command}`, 'client-command');
+                    // --- ZMIANA NAZWY ZDARZENIA ---
+                    socket.emit('command_from_client', { data: command });
+                    input.value = '';
+                }
+            });
+        });
+    </script>
+</body>
+</html>
