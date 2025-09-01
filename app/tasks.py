@@ -24,7 +24,6 @@ if "REDIS_URL" not in os.environ:
 celery_socketio = SocketIO(message_queue=REDIS_URL)
 
 @celery.task(name='app.tasks.read_sensors_task')
-@profile
 def read_sensors_task():
     """
     Zadanie Celery do odczytu danych z czujników.

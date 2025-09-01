@@ -46,13 +46,13 @@ celery.autodiscover_tasks(['app.tasks'])
 
 # Tutaj zdefiniujemy zadania cykliczne używając Celery Beat
 # UWAGA: Tymczasowo wyłączone na czas profilowania pamięci
-# celery.conf.beat_schedule = {
-#     'read-sensors-every-5-seconds': {
-#         'task': 'app.tasks.read_sensors_task',
-#         'schedule': 5.0,
-#     },
-#     'check-alarms-every-5-seconds': {
-#         'task': 'app.tasks.check_alarms_task',
-#         'schedule': 5.0,
-#     },
-# }
+celery.conf.beat_schedule = {
+    'read-sensors-every-5-seconds': {
+        'task': 'app.tasks.read_sensors_task',
+        'schedule': 5.0,
+    },
+    'check-alarms-every-5-seconds': {
+        'task': 'app.tasks.check_alarms_task',
+        'schedule': 5.0,
+    },
+}
