@@ -16,6 +16,7 @@ pytz
 Flask-Admin
 celery
 redis
+memory-profiler
 
 # Linux
 gunicorn

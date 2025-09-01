@@ -7,6 +7,7 @@ from .sockets import broadcast_dashboard_update
 from datetime import datetime
 import os
 from flask_socketio import SocketIO
+from memory_profiler import profile
 
 # Ustal adres URL brokera Redis
 REDIS_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
@@ -23,11 +24,13 @@ if "REDIS_URL" not in os.environ:
 celery_socketio = SocketIO(message_queue=REDIS_URL)
 
 @celery.task(name='app.tasks.read_sensors_task')
+@profile
 def read_sensors_task():
     """
     Zadanie Celery do odczytu danych z czujników.
+    Używa memory_profiler do logowania zużycia pamięci.
     """
-    print(f"\n--- [PID: {os.getpid()}] CELERY TASK: Uruchamiam read_sensors_task o {datetime.now()} ---")
+    print(f"\n--- [PID: {os.getpid()}] CELERY TASK: Uruchamiam read_sensors_task (z profilowaniem pamięci) o {datetime.now()} ---")
     try:
         # Serwisy są już zainicjowane w celery_app.py, więc możemy ich używać
         sensor_service = SensorService()

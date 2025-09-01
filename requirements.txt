@@ -79,6 +79,8 @@ markupsafe==3.0.2
     #   mako
     #   werkzeug
     #   wtforms
+memory-profiler==0.61.0
+    # via -r requirements.in
 mysql-connector-python==9.3.0
     # via -r requirements.in
 networkx==3.5
@@ -92,6 +94,8 @@ pluggy==1.6.0
     # via pytest
 prompt-toolkit==3.0.52
     # via click-repl
+psutil==7.0.0
+    # via memory-profiler
 pygments==2.19.2
     # via pytest
 pytest==8.4.1
