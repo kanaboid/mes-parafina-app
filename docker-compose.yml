@@ -7,7 +7,7 @@ services:
     restart: always
     command: gunicorn --worker-class eventlet -w 1 --bind 0.0.0.0:5000 --reload --preload "run:app"
     ports:
-      - "8080:5000" # Aplikacja webowa
+      - "8080:5000" # Aplikacja webowa powinna być dostępna na porcie 8080
     volumes:
       - .:/app
     environment:
