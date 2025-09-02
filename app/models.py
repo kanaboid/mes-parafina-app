@@ -177,6 +177,7 @@ class ApolloSesje(db.Model):
     czas_zakonczenia: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime)
     rozpoczeta_przez: Mapped[Optional[str]] = mapped_column(String(255, 'utf8mb4_unicode_ci'))
     uwagi: Mapped[Optional[str]] = mapped_column(Text(collation='utf8mb4_unicode_ci'))
+    #uwagi_do_kolektora: Mapped[Optional[str]] = mapped_column(Text(collation='utf8mb4_unicode_ci'))
 
     sprzet: Mapped['Sprzet'] = relationship('Sprzet', back_populates='apollo_sesje')
     operacje_log: Mapped[List['OperacjeLog']] = relationship('OperacjeLog', back_populates='apollo_sesje')
