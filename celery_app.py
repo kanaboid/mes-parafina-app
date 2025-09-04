@@ -45,14 +45,32 @@ celery.autodiscover_tasks(['app.tasks'])
 # --------------------------------------------------------------------
 
 # Tutaj zdefiniujemy zadania cykliczne używając Celery Beat
-# UWAGA: Tymczasowo wyłączone na czas profilowania pamięci
-celery.conf.beat_schedule = {
-    'read-sensors-every-5-seconds': {
+# Interwały można kontrolować przez zmienne środowiskowe
+
+# Pobierz interwały z zmiennych środowiskowych (domyślnie: 10s i 5s)
+SENSORS_INTERVAL = float(os.environ.get('SENSORS_INTERVAL', '10.0'))
+ALARMS_INTERVAL = float(os.environ.get('ALARMS_INTERVAL', '5.0'))
+
+# Sprawdź czy zadania są włączone (domyślnie: włączone)
+SENSORS_ENABLED = os.environ.get('SENSORS_ENABLED', 'true').lower() == 'true'
+ALARMS_ENABLED = os.environ.get('ALARMS_ENABLED', 'true').lower() == 'true'
+
+print(f"DEBUG: SENSORS_INTERVAL={SENSORS_INTERVAL}s, SENSORS_ENABLED={SENSORS_ENABLED}")
+print(f"DEBUG: ALARMS_INTERVAL={ALARMS_INTERVAL}s, ALARMS_ENABLED={ALARMS_ENABLED}")
+
+# Buduj harmonogram na podstawie zmiennych środowiskowych
+beat_schedule = {}
+
+if SENSORS_ENABLED:
+    beat_schedule['read-sensors-periodic'] = {
         'task': 'app.tasks.read_sensors_task',
-        'schedule': 10.0,
-    },
-    'check-alarms-every-5-seconds': {
+        'schedule': SENSORS_INTERVAL,
+    }
+
+if ALARMS_ENABLED:
+    beat_schedule['check-alarms-periodic'] = {
         'task': 'app.tasks.check_alarms_task',
-        'schedule': 5.0,
-    },
-}
+        'schedule': ALARMS_INTERVAL,
+    }
+
+celery.conf.beat_schedule = beat_schedule

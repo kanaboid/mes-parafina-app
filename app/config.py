@@ -27,6 +27,7 @@ class Config:
     )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     TESTING = False
+    CELERY_BEAT_DBURI = SQLALCHEMY_DATABASE_URI
 
 class ProdConfig(Config):
     """Konfiguracja produkcyjna"""

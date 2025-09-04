@@ -55,18 +55,41 @@ services:
   celery-worker:
     build: .
     restart: always
-    command: ["celery", "-A", "celery_app.celery", "worker", "-B", "-l", "info"]
+    command: ["celery", "-A", "celery_app.celery", "worker", "-B", "-E", "-l", "info"]
     environment:
       - SECRET_KEY=${SECRET_KEY}
       - MYSQLUSER=${MYSQLUSER}
       - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
       - MYSQLHOST=db
+      - REDIS_URL=redis://redis:6379/0
+      - SENSORS_INTERVAL=${SENSORS_INTERVAL:-10.0}
+      - ALARMS_INTERVAL=${ALARMS_INTERVAL:-5.0}
+      - SENSORS_ENABLED=${SENSORS_ENABLED:-true}
+      - ALARMS_ENABLED=${ALARMS_ENABLED:-true}
     networks:
       - mes-parafina-net
     volumes:
       - .:/app
     depends_on:
       - web
+      - redis
+
+  flower:
+    build: .
+    restart: always
+    command: ["celery", "-A", "celery_app.celery", "flower", "--port=5555", "--broker=redis://redis:6379/0", "--persistent=true"]
+    ports:
+      - "5555:5555"
+    environment:
+      - SECRET_KEY=${SECRET_KEY}
+      - MYSQLUSER=${MYSQLUSER}
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - MYSQLHOST=db
+      - REDIS_URL=redis://redis:6379/0
+      - FLOWER_UNAUTHENTICATED_API=true
+    networks:
+      - mes-parafina-net
+    depends_on:
       - redis
 
 # Definicja sieci
