@@ -19,7 +19,7 @@ from logging.handlers import RotatingFileHandler
 pathfinder = PathFinder()
 monitoring = MonitoringService()
 sensor_service = SensorService()
-# scheduler = APScheduler()
+
 
 # Globalne referencje do zadań schedulera
 scheduler_jobs = {}
@@ -29,8 +29,8 @@ scheduler_jobs = {}
 
 def create_app(config_class=None):
     # --- KROK 1: WŁĄCZENIE SZCZEGÓŁOWEGO LOGOWANIA ---
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    logging.getLogger('apscheduler').setLevel(logging.DEBUG)
+    #logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    
     # ----------------------------------------------------
 
     app = Flask(__name__)

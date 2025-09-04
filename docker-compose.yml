@@ -63,6 +63,8 @@ services:
       - MYSQLHOST=db
     networks:
       - mes-parafina-net
+    volumes:
+      - .:/app
     depends_on:
       - web
       - redis

@@ -49,7 +49,7 @@ celery.autodiscover_tasks(['app.tasks'])
 celery.conf.beat_schedule = {
     'read-sensors-every-5-seconds': {
         'task': 'app.tasks.read_sensors_task',
-        'schedule': 5.0,
+        'schedule': 10.0,
     },
     'check-alarms-every-5-seconds': {
         'task': 'app.tasks.check_alarms_task',

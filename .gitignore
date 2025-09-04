@@ -14,3 +14,4 @@ Camera/
 .dockerfile
 node_modules/
 instance/
+celerybeat-schedule
