@@ -100,6 +100,13 @@ def create_app(config_class=None):
     pathfinder_service.init_app(app)
     sensor_service.init_app(app)
     monitoring.init_app(app)
+    
+    # Rejestrujemy serwisy w extensions
+    app.extensions['pathfinder'] = pathfinder_service
+    app.extensions['sensor_service'] = sensor_service
+    app.extensions['monitoring'] = monitoring
+    
+    print(f"DEBUG: Registered extensions: {list(app.extensions.keys())}")
 
     # --- CAŁY BLOK LOGIKI STARTOWEJ SCHEDULERA JEST USUWANY ---
 

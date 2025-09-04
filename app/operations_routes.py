@@ -19,7 +19,17 @@ bp = Blueprint('operations', __name__, url_prefix='/api/operations')
 
 def get_pathfinder():
     """Pobiera instancję serwisu PathFinder z kontekstu aplikacji."""
-    return current_app.extensions['pathfinder']
+    print(f"DEBUG: get_pathfinder() called")
+    print(f"DEBUG: current_app.extensions keys: {list(current_app.extensions.keys())}")
+    
+    if 'pathfinder' not in current_app.extensions:
+        print(f"ERROR: 'pathfinder' not found in current_app.extensions")
+        print(f"Available extensions: {list(current_app.extensions.keys())}")
+        raise KeyError("'pathfinder' not found in current_app.extensions")
+    
+    pathfinder = current_app.extensions['pathfinder']
+    print(f"DEBUG: pathfinder retrieved: {type(pathfinder)}")
+    return pathfinder
 
 # Endpoint do tworzenia nowej partii przez tankowanie
 
@@ -275,11 +285,14 @@ def dobielanie():
 @bp.route('/apollo-transfer/start', methods=['POST'])
 def start_apollo_transfer():
     """Rozpoczyna operację transferu z Apollo, blokując zasoby w `log_uzyte_segmenty`."""
+    print(f"DEBUG: start_apollo_transfer() called")
     data = request.get_json()
+    print(f"DEBUG: Received data: {data}")
     
     id_zrodla = data['id_zrodla']
     id_celu = data['id_celu']
     operator = data.get('operator', 'SYSTEM')
+    print(f"DEBUG: id_zrodla={id_zrodla}, id_celu={id_celu}, operator={operator}")
     
     conn = None
     read_cursor = None
@@ -301,12 +314,21 @@ def start_apollo_transfer():
         if cel['stan_sprzetu'] != 'Pusty':
             print(f"OSTRZEŻENIE: Cel operacji {cel['nazwa_unikalna']} nie jest pusty (stan: {cel['stan_sprzetu']}).")
 
+        print(f"DEBUG: About to call get_pathfinder()")
         pathfinder = get_pathfinder()
+        print(f"DEBUG: pathfinder retrieved successfully: {type(pathfinder)}")
+        
         punkt_startowy = f"{zrodlo['nazwa_unikalna']}_OUT"
         punkt_docelowy = f"{cel['nazwa_unikalna']}_IN"
+        print(f"DEBUG: punkt_startowy={punkt_startowy}, punkt_docelowy={punkt_docelowy}")
         
+        print(f"DEBUG: Getting all valves from pathfinder graph")
         wszystkie_zawory = [edge_data['valve_name'] for _, _, edge_data in pathfinder.graph.edges(data=True)]
+        print(f"DEBUG: Found {len(wszystkie_zawory)} valves")
+        
+        print(f"DEBUG: Calling pathfinder.find_path()")
         trasa_segmentow_nazwy = pathfinder.find_path(punkt_startowy, punkt_docelowy, wszystkie_zawory)
+        print(f"DEBUG: pathfinder.find_path() returned: {trasa_segmentow_nazwy}")
 
         if not trasa_segmentow_nazwy:
             return jsonify({'message': f'Nie można znaleźć trasy z {punkt_startowy} do {punkt_docelowy}'}), 404

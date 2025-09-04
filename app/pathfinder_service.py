@@ -51,8 +51,8 @@ class PathFinder:
         segmenty = db.session.execute(segmenty_q).scalars().all()
         
         for segment in segmenty:
-            punkt_startowy = segment.porty_sprzetu_.nazwa_portu if segment.porty_sprzetu_ else segment.wezly_rurociagu_.nazwa_wezla
-            punkt_koncowy = segment.porty_sprzetu.nazwa_portu if segment.porty_sprzetu else segment.wezly_rurociagu.nazwa_wezla
+            punkt_startowy = segment.porty_sprzetu_.nazwa_portu if segment.porty_sprzetu_ else (segment.wezly_rurociagu_.nazwa_wezla if segment.wezly_rurociagu_ else None)
+            punkt_koncowy = segment.porty_sprzetu.nazwa_portu if segment.porty_sprzetu else (segment.wezly_rurociagu.nazwa_wezla if segment.wezly_rurociagu else None)
             
             if punkt_startowy and punkt_koncowy:
                 self.graph.add_edge(
