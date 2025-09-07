@@ -74,3 +74,4 @@ if ALARMS_ENABLED:
     }
 
 celery.conf.beat_schedule = beat_schedule
+print(f"DEBUG: beat_schedule={beat_schedule}")

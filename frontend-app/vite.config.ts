@@ -10,8 +10,8 @@ export default defineConfig({
 
   server: {
     proxy: {
-      '/api': 'http://localhost:5000', // port Twojego Flask
-      '/topology': 'http://localhost:5000',
+      '/api': 'http://mes-parafina-app.railway.internal',
+      '/topology': 'http://mes-parafina-app.railway.internal',
     },
   },
 

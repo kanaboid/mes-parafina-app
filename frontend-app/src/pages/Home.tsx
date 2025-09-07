@@ -11,12 +11,15 @@ export default function Home() {
   async function load() {
     try {
       const [o, s, z, a] = await Promise.all([
-        apiGet('/api/operations/aktywne'),
-        apiGet('/api/sprzet'),
-        apiGet('/api/zawory'),
+        apiGet('/api/operations/aktywne').catch(()=>[]),
+        apiGet('/api/sprzet').catch(()=>[]),
+        apiGet('/api/zawory').catch(()=>[]),
         apiGet('/api/alarmy/aktywne').catch(()=>[])
       ])
-      setOps(o); setSprzet(s); setZawory(z); setAlArmy(a)
+      setOps(Array.isArray(o) ? o : []); 
+      setSprzet(Array.isArray(s) ? s : []); 
+      setZawory(Array.isArray(z) ? z : []); 
+      setAlArmy(Array.isArray(a) ? a : [])
     } catch(e:any){ setMsg(e.message) }
   }
   useEffect(()=>{ load() }, [])

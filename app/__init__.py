@@ -13,7 +13,7 @@ from .extensions import db, socketio
 from flask_admin import Admin
 from flask_admin.contrib.sqla import ModelView
 from logging.handlers import RotatingFileHandler
-
+from flask_cors import CORS
 
 # ... instancje pathfinder, monitoring, sensor_service, scheduler ...
 pathfinder = PathFinder()
@@ -35,6 +35,13 @@ def create_app(config_class=None):
 
     app = Flask(__name__)
     
+    CORS(app, origins=[
+        "https://react-production-91c7.up.railway.app",  # Twój frontend
+        "http://localhost:5173",  # Development
+        "http://localhost:3000",  # Alternatywny dev port
+    ])
+
+
     # --- OSTATECZNA POPRAWKA: Dynamiczne ładowanie konfiguracji ---
     if config_class:
         app.config.from_object(config_class)
