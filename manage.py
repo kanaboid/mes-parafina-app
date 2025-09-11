@@ -1,4 +1,13 @@
 # manage.py
+
+
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'local_libs'))
+from celery_sqlalchemy_scheduler import models
+
+
+
 import click
 from app import create_app
 from app.sensors import SensorService
@@ -6,6 +15,9 @@ from app.extensions import db
 from tabulate import tabulate
 from app.sockets import broadcast_dashboard_update
 import time
+from celery_sqlalchemy_scheduler.models import PeriodicTask, IntervalSchedule
+
+
 # Tworzymy instancję aplikacji, aby mieć dostęp do jej kontekstu
 # Jest to konieczne, aby SensorService mógł korzystać z `db.session`
 app = create_app()
@@ -151,3 +163,49 @@ def clear_measurements_command(confirm, recreate):
             db.session.rollback()
             click.echo(click.style(f"Błąd podczas czyszczenia tabeli: {str(e)}", fg="red"))
             raise click.Abort()
+
+@app.cli.command("seed-tasks")
+def seed_tasks_command():
+    """
+    Tworzy domyślne, cykliczne zadania Celery Beat w bazie danych.
+    Ta komenda jest idempotentna - nie stworzy duplikatów.
+    """
+    print("Rozpoczęto inicjalizację domyślnych zadań Celery...")
+
+    with app.app_context():
+        # Zadanie 1: Odczyt sensorów co 10 sekund
+        task_name_1 = 'read-sensors-periodic'
+        if not db.session.query(PeriodicTask).filter_by(name=task_name_1).first():
+            interval_10s = db.session.query(IntervalSchedule).filter_by(every=10, period='seconds').first()
+            if not interval_10s:
+                interval_10s = IntervalSchedule(every=10, period='seconds')
+                db.session.add(interval_10s)
+                db.session.commit()
+            
+            task1 = PeriodicTask(
+                interval_id=interval_10s.id,
+                name=task_name_1,
+                task='app.tasks.read_sensors_task'
+            )
+            db.session.add(task1)
+            print(f"-> Stworzono zadanie: '{task_name_1}'")
+
+        # Zadanie 2: Sprawdzanie alarmów co 5 sekund
+        task_name_2 = 'check-alarms-periodic'
+        if not db.session.query(PeriodicTask).filter_by(name=task_name_2).first():
+            interval_5s = db.session.query(IntervalSchedule).filter_by(every=5, period='seconds').first()
+            if not interval_5s:
+                interval_5s = IntervalSchedule(every=5, period='seconds')
+                db.session.add(interval_5s)
+                db.session.commit()
+
+            task2 = PeriodicTask(
+                interval_id=interval_5s.id,
+                name=task_name_2,
+                task='app.tasks.check_alarms_task'
+            )
+            db.session.add(task2)
+            print(f"-> Stworzono zadanie: '{task_name_2}'")
+
+        db.session.commit()
+        print("Zakończono inicjalizację domyślnych zadań.")

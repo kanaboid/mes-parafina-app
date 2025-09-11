@@ -25,9 +25,12 @@ class Config:
         f"{MYSQL_HOST}/{MYSQL_DB}"
         "?charset=utf8mb4"
     )
+    print(f"--- [CONFIG DEBUG] Zbudowano SQLALCHEMY_DATABASE_URI: {SQLALCHEMY_DATABASE_URI}")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     TESTING = False
     CELERY_BEAT_DBURI = SQLALCHEMY_DATABASE_URI
+    print(f"--- [CONFIG DEBUG] Ustawiono CELERY_BEAT_DBURI na: {CELERY_BEAT_DBURI}")
+
 
 class ProdConfig(Config):
     """Konfiguracja produkcyjna"""

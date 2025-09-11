@@ -19,7 +19,6 @@ redis
 memory-profiler
 flower
 pyyaml
-celery-sqlalchemy-scheduler
 flask-cors
 # Linux
 gunicorn

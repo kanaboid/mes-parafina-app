@@ -1,5 +1,5 @@
 const API_BASE_URL = import.meta.env.PROD 
-  ? 'https://mes-parafina-app.railway.app'  // URL Twojego Railway backend
+  ? 'https://mes-parafina-app-production.up.railway.app'  // URL Twojego Railway backend
   : ''
 
 export async function apiGet<T = any>(url: string): Promise<T> {

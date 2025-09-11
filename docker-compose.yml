@@ -55,7 +55,7 @@ services:
   celery-worker:
     build: .
     restart: always
-    command: ["celery", "-A", "celery_app.celery", "worker", "-B", "-E", "-l", "info"]
+    command: ["celery", "-A", "celery_app.celery", "worker", "-B", "-E", "-l", "info", "--scheduler", "celery_sqlalchemy_scheduler.schedulers.DatabaseScheduler", "--concurrency=2"]
     environment:
       - SECRET_KEY=${SECRET_KEY}
       - MYSQLUSER=${MYSQLUSER}

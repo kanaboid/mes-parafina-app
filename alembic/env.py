@@ -1,54 +1,51 @@
 # alembic/env.py
 
-import os
+# --- KROK 1: Konfiguracja ścieżek i podstawowe importy ---
 import sys
+from os.path import abspath, dirname, realpath, join
+# Dodajemy główny folder projektu do ścieżki Pythona. Robimy to tylko raz.
+sys.path.insert(0, dirname(dirname(abspath(__file__))))
+
 from logging.config import fileConfig
-
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
-
+from sqlalchemy import engine_from_config, pool
 from alembic import context
+import os
 
-# Dodaj ścieżkę do swojego projektu, aby importy zadziałały
-sys.path.insert(0, os.path.realpath(os.path.join(os.path.dirname(__file__), '..')))
+# --- KROK 2: Import metadanych z obu źródeł ---
+# Importujemy obiekt `db` z Twojej aplikacji, aby uzyskać dostęp do Twoich modeli
+from app.extensions import db  # Zakładam, że db jest w extensions.py, jeśli nie, zmień ścieżkę
+# Importujemy `ModelBase` z biblioteki schedulera, zgodnie z tym, co odkryliśmy
+from celery_sqlalchemy_scheduler.session import ModelBase as SchedulerModelBase
 
-# Zaimportuj tylko obiekt `db` z __init__, aby dostać się do metadanych
-from app import db
-# UWAGA: Celowo NIE importujemy klas Config i TestConfig
-
+# --- KROK 3: Konfiguracja Alembic i logiki URI ---
 config = context.config
-
-# --- BEZPOŚREDNIA I JAWNA LOGIKA WYBORU URI ---
-
-# Pobieramy potrzebne zmienne środowiskowe, tak jak robi to Config
-DB_USER = os.environ.get('MYSQLUSER', 'root')
-DB_PASSWORD = os.environ.get('MYSQL_ROOT_PASSWORD', '')
-DB_HOST = os.environ.get('MYSQLHOST', 'localhost')
-
-
-
-if os.environ.get('ALEMBIC_TEST_MODE') == 'true':
-    #print("--- Running Alembic in TEST mode (via environment variable) ---")
-    database_uri = f"mysql+mysqlconnector://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/mes_parafina_db_test"
-else:
-    #print("--- Running Alembic in DEV mode ---")
-    database_uri = f"mysql+mysqlconnector://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/mes_parafina_db"
-
-# Ustawiamy URI i drukujemy go, aby mieć 100% pewności
-config.set_main_option('sqlalchemy.url', database_uri)
-#print(f"--- Alembic will connect to: {database_uri} ---")
-
-# --- KONIEC LOGIKI ---
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Wskaż Alembicowi, które metadane ma śledzić
-# Aby to zadziałało, musimy zaimportować WSZYSTKIE modele
+# Logika wyboru URI - jest dobra, zostawiamy ją
+DB_USER = os.environ.get('MYSQLUSER', 'root')
+DB_PASSWORD = os.environ.get('MYSQL_ROOT_PASSWORD', '')
+DB_HOST = os.environ.get('MYSQLHOST', 'localhost')
+
+if os.environ.get('ALEMBIC_TEST_MODE') == 'true':
+    database_uri = f"mysql+mysqlconnector://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/mes_parafina_db_test"
+else:
+    database_uri = f"mysql+mysqlconnector://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/mes_parafina_db"
+
+config.set_main_option('sqlalchemy.url', database_uri)
+
+# --- KROK 4: Zdefiniowanie celu dla Alembic ---
+# To jest najważniejsza część. Tworzymy listę obiektów MetaData.
+# Alembic musi wiedzieć o WSZYSTKICH modelach, aby działać poprawnie.
+# Import `from app import models` zapewnia, że SQLAlchemy "widzi" Twoje tabele.
 from app import models
-target_metadata = db.metadata
+target_metadata = [
+    db.metadata,                   # Metadane z Twojej aplikacji
+    SchedulerModelBase.metadata    # Metadane z biblioteki Celery
+]
 
-
+# --- KROK 5: Funkcje uruchomieniowe (bez zmian) ---
 def run_migrations_offline() -> None:
     url = config.get_main_option("sqlalchemy.url")
     context.configure(
@@ -59,7 +56,6 @@ def run_migrations_offline() -> None:
     )
     with context.begin_transaction():
         context.run_migrations()
-
 
 def run_migrations_online() -> None:
     connectable = engine_from_config(
@@ -73,7 +69,6 @@ def run_migrations_online() -> None:
         )
         with context.begin_transaction():
             context.run_migrations()
-
 
 if context.is_offline_mode():
     run_migrations_offline()
