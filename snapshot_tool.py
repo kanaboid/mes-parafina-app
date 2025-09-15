@@ -10,8 +10,8 @@ from datetime import datetime, timezone
 # 1. Katalogi do automatycznego skanowania w poszukiwaniu plików .py
 DIRECTORIES_TO_SCAN = [
     'app/',
-    'alembic/',
-    'templates/'
+    'alembic/'
+    
 ]
 
 # 2. Pliki, które ZAWSZE mają być dołączone (nawet jeśli są poza skanowanymi katalogami)
@@ -75,8 +75,8 @@ def collect_files_to_include() -> list[str]:
                 
                 if filename.endswith('.py'):
                     files_to_process.add(full_path)
-                elif filename.endswith('.js'):
-                    files_to_process.add(full_path)
+                # elif filename.endswith('.js'):
+                #     files_to_process.add(full_path)
     return sorted(list(files_to_process))
 
 
