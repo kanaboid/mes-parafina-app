@@ -194,3 +194,48 @@ class TestPathFinderService(unittest.TestCase):
         # Szukamy ścieżki - powinna być wybrana dłuższa, dwu-segmentowa
         path = self.pathfinder.find_path('R01_OUT', 'W1', open_valves=['V-ALT1', 'V-ALT2'])
         self.assertEqual(path, ['SEG-ALT1', 'SEG-ALT2'])
+
+    def test_12_find_path_with_corrected_leading_zero_names(self):
+        """
+        Weryfikuje, czy Pathfinder znajduje trasy dla sprzętu po 
+        korekcie nazw (np. z B1c na B01c).
+        Ten test dodaje do środowiska testowego sprzęt i porty, które
+        wcześniej sprawiały problemy, aby upewnić się, że logika ładowania
+        topologii jest na to odporna.
+        """
+        # --- Przygotowanie (Arrange) ---
+        # 1. Dodajemy do naszej testowej topologii sprzęt i porty z nową konwencją nazewniczą
+        sprzet_b01c = Sprzet(id=20, nazwa_unikalna='B01c', typ_sprzetu='beczka_czysta')
+        port_b01c_in = PortySprzetu(id=200, id_sprzetu=20, nazwa_portu='B01c_IN', typ_portu='IN')
+        
+        # Łączymy istniejący węzeł W1 z nowym portem B01c_IN
+        zawor_v_b01c = Zawory(id=201, nazwa_zaworu='V-B01c', stan='OTWARTY')
+        seg_do_b01c = Segmenty(
+            id=2001, 
+            nazwa_segmentu='SEG-W1-B01c', 
+            id_zaworu=201, 
+            id_wezla_startowego=100,  # ID węzła W1 z _create_test_topology
+            id_portu_koncowego=200
+        )
+        
+        db.session.add_all([sprzet_b01c, port_b01c_in, zawor_v_b01c, seg_do_b01c])
+        db.session.commit()
+        
+        # 2. Kluczowy krok: przeładowujemy topologię, aby Pathfinder "zobaczył" nowe elementy
+        self.pathfinder._load_topology()
+        
+        # 3. Definiujemy trasę do znalezienia
+        start_node = 'R01_OUT'
+        end_node = 'B01c_IN'
+
+        # --- Działanie (Act) ---
+        # Używamy listy wszystkich otwartych zaworów, aby mieć pewność, że testujemy tylko topologię
+        open_valves = [v.nazwa_zaworu for v in db.session.execute(db.select(Zawory)).scalars().all()]
+        path = self.pathfinder.find_path(start_node, end_node, open_valves)
+        
+        # --- Asercje (Assert) ---
+        self.assertIsNotNone(path, f"Pathfinder powinien znaleźć ścieżkę z {start_node} do {end_node}")
+        self.assertEqual(path, ['SEG-R01-W1', 'SEG-W1-B01c'])
+        
+        # Sprawdźmy też, czy graf został poprawnie zaktualizowany
+        self.assertIn('B01c_IN', self.pathfinder.graph.nodes())
