@@ -1545,3 +1545,60 @@ def api_dashboard_status():
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
+
+# === ENDPOINTY API DLA ZARZĄDZANIA HARMONOGRAMEM ZADAŃ ===
+
+@bp.route('/api/scheduler/tasks', methods=['GET'])
+def get_scheduler_tasks():
+    """Zwraca listę wszystkich zadań z harmonogramu Celery."""
+    try:
+        from .scheduler_service import SchedulerService
+        tasks = SchedulerService.get_all_tasks()
+        return jsonify(tasks)
+    except Exception as e:
+        return jsonify({'error': f'Błąd pobierania zadań: {str(e)}'}), 500
+
+@bp.route('/api/scheduler/tasks/<int:task_id>/toggle', methods=['POST'])
+def toggle_scheduler_task(task_id):
+    """Włącza lub wyłącza zadanie w harmonogramie."""
+    try:
+        from .scheduler_service import SchedulerService
+        data = request.get_json()
+        enabled = data.get('enabled', False)
+        
+        success = SchedulerService.toggle_task(task_id, enabled)
+        if success:
+            return jsonify({'success': True, 'message': f'Zadanie {"włączone" if enabled else "wyłączone"}'})
+        else:
+            return jsonify({'error': 'Błąd podczas zmiany stanu zadania'}), 500
+    except Exception as e:
+        return jsonify({'error': f'Błąd: {str(e)}'}), 500
+
+@bp.route('/api/scheduler/tasks/<int:task_id>/interval', methods=['POST'])
+def update_task_interval(task_id):
+    """Aktualizuje interwał zadania w harmonogramie."""
+    try:
+        from .scheduler_service import SchedulerService
+        data = request.get_json()
+        interval_seconds = data.get('interval_seconds')
+        
+        if not interval_seconds or interval_seconds <= 0:
+            return jsonify({'error': 'Nieprawidłowy interwał'}), 400
+        
+        success = SchedulerService.update_task_interval(task_id, interval_seconds)
+        if success:
+            return jsonify({'success': True, 'message': f'Interwał zaktualizowany na {interval_seconds} sekund'})
+        else:
+            return jsonify({'error': 'Błąd podczas aktualizacji interwału'}), 500
+    except Exception as e:
+        return jsonify({'error': f'Błąd: {str(e)}'}), 500
+
+@bp.route('/api/scheduler/predefined-intervals', methods=['GET'])
+def get_predefined_intervals():
+    """Zwraca listę predefiniowanych interwałów."""
+    try:
+        from .scheduler_service import SchedulerService
+        intervals = SchedulerService.get_predefined_intervals()
+        return jsonify(intervals)
+    except Exception as e:
+        return jsonify({'error': f'Błąd pobierania interwałów: {str(e)}'}), 500

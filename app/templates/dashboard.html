@@ -23,7 +23,12 @@
 <div class="container-fluid mt-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h1>Pulpit Operatora</h1>
-        <span class="badge bg-secondary" id="last-updated-time">Ładowanie...</span>
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-primary" id="scheduler-btn">
+                <i class="fas fa-clock"></i> Harmonogram Zadań
+            </button>
+            <span class="badge bg-secondary" id="last-updated-time">Ładowanie...</span>
+        </div>
     </div>
 
     <!-- Sekcja Alarmów -->
@@ -143,6 +148,94 @@
           </form>
         </div>
       </div>
+    </div>
+</div>
+
+<!-- Modal Harmonogramu Zadań -->
+<div class="modal fade" id="scheduler-modal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-clock"></i> Zarządzanie Harmonogramem Zadań
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover" id="scheduler-tasks-table">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Nazwa Zadania</th>
+                                <th>Status</th>
+                                <th>Interwał</th>
+                                <th>Ostatnie Wykonanie</th>
+                                <th>Następne Wykonanie</th>
+                                <th>Liczba Wykonań</th>
+                                <th>Akcje</th>
+                            </tr>
+                        </thead>
+                        <tbody id="scheduler-tasks-tbody">
+                            <tr>
+                                <td colspan="7" class="text-center">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">Ładowanie...</span>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Edycji Interwału -->
+<div class="modal fade" id="edit-interval-modal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edytuj Interwał Zadania</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="edit-interval-form">
+                    <input type="hidden" id="edit-task-id">
+                    <div class="mb-3">
+                        <label class="form-label">Nazwa zadania:</label>
+                        <input type="text" class="form-control" id="edit-task-name" readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Wybierz interwał:</label>
+                        <div id="interval-options" class="border rounded p-3 bg-light">
+                            <!-- Opcje będą wstawiane tutaj przez JavaScript -->
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="custom-interval" class="form-label fw-bold">
+                            <i class="fas fa-keyboard me-2 text-info"></i>
+                            Lub wprowadź własny interwał (w sekundach):
+                        </label>
+                        <div class="input-group">
+                            <input type="number" class="form-control form-control-lg" id="custom-interval" 
+                                   min="1" step="1" placeholder="np. 45" disabled>
+                            <span class="input-group-text">
+                                <i class="fas fa-stopwatch text-muted"></i>
+                            </span>
+                        </div>
+                        <div class="form-text">
+                            <i class="fas fa-info-circle me-1"></i>
+                            Wprowadź liczbę sekund (minimum 1)
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Anuluj</button>
+                <button type="button" class="btn btn-primary" id="save-interval-btn">Zapisz Zmiany</button>
+            </div>
+        </div>
     </div>
 </div>
 

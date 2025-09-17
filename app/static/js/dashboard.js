@@ -474,4 +474,296 @@ document.addEventListener('DOMContentLoaded', () => {
             alert(message);
         }
     }
+
+    // === FUNKCJONALNOŚĆ HARMONOGRAMU ZADAŃ ===
+    
+    // Elementy DOM dla harmonogramu
+    const schedulerBtn = document.getElementById('scheduler-btn');
+    const schedulerModal = new bootstrap.Modal(document.getElementById('scheduler-modal'));
+    const editIntervalModal = new bootstrap.Modal(document.getElementById('edit-interval-modal'));
+    const schedulerTasksTbody = document.getElementById('scheduler-tasks-tbody');
+    const intervalOptions = document.getElementById('interval-options');
+    const customIntervalInput = document.getElementById('custom-interval');
+    const saveIntervalBtn = document.getElementById('save-interval-btn');
+    
+    let currentTaskId = null;
+    let predefinedIntervals = [];
+
+    // Obsługa przycisku harmonogramu
+    schedulerBtn.addEventListener('click', () => {
+        loadSchedulerTasks();
+        schedulerModal.show();
+    });
+
+    // Obsługa przycisku zapisywania interwału
+    saveIntervalBtn.addEventListener('click', async () => {
+        await saveTaskInterval();
+    });
+
+    // Funkcja do ładowania zadań harmonogramu
+    async function loadSchedulerTasks() {
+        try {
+            const response = await fetch('/api/scheduler/tasks');
+            if (!response.ok) throw new Error('Błąd pobierania zadań');
+            
+            const tasks = await response.json();
+            renderSchedulerTasks(tasks);
+        } catch (error) {
+            console.error('Błąd ładowania zadań:', error);
+            showToast('Błąd ładowania zadań harmonogramu', 'error');
+        }
+    }
+
+    // Funkcja do renderowania zadań w tabeli
+    function renderSchedulerTasks(tasks) {
+        schedulerTasksTbody.innerHTML = '';
+        
+        if (tasks.length === 0) {
+            schedulerTasksTbody.innerHTML = `
+                <tr>
+                    <td colspan="7" class="text-center text-muted">Brak zadań w harmonogramie</td>
+                </tr>
+            `;
+            return;
+        }
+
+        tasks.forEach(task => {
+            const statusBadge = task.enabled ? 
+                '<span class="badge bg-success">Włączone</span>' : 
+                '<span class="badge bg-secondary">Wyłączone</span>';
+            
+            const intervalText = formatInterval(task.interval_seconds);
+            const lastRun = task.last_run_at ? new Date(task.last_run_at).toLocaleString() : 'Nigdy';
+            const nextRun = task.next_run_at ? new Date(task.next_run_at).toLocaleString() : 'Nie zaplanowano';
+            
+            const row = `
+                <tr>
+                    <td><strong>${task.name}</strong></td>
+                    <td>${statusBadge}</td>
+                    <td>${intervalText}</td>
+                    <td>${lastRun}</td>
+                    <td>${nextRun}</td>
+                    <td>${task.total_run_count}</td>
+                    <td>
+                        <div class="btn-group btn-group-sm" role="group">
+                            <button class="btn btn-outline-${task.enabled ? 'warning' : 'success'}" 
+                                    onclick="toggleTask(${task.id}, ${!task.enabled})">
+                                ${task.enabled ? 'Wyłącz' : 'Włącz'}
+                            </button>
+                            <button class="btn btn-outline-primary" 
+                                    onclick="editTaskInterval(${task.id}, '${task.name}', ${task.interval_seconds})">
+                                Edytuj
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+            schedulerTasksTbody.innerHTML += row;
+        });
+    }
+
+    // Funkcja do formatowania interwału
+    function formatInterval(seconds) {
+        if (seconds < 60) {
+            return `${seconds}s`;
+        } else if (seconds < 3600) {
+            const minutes = Math.floor(seconds / 60);
+            return `${minutes}m`;
+        } else {
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            return `${hours}h ${minutes}m`;
+        }
+    }
+
+    // Funkcja do przełączania stanu zadania
+    async function toggleTask(taskId, enabled) {
+        try {
+            const response = await fetch(`/api/scheduler/tasks/${taskId}/toggle`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled })
+            });
+            
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.error);
+            
+            showToast(result.message, 'success');
+            loadSchedulerTasks(); // Odśwież listę
+        } catch (error) {
+            console.error('Błąd przełączania zadania:', error);
+            showToast(error.message, 'error');
+        }
+    }
+
+    // Funkcja do edycji interwału zadania
+    async function editTaskInterval(taskId, taskName, currentInterval) {
+        currentTaskId = taskId;
+        document.getElementById('edit-task-id').value = taskId;
+        document.getElementById('edit-task-name').value = taskName;
+        
+        // Załaduj predefiniowane interwały
+        await loadPredefinedIntervals();
+        
+        // Ustaw aktualny interwał jako wybrany
+        const currentIntervalRadio = document.querySelector(`input[name="interval"][value="${currentInterval}"]`);
+        if (currentIntervalRadio) {
+            currentIntervalRadio.checked = true;
+            // Ustaw style dla wybranego interwału
+            const selectedLabel = document.querySelector(`label[for="${currentIntervalRadio.id}"]`);
+            if (selectedLabel) {
+                selectedLabel.classList.add('border-primary', 'bg-primary', 'text-white');
+                selectedLabel.classList.remove('border-transparent');
+            }
+        } else {
+            // Jeśli aktualny interwał nie jest predefiniowany, wybierz opcję "własny"
+            const customRadio = document.querySelector('input[name="interval"][value="custom"]');
+            customRadio.checked = true;
+            customIntervalInput.value = currentInterval;
+            customIntervalInput.disabled = false;
+            
+            // Ustaw style dla opcji "własny"
+            const customLabel = document.querySelector('label[for="interval-custom"]');
+            if (customLabel) {
+                customLabel.classList.add('border-primary', 'bg-primary', 'text-white');
+                customLabel.classList.remove('border-transparent');
+            }
+        }
+        
+        editIntervalModal.show();
+    }
+
+    // Funkcja do ładowania predefiniowanych interwałów
+    async function loadPredefinedIntervals() {
+        try {
+            const response = await fetch('/api/scheduler/predefined-intervals');
+            if (!response.ok) throw new Error('Błąd pobierania interwałów');
+            
+            predefinedIntervals = await response.json();
+            renderIntervalOptions();
+        } catch (error) {
+            console.error('Błąd ładowania interwałów:', error);
+            showToast('Błąd ładowania predefiniowanych interwałów', 'error');
+        }
+    }
+
+    // Funkcja do renderowania opcji interwałów
+    function renderIntervalOptions() {
+        intervalOptions.innerHTML = '';
+        
+        predefinedIntervals.forEach(interval => {
+            const option = `
+                <div class="form-check form-check-lg mb-2">
+                    <input class="form-check-input" type="radio" name="interval" 
+                           value="${interval.value}" id="interval-${interval.value}">
+                    <label class="form-check-label fw-semibold py-2 px-3 rounded border border-2 border-transparent" 
+                           for="interval-${interval.value}" 
+                           style="cursor: pointer; transition: all 0.2s ease; min-height: 44px; display: flex; align-items: center;">
+                        <i class="fas fa-clock me-2 text-primary"></i>
+                        ${interval.label}
+                    </label>
+                </div>
+            `;
+            intervalOptions.innerHTML += option;
+        });
+        
+        // Dodaj opcję "własny interwał"
+        const customOption = `
+            <div class="form-check form-check-lg mb-2">
+                <input class="form-check-input" type="radio" name="interval" 
+                       value="custom" id="interval-custom">
+                <label class="form-check-label fw-semibold py-2 px-3 rounded border border-2 border-transparent" 
+                       for="interval-custom" 
+                       style="cursor: pointer; transition: all 0.2s ease; min-height: 44px; display: flex; align-items: center;">
+                    <i class="fas fa-edit me-2 text-warning"></i>
+                    Własny interwał
+                </label>
+            </div>
+        `;
+        intervalOptions.innerHTML += customOption;
+        
+        // Obsługa zmiany wyboru interwału
+        document.querySelectorAll('input[name="interval"]').forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                // Usuń wszystkie style aktywne
+                document.querySelectorAll('label[for^="interval-"]').forEach(label => {
+                    label.classList.remove('border-primary', 'bg-primary', 'text-white');
+                    label.classList.add('border-transparent');
+                });
+                
+                // Dodaj style aktywne do wybranego
+                const selectedLabel = document.querySelector(`label[for="${e.target.id}"]`);
+                if (selectedLabel) {
+                    selectedLabel.classList.add('border-primary', 'bg-primary', 'text-white');
+                    selectedLabel.classList.remove('border-transparent');
+                }
+                
+                if (e.target.value === 'custom') {
+                    customIntervalInput.disabled = false;
+                    customIntervalInput.focus();
+                } else {
+                    customIntervalInput.disabled = true;
+                    customIntervalInput.value = '';
+                }
+            });
+            
+            // Dodaj hover effect
+            const label = document.querySelector(`label[for="${radio.id}"]`);
+            if (label) {
+                label.addEventListener('mouseenter', () => {
+                    if (!radio.checked) {
+                        label.classList.add('border-primary', 'bg-light');
+                    }
+                });
+                
+                label.addEventListener('mouseleave', () => {
+                    if (!radio.checked) {
+                        label.classList.remove('border-primary', 'bg-light');
+                    }
+                });
+            }
+        });
+    }
+
+    // Funkcja do zapisywania interwału zadania
+    async function saveTaskInterval() {
+        const selectedInterval = document.querySelector('input[name="interval"]:checked');
+        if (!selectedInterval) {
+            showToast('Wybierz interwał', 'error');
+            return;
+        }
+        
+        let intervalSeconds;
+        if (selectedInterval.value === 'custom') {
+            intervalSeconds = parseInt(customIntervalInput.value);
+            if (!intervalSeconds || intervalSeconds <= 0) {
+                showToast('Wprowadź prawidłowy interwał', 'error');
+                return;
+            }
+        } else {
+            intervalSeconds = parseInt(selectedInterval.value);
+        }
+        
+        try {
+            const response = await fetch(`/api/scheduler/tasks/${currentTaskId}/interval`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ interval_seconds: intervalSeconds })
+            });
+            
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.error);
+            
+            showToast(result.message, 'success');
+            editIntervalModal.hide();
+            loadSchedulerTasks(); // Odśwież listę
+        } catch (error) {
+            console.error('Błąd zapisywania interwału:', error);
+            showToast(error.message, 'error');
+        }
+    }
+
+    // Eksportuj funkcje do globalnego zakresu
+    window.toggleTask = toggleTask;
+    window.editTaskInterval = editTaskInterval;
 });
