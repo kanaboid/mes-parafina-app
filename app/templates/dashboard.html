@@ -208,7 +208,7 @@
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-bold">Wybierz interwał:</label>
-                        <div id="interval-options" class="border rounded p-3 bg-light">
+                        <div id="interval-options" class="d-flex flex-wrap gap-2 p-3 border rounded bg-light">
                             <!-- Opcje będą wstawiane tutaj przez JavaScript -->
                         </div>
                     </div>
@@ -226,14 +226,16 @@
                         </div>
                         <div class="form-text">
                             <i class="fas fa-info-circle me-1"></i>
-                            Wprowadź liczbę sekund (minimum 1)
+                            Wprowadź liczbę sekund (minimum 1) i naciśnij <kbd>Enter</kbd> lub kliknij "Zapisz Zmiany"
                         </div>
                     </div>
                 </form>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Anuluj</button>
-                <button type="button" class="btn btn-primary" id="save-interval-btn">Zapisz Zmiany</button>
+                <button type="button" class="btn btn-primary" id="save-interval-btn" style="display: none;">
+                    <i class="fas fa-save me-1"></i>Zapisz Zmiany
+                </button>
             </div>
         </div>
     </div>
