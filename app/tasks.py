@@ -34,6 +34,14 @@ def read_sensors_task():
         # Serwisy są już zainicjowane w celery_app.py, więc możemy ich używać
         sensor_service = SensorService()
         sensor_service.read_sensors()
+        with flask_app.app_context():
+            from .dashboard_service import DashboardService
+            dashboard_data = DashboardService.get_main_dashboard_data()
+            
+            # Wyemituj zdarzenie do wszystkich klientów przez Redisa
+            celery_socketio.emit('dashboard_update', dashboard_data)
+            print(f"--- [PID: {os.getpid()}] CELERY TASK: Wyemitowano 'dashboard_update' przez Redis z read_sensors_task. ---")
+            
     except Exception as e:
         print(f"Błąd w zadaniu Celery 'read_sensors_task': {e}")
         # Można dodać bardziej zaawansowane logowanie lub ponawianie zadania

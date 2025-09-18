@@ -127,7 +127,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <div class="card-body">
                             <p><strong>Partia:</strong> ${r.partia ? r.partia.kod : '<em>Pusty</em>'}</p>
                             ${wagaHTML} 
-                            <p class="mb-1"><strong>Temperatura:</strong> ${r.temperatura_aktualna || 'N/A'}°C / ${r.temperatura_docelowa || 'N/A'}°C</p>
+                            <p class="mb-1"><strong>Temperatura:</strong> ${r.temperatura_aktualna.toFixed(2)|| 'N/A'}°C / ${r.temperatura_docelowa || 'N/A'}°C</p>
                             ${tempProgressBar}
                             <p class="mb-1 mt-3"><strong>Ciśnienie:</strong> ${r.cisnienie_aktualne || 'N/A'} bar</p>
                             ${pressureProgressBar}
