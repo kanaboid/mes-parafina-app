@@ -35,7 +35,7 @@ bp = Blueprint('api', __name__, url_prefix='/')
 @bp.route('/')
 def index():
     """Serwuje główną stronę aplikacji (frontend)."""
-    return render_template('index.html')
+    return render_template('dashboard.html')
 
 @bp.route('/sprzet/<int:sprzet_id>/details')
 def sprzet_details_view(sprzet_id):
@@ -1530,10 +1530,10 @@ def get_historia_zaladunku_sesji(sesja_id):
             cursor.close()
             conn.close()
 
-@bp.route('/dashboard')
+@bp.route('/dashboard') 
 def dashboard_view():
-    """Serwuje główną stronę dashboardu."""
-    return render_template('dashboard.html')
+    """Stary pulpit operatora"""
+    return render_template('index.html')
 
 @bp.route('/api/dashboard/main-status')
 def api_dashboard_status():

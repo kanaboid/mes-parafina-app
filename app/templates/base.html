@@ -28,42 +28,49 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav">
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('api.index') }}">Panel Główny</a>
+                        <a class="nav-link" href="{{ url_for('api.index') }}">Pulpit Operatora</a>
                     </li>
-                    <!-- <li class="nav-item">
-                        <a class="nav-link" href="/cykle-monitor">Monitor Cykli</a>
-                    </li> -->
+                    
+                    
                     <li class="nav-item">
-                        <a class="nav-link" href="/dashboard">DashboardBETA</a>
-                    </li>
-                    <!-- 
-                    <li class="nav-item">
-                        <a class="nav-link" href="/filtry">Monitoring Filtrów</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/aktywne-partie">Aktywne Partie</a>
-                    </li>
-                    <li class="nav-item"> -->
                         <a class="nav-link" href="/operacje-apollo">Operacje Apollo</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="/operacje-cysterny">Operacje cysterny</a>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/batch-tester">Batch Tester</a>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="additionalDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-tools me-1"></i>Dodatkowe
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="additionalDropdown">
+                            <li><a class="dropdown-item" href="/batch-tester">
+                                <i class="fas fa-vial me-2"></i>Batch Tester
+                            </a></li>
+                            <li><a class="dropdown-item" href="/dashboard">
+                                <i class="fas fa-chart-line me-2"></i>PulpitALFA
+                            </a></li>
+                            <li><a class="dropdown-item" href="/beczki">
+                                <i class="fas fa-drum me-2"></i>Beczki
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('topology.topology_index') }}">
+                                <i class="fas fa-project-diagram me-2"></i>Topologia
+                            </a></li>
+                            <li><a class="dropdown-item" href="/alarms">
+                                <i class="fas fa-exclamation-triangle me-2"></i>Alarmy
+                            </a></li>
+                            <li><a class="dropdown-item" href="/cykle-monitor">
+                                <i class="fas fa-clock me-2"></i>Monitor Cykli
+                            </a></li>                     
+                            <li>
+                            <a class="dropdown-item" href="/filtry">
+                            <i class="fas fa-filter me-2"></i>Monitoring Filtrów
+                            </a></li>
+                            <li>
+                            <a class="dropdown-item" href="/aktywne-partie"><i class="fas fa-tasks me-2"></i>Aktywne Partie
+                            </a></li>
+                        </ul>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/operacje">Operacje</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/beczki">Beczki</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('topology.topology_index') }}">Topologia</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/alarms">Alarmy</a>
-                    </li>
+                
                 </ul>
             </div>
         </div>

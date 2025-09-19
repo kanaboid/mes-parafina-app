@@ -116,30 +116,40 @@ document.addEventListener('DOMContentLoaded', () => {
             // --- NOWA, POPRAWIONA LOGIKA DLA WAGI ---
             const wagaHTML = r.partia ? `<p><strong>Waga:</strong> ${(r.partia.waga_kg/1000).toFixed(1)} t</p>` : '';
 
-            // --- Kompletny szablon karty ---
-            const cardHTML = `
-                <div class="col-xl-4 col-lg-6 mb-4">
-                    <div class="card h-100 card-reaktor">
-                        <div class="card-header d-flex justify-content-between">
-                            <h5 class="mb-0"><span class="status-indicator ${statusClass}"></span>${r.nazwa}</h5>
-                            <span class="badge bg-info text-dark">${r.stan_sprzetu || 'Brak stanu'}</span>
-                        </div>
-                        <div class="card-body">
-                            <p><strong>Partia:</strong> ${r.partia ? r.partia.kod : '<em>Pusty</em>'}</p>
-                            ${wagaHTML} 
-                            <p class="mb-1"><strong>Temperatura:</strong> ${r.temperatura_aktualna.toFixed(2)|| 'N/A'}°C / ${r.temperatura_docelowa || 'N/A'}°C</p>
-                            ${tempProgressBar}
-                            <p class="mb-1 mt-3"><strong>Ciśnienie:</strong> ${r.cisnienie_aktualne || 'N/A'} bar</p>
-                            ${pressureProgressBar}
-                            ${burnerSwitchHTML}
-                        </div>
-                        <div class="card-footer p-2">
-                            <div class="btn-group w-100" role="group">
-                                ${actionButtonsHTML}
-                            </div>
+            // --- NOWA LOGIKA DLA TYPU MATERIAŁU ---
+        let materialTypeHTML = '';
+        if (r.partia && r.partia.sklad && r.partia.sklad.length > 0) {
+            // Pobierz unikalne typy materiałów
+            const materialTypes = [...new Set(r.partia.sklad.map(item => item.material_type))];
+            const materialTypesText = materialTypes.join(', ');
+            materialTypeHTML = `<p><strong>Typ materiału:</strong> ${materialTypesText}</p>`;
+        }
+
+        // --- Kompletny szablon karty ---
+        const cardHTML = `
+            <div class="col-xl-4 col-lg-6 mb-4">
+                <div class="card h-100 card-reaktor">
+                    <div class="card-header d-flex justify-content-between">
+                        <h5 class="mb-0"><span class="status-indicator ${statusClass}"></span>${r.nazwa}</h5>
+                        <span class="badge bg-info text-dark">${r.stan_sprzetu || 'Brak stanu'}</span>
+                    </div>
+                    <div class="card-body">
+                        <p><strong>Partia:</strong> ${r.partia ? r.partia.kod : '<em>Pusty</em>'}</p>
+                        ${wagaHTML}
+                        ${materialTypeHTML}
+                        <p class="mb-1"><strong>Temperatura:</strong> ${r.temperatura_aktualna.toFixed(2)|| 'N/A'}°C / ${r.temperatura_docelowa || 'N/A'}°C</p>
+                        ${tempProgressBar}
+                        <p class="mb-1 mt-3"><strong>Ciśnienie:</strong> ${r.cisnienie_aktualne || 'N/A'} bar</p>
+                        ${pressureProgressBar}
+                        ${burnerSwitchHTML}
+                    </div>
+                    <div class="card-footer p-2">
+                        <div class="btn-group w-100" role="group">
+                            ${actionButtonsHTML}
                         </div>
                     </div>
-                </div>`;
+                </div>
+            </div>`;
             reaktoryContainer.innerHTML += cardHTML;
         });
     }
