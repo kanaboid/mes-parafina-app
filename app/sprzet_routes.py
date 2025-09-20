@@ -136,16 +136,31 @@ def get_aktualne_pomiary_sprzetu():
 
 @sprzet_bp.route('/<int:sprzet_id>/temperatura', methods=['POST'])
 def set_temperatura(sprzet_id):
-    """Ustawia docelową temperaturę dla danego sprzętu."""
+    """Ustawia temperaturę dla danego sprzętu."""
     dane = request.get_json()
-    nowa_temperatura = dane['temperatura']
+    nowa_temperatura = dane.get('temperatura')
+    temp_type = dane.get('type', 'target')  # 'target' lub 'current'
+    
+    if nowa_temperatura is None:
+        return jsonify({"status": "error", "message": "Brak wartości temperatury"}), 400
     
     try:
-        # Delegujemy całą pracę do serwisu
-        sensor_service = get_sensor_service()
-        sensor_service.set_temperature(sprzet_id, nowa_temperatura)
+        from .sensors import SensorService
         
-        return jsonify({"status": "success", "message": "Temperatura ustawiona."})
+        if temp_type == 'target':
+            success = SensorService.set_target_temperature(sprzet_id, nowa_temperatura)
+            message = "Temperatura docelowa ustawiona." if success else "Nie udało się ustawić temperatury docelowej."
+        elif temp_type == 'current':
+            success = SensorService.set_current_temperature_single(sprzet_id, nowa_temperatura)
+            message = "Temperatura aktualna ustawiona." if success else "Nie udało się ustawić temperatury aktualnej."
+        else:
+            return jsonify({"status": "error", "message": "Nieprawidłowy typ temperatury. Użyj 'target' lub 'current'"}), 400
+        
+        if success:
+            return jsonify({"status": "success", "message": message})
+        else:
+            return jsonify({"status": "error", "message": message}), 500
+            
     except Exception as e:
         return jsonify({"status": "error", "message": f"Błąd serwera: {e}"}), 500
     
@@ -434,12 +449,28 @@ def set_simulation_params_endpoint(sprzet_id):
         # Pobieramy i walidujemy dane wejściowe
         szybkosc_grzania = Decimal(data['szybkosc_grzania']) if 'szybkosc_grzania' in data else None
         szybkosc_chlodzenia = Decimal(data['szybkosc_chlodzenia']) if 'szybkosc_chlodzenia' in data else None
+        temperatura_docelowa = Decimal(data['temperatura_docelowa']) if 'temperatura_docelowa' in data else None
+        temperatura_aktualna = Decimal(data['temperatura_aktualna']) if 'temperatura_aktualna' in data else None
 
         if szybkosc_grzania is None or szybkosc_chlodzenia is None:
             return jsonify({'error': 'Wymagane są pola "szybkosc_grzania" i "szybkosc_chlodzenia".'}), 400
 
         # Wywołanie logiki z serwisu
         SprzetService.set_simulation_params(sprzet_id, szybkosc_grzania, szybkosc_chlodzenia)
+
+        # Jeśli podano temperaturę docelową, ustaw ją
+        if temperatura_docelowa is not None:
+            from .sensors import SensorService
+            success = SensorService.set_target_temperature(sprzet_id, temperatura_docelowa)
+            if not success:
+                return jsonify({'error': 'Nie udało się ustawić temperatury docelowej.'}), 500
+
+        # Jeśli podano temperaturę aktualną, ustaw ją
+        if temperatura_aktualna is not None:
+            from .sensors import SensorService
+            success = SensorService.set_current_temperature_single(sprzet_id, temperatura_aktualna)
+            if not success:
+                return jsonify({'error': 'Nie udało się ustawić temperatury aktualnej.'}), 500
         
         # Odśwież dashboard
         broadcast_dashboard_update()
@@ -465,6 +496,18 @@ def get_simulation_params_endpoint(sprzet_id):
         # Konwertuj Decimal na string, aby zapewnić serializację do JSON
         params['szybkosc_grzania'] = str(params['szybkosc_grzania']) if params['szybkosc_grzania'] is not None else None
         params['szybkosc_chlodzenia'] = str(params['szybkosc_chlodzenia']) if params['szybkosc_chlodzenia'] is not None else None
+        
+        # Dodaj temperatury z bazy danych
+        from .extensions import db
+        from .models import Sprzet
+        sprzet = db.session.get(Sprzet, sprzet_id)
+        if sprzet:
+            params['temperatura_docelowa'] = float(sprzet.temperatura_docelowa) if sprzet.temperatura_docelowa else None
+            params['temperatura_aktualna'] = float(sprzet.temperatura_aktualna) if sprzet.temperatura_aktualna else None
+        else:
+            params['temperatura_docelowa'] = None
+            params['temperatura_aktualna'] = None
+            
         return jsonify(params), 200
     except ValueError as e:
         return jsonify({'error': str(e)}), 404

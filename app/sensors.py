@@ -232,3 +232,77 @@ class SensorService:
         except Exception as e:
             print(f"Wystąpił błąd podczas pobierania temperatur: {e}")
             raise
+
+    @staticmethod
+    def set_target_temperature(sprzet_id, temperatura):
+        """
+        Ustawia TYLKO temperaturę docelową dla pojedynczego sprzętu.
+        
+        :param sprzet_id: ID sprzętu w bazie danych
+        :param temperatura: Nowa temperatura docelowa
+        :return: True jeśli sukces, False jeśli błąd
+        """
+        try:
+            # Sprawdź czy sprzęt istnieje
+            sprzet = db.session.get(Sprzet, sprzet_id)
+            if not sprzet:
+                print(f"Sprzęt o ID {sprzet_id} nie istnieje")
+                return False
+
+            # Ustaw tylko temperaturę docelową
+            sprzet.temperatura_docelowa = temperatura
+            sprzet.ostatnia_aktualizacja = datetime.now(timezone.utc)
+            
+            # Dodaj wpis do historii
+            nowy_wpis = OperatorTemperatures(
+                id_sprzetu=sprzet_id, 
+                temperatura=temperatura, 
+                czas_ustawienia=datetime.now(timezone.utc)
+            )
+            db.session.add(nowy_wpis)
+            
+            db.session.commit()
+            print(f"Ustawiono temperaturę docelową {temperatura}°C dla sprzętu ID {sprzet_id}")
+            return True
+
+        except Exception as e:
+            db.session.rollback()
+            print(f"Wystąpił błąd podczas ustawiania temperatury docelowej: {e}")
+            return False
+
+    @staticmethod
+    def set_current_temperature_single(sprzet_id, temperatura):
+        """
+        Ustawia TYLKO temperaturę aktualną dla pojedynczego sprzętu.
+        
+        :param sprzet_id: ID sprzętu w bazie danych
+        :param temperatura: Nowa temperatura aktualna
+        :return: True jeśli sukces, False jeśli błąd
+        """
+        try:
+            # Sprawdź czy sprzęt istnieje
+            sprzet = db.session.get(Sprzet, sprzet_id)
+            if not sprzet:
+                print(f"Sprzęt o ID {sprzet_id} nie istnieje")
+                return False
+
+            # Ustaw tylko temperaturę aktualną
+            sprzet.temperatura_aktualna = temperatura
+            sprzet.ostatnia_aktualizacja = datetime.now(timezone.utc)
+            
+            # Dodaj wpis do historii
+            nowy_wpis = OperatorTemperatures(
+                id_sprzetu=sprzet_id, 
+                temperatura=temperatura, 
+                czas_ustawienia=datetime.now(timezone.utc)
+            )
+            db.session.add(nowy_wpis)
+            
+            db.session.commit()
+            print(f"Ustawiono temperaturę aktualną {temperatura}°C dla sprzętu ID {sprzet_id}")
+            return True
+
+        except Exception as e:
+            db.session.rollback()
+            print(f"Wystąpił błąd podczas ustawiania temperatury aktualnej: {e}")
+            return False

@@ -137,8 +137,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         <p><strong>Partia:</strong> ${r.partia ? r.partia.kod : '<em>Pusty</em>'}</p>
                         ${wagaHTML}
                         ${materialTypeHTML}
-                        <p class="mb-1"><strong>Temperatura:</strong> ${r.temperatura_aktualna.toFixed(2)|| 'N/A'}°C / ${r.temperatura_docelowa || 'N/A'}°C</p>
+                        <p class="mb-1"><strong>Temperatura:</strong> ${r.temperatura_aktualna ? r.temperatura_aktualna.toFixed(2) : 'N/A'}°C / ${r.temperatura_docelowa || 'N/A'}°C</p>
                         ${tempProgressBar}
+                        
                         <p class="mb-1 mt-3"><strong>Ciśnienie:</strong> ${r.cisnienie_aktualne || 'N/A'} bar</p>
                         ${pressureProgressBar}
                         ${burnerSwitchHTML}
@@ -247,13 +248,30 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- OBSŁUGA ZDARZEŃ ---
+    if (!reaktoryContainer) {
+        if (console && console.error) {
+            console.error('reaktoryContainer nie został znaleziony!');
+        }
+        return;
+    }
+    
     reaktoryContainer.addEventListener('click', (e) => {
+        if (console && console.log) {
+            console.log('Kliknięto w reaktoryContainer:', e.target);
+        }
         const targetElement = e.target.closest('.action-btn');
+        if (console && console.log) {
+            console.log('Znaleziony targetElement:', targetElement);
+        }
         if (!targetElement) return;
         
         const action = targetElement.dataset.action;
         const sprzetId = targetElement.dataset.sprzetId;
         const sprzetNazwa = targetElement.dataset.sprzetNazwa;
+        
+        if (console && console.log) {
+            console.log(`Action: ${action}, SprzetId: ${sprzetId}, SprzetNazwa: ${sprzetNazwa}`);
+        }
 
         if (action === 'show-details') {
             handleShowDetails(sprzetId, sprzetNazwa);
@@ -283,7 +301,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function handleToggleBurner(id, newState) {
-        console.log(`Wysyłanie żądania zmiany stanu palnika dla ID ${id} na ${newState}`);
+        if (console && console.log) {
+            console.log(`Wysyłanie żądania zmiany stanu palnika dla ID ${id} na ${newState}`);
+        }
         try {
             const response = await fetch(`/api/sprzet/${id}/palnik`, {
                 method: 'POST',
@@ -293,10 +313,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const result = await response.json();
             if (!response.ok) throw new Error(result.error || 'Wystąpił nieznany błąd');
         } catch (error) {
-            console.error('Błąd podczas zmiany stanu palnika:', error);
-            initialLoad();
+            if (console && console.error) {
+                console.error('Błąd podczas zmiany stanu palnika:', error);
+            }
+            window.location.reload();
         }
     }
+
+
 
     function handlePlanTransfer(sourceId, sourceName) {
         document.getElementById('plan-transfer-source-id').value = sourceId;
@@ -369,6 +393,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const sprzetId = document.getElementById('simulation-settings-sprzet-id').value;
         const newHeating = document.getElementById('simulation-heating-speed').value;
         const newCooling = document.getElementById('simulation-cooling-speed').value;
+        const newTargetTemp = document.getElementById('simulation-target-temp').value;
+        const newCurrentTemp = document.getElementById('simulation-current-temp').value;
 
         try {
             const response = await fetch(`/api/sprzet/${sprzetId}/simulation-params`, {
@@ -376,7 +402,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     szybkosc_grzania: newHeating,
-                    szybkosc_chlodzenia: newCooling
+                    szybkosc_chlodzenia: newCooling,
+                    temperatura_docelowa: newTargetTemp,
+                    temperatura_aktualna: newCurrentTemp
                 })
             });
             const result = await response.json();
@@ -386,7 +414,11 @@ document.addEventListener('DOMContentLoaded', () => {
             modals.simulationSettings.hide();
         } catch (error) {
             console.error('Błąd podczas aktualizacji parametrów symulacji:', error);
-            showToast(`Błąd: ${error.message}`, 'error');
+            if (window.showToast) {
+                showToast(`Błąd: ${error.message}`, 'error');
+            } else {
+                alert(`Błąd: ${error.message}`);
+            }
         }
     });
 
@@ -413,12 +445,18 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const heatingInput = document.getElementById('simulation-heating-speed');
         const coolingInput = document.getElementById('simulation-cooling-speed');
+        const targetTempInput = document.getElementById('simulation-target-temp');
+        const currentTempInput = document.getElementById('simulation-current-temp');
 
         // Pokaż stan ładowania
         heatingInput.value = 'Ładowanie...';
         coolingInput.value = 'Ładowanie...';
+        targetTempInput.value = 'Ładowanie...';
+        currentTempInput.value = 'Ładowanie...';
         heatingInput.disabled = true;
         coolingInput.disabled = true;
+        targetTempInput.disabled = true;
+        currentTempInput.disabled = true;
 
         // Pokaż modal
         modals.simulationSettings.show();
@@ -435,6 +473,8 @@ document.addEventListener('DOMContentLoaded', () => {
             // Wypełnij formularz aktualnymi wartościami
             heatingInput.value = data.szybkosc_grzania || '0.50';
             coolingInput.value = data.szybkosc_chlodzenia || '0.10';
+            targetTempInput.value = data.temperatura_docelowa || '';
+            currentTempInput.value = data.temperatura_aktualna || '';
 
         } catch (error) {
             console.error('Błąd podczas pobierania parametrów symulacji:', error);
@@ -445,6 +485,8 @@ document.addEventListener('DOMContentLoaded', () => {
             // Zawsze włączaj pola po zakończeniu operacji
             heatingInput.disabled = false;
             coolingInput.disabled = false;
+            targetTempInput.disabled = false;
+            currentTempInput.disabled = false;
         }
     }
 
@@ -773,4 +815,5 @@ document.addEventListener('DOMContentLoaded', () => {
     // Eksportuj funkcje do globalnego zakresu
     window.toggleTask = toggleTask;
     window.editTaskInterval = editTaskInterval;
+    window.showToast = showToast;
 });

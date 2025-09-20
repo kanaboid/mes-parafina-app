@@ -144,6 +144,14 @@
               <label for="simulation-cooling-speed" class="form-label">Szybkość chłodzenia (°C/min):</label>
               <input type="number" class="form-control" id="simulation-cooling-speed" step="0.01" required>
             </div>
+            <div class="mb-3">
+              <label for="simulation-target-temp" class="form-label">Temperatura docelowa (°C):</label>
+              <input type="number" class="form-control" id="simulation-target-temp" min="0" max="120" step="0.1" required>
+            </div>
+            <div class="mb-3">
+              <label for="simulation-current-temp" class="form-label">Temperatura aktualna (°C):</label>
+              <input type="number" class="form-control" id="simulation-current-temp" min="0" max="120" step="0.1">
+            </div>
             <button type="submit" class="btn btn-primary">Zapisz zmiany</button>
           </form>
         </div>
