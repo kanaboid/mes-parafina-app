@@ -1,7 +1,6 @@
 # app/extensions.py
 
 import os
-import time
 from flask_sqlalchemy import SQLAlchemy
 from flask_socketio import SocketIO
 from sqlalchemy import event
@@ -19,10 +18,6 @@ def set_utc_timezone(dbapi_connection, connection_record):
     cursor = dbapi_connection.cursor()
     cursor.execute("SET time_zone = '+00:00'")
     cursor.close()
-
-# === CONNECTION POOL MONITORING ===
-# TODO: Add proper event listeners for connection pool monitoring
-# For now, monitoring will be done through the test script
 
 redis_url = os.environ.get('REDIS_URL')
 

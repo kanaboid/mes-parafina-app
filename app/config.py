@@ -28,31 +28,6 @@ class Config:
     print(f"--- [CONFIG DEBUG] Zbudowano SQLALCHEMY_DATABASE_URI: {SQLALCHEMY_DATABASE_URI}")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     TESTING = False
-
-    # === CONNECTION POOL CONFIGURATION ===
-    SQLALCHEMY_ENGINE_OPTIONS = {
-        # Liczba połączeń w puli (dla Twojej aplikacji 5-10 jest wystarczające)
-        'pool_size': 5,
-
-        # Maksymalna liczba dodatkowych połączeń poza pulą
-        'max_overflow': 10,
-
-        # Jak często odnawiać połączenia (w sekundach)
-        'pool_recycle': 3600,  # 1 godzina
-
-        # Sprawdzenie czy połączenie jest żywe przed użyciem
-        'pool_pre_ping': True,
-
-        # Wyłącz echo w produkcji (logowanie zapytań)
-        'echo': False
-    }
-
-    # Timeout dla pozyskania połączenia z puli
-    SQLALCHEMY_POOL_TIMEOUT = 30
-
-    # Reset połączenia po zwróceniu do puli
-    SQLALCHEMY_POOL_RESET_ON_RETURN = 'commit'
-
     CELERY_BEAT_DBURI = SQLALCHEMY_DATABASE_URI
     print(f"--- [CONFIG DEBUG] Ustawiono CELERY_BEAT_DBURI na: {CELERY_BEAT_DBURI}")
 
@@ -62,18 +37,6 @@ class ProdConfig(Config):
     DEBUG = False
     TESTING = False
     ENVIRONMENT = 'production'
-
-    # === PRODUCTION CONNECTION POOL ===
-    # W produkcji zwiększamy pulę dla lepszej wydajności
-    SQLALCHEMY_ENGINE_OPTIONS = {
-        'pool_size': 10,        # Większa pula dla produkcji
-        'max_overflow': 20,      # Więcej połączeń dodatkowych
-        'pool_recycle': 3600,   # Odnawianie co godzinę
-        'pool_pre_ping': True,  # Sprawdzenie żywotności
-        'echo': False           # Brak logowania zapytań
-    }
-
-    SQLALCHEMY_POOL_TIMEOUT = 20  # Krótszy timeout w produkcji
 
 class TestConfig(Config):
     TESTING = True
