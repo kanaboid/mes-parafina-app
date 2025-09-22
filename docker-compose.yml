@@ -5,7 +5,7 @@ services:
     build: .
     container_name: mes-parafina-app-compose
     restart: always
-    command: gunicorn --worker-class eventlet -w 1 --bind 0.0.0.0:5000 --reload --preload "run:app"
+    command: gunicorn --worker-class eventlet -w 4 --bind 0.0.0.0:5000 --preload "run:app" --max-requests 1000 --max-requests-jitter 50
     ports:
       - "8080:5000" # Aplikacja webowa powinna być dostępna na porcie 8080
     volumes:
