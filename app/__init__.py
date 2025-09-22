@@ -66,26 +66,6 @@ def create_app(config_class=None):
     app.logger.addHandler(file_handler)
     app.logger.setLevel(logging.INFO)
     app.logger.info('--- Aplikacja MES Parafina startuje ---')
-
-    # === FIX: Configure logging filters to reduce session error noise ===
-    # Filter out "Invalid session" messages which are normal WebSocket behavior
-    class InvalidSessionFilter(logging.Filter):
-        def filter(self, record):
-            # Filter out common invalid session messages
-            if hasattr(record, 'msg') and 'Invalid session' in str(record.msg):
-                return False
-            return True
-
-    # Apply filter to relevant loggers
-    socketio_logger = logging.getLogger('socketio.server')
-    socketio_logger.addFilter(InvalidSessionFilter())
-    engineio_logger = logging.getLogger('engineio.server')
-    engineio_logger.addFilter(InvalidSessionFilter())
-
-    # Also filter at the root logger level for broader coverage
-    root_logger = logging.getLogger()
-    root_logger.addFilter(InvalidSessionFilter())
-
     # ----------------------------------------------------
 
     print(f"--- [PID: {os.getpid()}] START FABRYKI APLIKACJI (Debug: {app.debug}) ---")
@@ -155,12 +135,6 @@ def create_app(config_class=None):
     def hello():
         return "Witaj w aplikacji MES!"
     from . import sockets
-
-    # === FIX: Configure logging to reduce "Invalid session" noise ===
-    # These errors are normal when clients try to use HTTP session cookies with WebSocket
-    logging.getLogger('socketio').setLevel(logging.WARNING)
-    logging.getLogger('engineio').setLevel(logging.WARNING)
-    logging.getLogger('werkzeug').setLevel(logging.INFO)
     
     
     # Konfiguracja Flask-Admin

@@ -29,15 +29,10 @@ redis_url = os.environ.get('REDIS_URL')
 socketio = SocketIO(
     async_mode='eventlet',
     cors_allowed_origins="*",
-    logger=False,                   # Disable SocketIO logging to reduce noise
-    engineio_logger=False,          # Disable Engine.IO logging
+    #logger=True,
+    #engineio_logger=True,
     message_queue=redis_url,
     ping_timeout=20,
-    ping_interval=10,
-    # === FIX: Comprehensive session handling fix ===
-    # Disable all session-related features to prevent "Invalid session" errors
-    cookie=None,                    # Disable cookie-based sessions
-    manage_session=False,           # Disable session management
-    # Additional logging configuration
-    # log_output=False,             # Uncomment to disable all SocketIO output
+    ping_interval=10
+
 )
