@@ -9,52 +9,73 @@ class MonitoringService:
     def init_app(self, app):
         self.app = app
 
-    def check_equipment_status(self):
+    def check_equipment_status(self, chunk_size=50):
         """
-        Sprawdza stan wszystkich urządzeń (wersja ORM). Tworzy i zamyka alarmy.
+        Sprawdza stan wszystkich urządzeń (wersja ORM z optymalizacją).
+        Tworzy i zamyka alarmy używając chunking dla lepszej wydajności.
+
+        Args:
+            chunk_size (int): Rozmiar partii urządzeń do przetworzenia (domyślnie 50)
         """
         try:
-            # 1. Pobierz stan wszystkich urządzeń
-            all_equipment = db.session.execute(db.select(Sprzet)).scalars().all()
-
-            # 2. Pobierz wszystkie AKTYWNE alarmy
+            # 1. Pobierz wszystkie AKTYWNE alarmy (to jest małe, więc OK)
             active_alarms_q = db.select(Alarmy).where(Alarmy.status_alarmu == 'AKTYWNY')
             active_alarms_raw = db.session.execute(active_alarms_q).scalars().all()
-            
+
             # Stwórz słownik dla szybkich sprawdzeń: (nazwa_sprzętu, typ_alarmu) -> obiekt Alarm
             active_alarms = {(a.nazwa_sprzetu, a.typ_alarmu): a for a in active_alarms_raw}
 
-            # 3. Przejdź przez każde urządzenie i zweryfikuj jego stan
-            for item in all_equipment:
-                nazwa_sprzetu = item.nazwa_unikalna
-                
-                # --- Sprawdzanie temperatury ---
-                # Używamy teraz dostępu przez atrybut (kropkę)
-                aktualna_temp = item.temperatura_aktualna
-                max_temp = item.temperatura_max
-                is_temp_alarm = (nazwa_sprzetu, 'TEMPERATURA') in active_alarms
+            # 2. Przetwarzaj urządzenia w chunkach dla lepszej wydajności pamięci
+            offset = 0
+            while True:
+                # Pobierz chunk urządzeń
+                equipment_chunk = db.session.execute(
+                    db.select(Sprzet)
+                    .order_by(Sprzet.id)
+                    .limit(chunk_size)
+                    .offset(offset)
+                ).scalars().all()
 
-                if aktualna_temp is not None and max_temp is not None:
-                    if aktualna_temp > max_temp:
-                        if not is_temp_alarm:
-                            self._create_alarm('TEMPERATURA', nazwa_sprzetu, aktualna_temp, max_temp)
-                    elif is_temp_alarm:
-                        alarm_to_resolve = active_alarms[(nazwa_sprzetu, 'TEMPERATURA')]
-                        self._resolve_alarm(alarm_to_resolve)
+                if not equipment_chunk:  # Koniec danych
+                    break
 
-                # --- Sprawdzanie ciśnienia ---
-                aktualne_cisnienie = item.cisnienie_aktualne
-                max_cisnienie = item.cisnienie_max
-                is_pressure_alarm = (nazwa_sprzetu, 'CISNIENIE') in active_alarms
+                print(f"Przetwarzam urządzenia {offset+1}-{offset+len(equipment_chunk)} (chunk size: {chunk_size})")
 
-                if aktualne_cisnienie is not None and max_cisnienie is not None:
-                    if aktualne_cisnienie > max_cisnienie:
-                        if not is_pressure_alarm:
-                            self._create_alarm('CISNIENIE', nazwa_sprzetu, aktualne_cisnienie, max_cisnienie)
-                    elif is_pressure_alarm:
-                        alarm_to_resolve = active_alarms[(nazwa_sprzetu, 'CISNIENIE')]
-                        self._resolve_alarm(alarm_to_resolve)
-            
+                # 3. Przejdź przez każde urządzenie w chunku i zweryfikuj jego stan
+                for item in equipment_chunk:
+                    nazwa_sprzetu = item.nazwa_unikalna
+
+                    # --- Sprawdzanie temperatury ---
+                    # Używamy teraz dostępu przez atrybut (kropkę)
+                    aktualna_temp = item.temperatura_aktualna
+                    max_temp = item.temperatura_max
+                    is_temp_alarm = (nazwa_sprzetu, 'TEMPERATURA') in active_alarms
+
+                    if aktualna_temp is not None and max_temp is not None:
+                        if aktualna_temp > max_temp:
+                            if not is_temp_alarm:
+                                self._create_alarm('TEMPERATURA', nazwa_sprzetu, aktualna_temp, max_temp)
+                        elif is_temp_alarm:
+                            alarm_to_resolve = active_alarms[(nazwa_sprzetu, 'TEMPERATURA')]
+                            self._resolve_alarm(alarm_to_resolve)
+
+                    # --- Sprawdzanie ciśnienia ---
+                    aktualne_cisnienie = item.cisnienie_aktualne
+                    max_cisnienie = item.cisnienie_max
+                    is_pressure_alarm = (nazwa_sprzetu, 'CISNIENIE') in active_alarms
+
+                    if aktualne_cisnienie is not None and max_cisnienie is not None:
+                        if aktualne_cisnienie > max_cisnienie:
+                            if not is_pressure_alarm:
+                                self._create_alarm('CISNIENIE', nazwa_sprzetu, aktualne_cisnienie, max_cisnienie)
+                        elif is_pressure_alarm:
+                            alarm_to_resolve = active_alarms[(nazwa_sprzetu, 'CISNIENIE')]
+                            self._resolve_alarm(alarm_to_resolve)
+
+                # 4. Zwiększ offset dla następnego chunku
+                offset += chunk_size
+
+            # 5. Commit wszystkich zmian po przetworzeniu wszystkich chunków
             db.session.commit()
 
         except Exception as e:
