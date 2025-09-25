@@ -141,7 +141,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="card-body">
                         ${isActive ? `
                             <p><strong>Status:</strong> <span class="badge bg-success">Aktywna sesja</span></p>
-                            <p><strong>Typ surowca:</strong> ${apollo.typ_surowca}</p>
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span><strong>Typ surowca:</strong> ${apollo.typ_surowca}</span>
+                                <div class="btn-group btn-group-sm" role="group">
+                                    <button class="btn btn-outline-secondary action-btn" data-action="add-predefined-surowiec" data-id="${apollo.id_sprzetu}" data-name="${apollo.nazwa_apollo}" data-waga="1000">+1000 kg</button>
+                                    <button class="btn btn-outline-secondary action-btn" data-action="add-predefined-surowiec" data-id="${apollo.id_sprzetu}" data-name="${apollo.nazwa_apollo}" data-waga="1500">+1500 kg</button>
+                                </div>
+                            </div>
                             <p class="mb-1"><strong>Wytopione:</strong> <span class="fw-bold fs-5"><span class="apollo-value">${apollo.dostepne_kg.toFixed(2)}</span> kg</span></p>
                             <p class="text-muted"><strong>Całkowity bilans sesji:</strong> ${apollo.bilans_sesji_kg} kg</p>
                             ${apollo.ostatni_transfer_czas ? `<p class="text-info-emphasis small mt-2">Ostatnie roztankowanie: ${apollo.ostatni_transfer_kg} kg o ${lastTransferTime}</p>` : '<p class="text-muted small mt-2">Brak transferów w tej sesji.</p>'}` : `
@@ -197,7 +203,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const button = e.target.closest('.action-btn');
         if (!button) return;
         e.preventDefault();
-        const { action, id, name, sessionId } = button.dataset;
+        const { action, id, name, sessionId, waga } = button.dataset;
         switch (action) {
             case 'start-session':
                 document.getElementById('start-session-apollo-id').value = id;
@@ -207,6 +213,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.getElementById('add-surowiec-apollo-id').value = id;
                 document.getElementById('add-surowiec-apollo-name').textContent = name;
                 forms.addSurowiec.reset(); modals.addSurowiec.show(); break;
+            case 'add-predefined-surowiec':
+                if (confirm(`Dodać ${waga} kg surowca do ${name}?`)) {
+                    const payload = {
+                        id_sprzetu: parseInt(id),
+                        waga_kg: parseFloat(waga)
+                    };
+                    handleApiCall(API_URLS.addSurowiec, payload, `Dodano ${waga} kg surowca.`);
+                }
+                break;
             case 'start-transfer':
                 document.getElementById('start-transfer-apollo-id').value = id;
                 document.getElementById('start-transfer-apollo-name').textContent = name;
