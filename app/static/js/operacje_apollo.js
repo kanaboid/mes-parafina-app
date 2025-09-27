@@ -143,7 +143,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             <p><strong>Status:</strong> <span class="badge bg-success">Aktywna sesja</span></p>
                             <div class="d-flex justify-content-between align-items-center mb-2">
                                 <span><strong>Typ surowca:</strong> ${apollo.typ_surowca}</span>
-                                <div class="btn-group btn-group-sm" role="group">
+                                <div class="btn-group" role="group">
                                     <button class="btn btn-outline-secondary action-btn" data-action="add-predefined-surowiec" data-id="${apollo.id_sprzetu}" data-name="${apollo.nazwa_apollo}" data-waga="1000">+1000 kg</button>
                                     <button class="btn btn-outline-secondary action-btn" data-action="add-predefined-surowiec" data-id="${apollo.id_sprzetu}" data-name="${apollo.nazwa_apollo}" data-waga="1500">+1500 kg</button>
                                 </div>

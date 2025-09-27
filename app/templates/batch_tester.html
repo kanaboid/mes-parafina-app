@@ -65,15 +65,15 @@
                         <input type="number" id="batch_id_transfer" name="batch_id_transfer">
 
                         <label for="tank_id_dest">ID Zbiornika docelowego:</label>
-                        <input type="number" id="tank_id_dest" name="tank_id_dest" required>
+                        <select id="tank_id_dest" name="tank_id_dest" required></select>
                     </div>
 
                     <div id="tank-to-tank-fields" style="display:none;">
                         <label for="tank_id_source">ID Zbiornika źródłowego:</label>
-                        <input type="number" id="tank_id_source" name="tank_id_source">
+                        <select id="tank_id_source" name="tank_id_source"></select>
 
                         <label for="tank_id_dest_ttt">ID Zbiornika docelowego:</label>
-                        <input type="number" id="tank_id_dest_ttt" name="tank_id_dest_ttt">
+                        <select id="tank_id_dest_ttt" name="tank_id_dest_ttt"></select>
                         
                         <label for="quantity_transfer">Ilość do przelania [kg]:</label>
                         <input type="number" id="quantity_transfer" name="quantity_transfer" step="0.01">
@@ -88,7 +88,7 @@
                 <h2>3. Sprawdź Stan Zbiornika</h2>
                 <form id="form-check-status">
                     <label for="tank_id_status">ID Zbiornika:</label>
-                    <input type="number" id="tank_id_status" name="tank_id_status" required value="201">
+                    <select id="tank_id_status" name="tank_id_status" required></select>
                     <button type="submit">Sprawdź</button>
                 </form>
 
@@ -115,6 +115,48 @@
     <script>
         // Nasz kod JavaScript
         $(document).ready(function() {
+
+            function populateTankSelectors() {
+                $.ajax({
+                    url: '/api/sprzet/dostepne-cele', // ZMIANA: Bardziej odpowiedni endpoint
+                    type: 'GET',
+                    success: function(tanks) {
+                        const selectors = $('#tank_id_dest, #tank_id_source, #tank_id_dest_ttt, #tank_id_status');
+                        selectors.empty();
+
+                        const groupedTanks = tanks.reduce((acc, tank) => {
+                            const type = tank.typ_sprzetu; // ZMIANA: Użycie 'typ_sprzetu'
+                            if (!acc[type]) {
+                                acc[type] = [];
+                            }
+                            acc[type].push(tank);
+                            return acc;
+                        }, {});
+
+                        selectors.each(function() {
+                            const selector = $(this);
+                            selector.append('<option value="">-- Wybierz zbiornik --</option>');
+                            const sortedTypes = Object.keys(groupedTanks).sort();
+                            
+                            for (const type of sortedTypes) {
+                                const optgroup = $(`<optgroup label="${type}"></optgroup>`);
+                                // ZMIANA: Użycie 'nazwa_unikalna' do sortowania i wyświetlania
+                                groupedTanks[type].sort((a, b) => a.nazwa_unikalna.localeCompare(b.nazwa_unikalna)).forEach(tank => {
+                                    optgroup.append(`<option value="${tank.id}">${tank.nazwa_unikalna}</option>`);
+                                });
+                                selector.append(optgroup);
+                            }
+                        });
+                    },
+                    error: function(xhr) {
+                        console.error("Nie udało się załadować listy zbiorników:", xhr);
+                        alert('Błąd podczas ładowania listy zbiorników. Sprawdź konsolę.');
+                    }
+                });
+            }
+
+            populateTankSelectors();
+            
     const apiResponseEl = $('#api-response');
 
     function showResponse(response, isError = false) {
