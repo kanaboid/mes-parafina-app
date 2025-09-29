@@ -173,14 +173,16 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         beczki.forEach(b => {
-            const transferButtonHTML = (isBrudna && b.partia) ? 
-                `<button class="btn btn-sm btn-outline-primary mt-2 action-btn"
-                         data-action="plan-transfer"
-                         data-source-id="${b.id}"
-                         data-source-name="${b.nazwa}"
-                         data-mix-id="${b.partia.id}">
-                    Zaplanuj Transfer
-                 </button>` : '';
+            // Zawsze pokazuj przycisk transferu dla wszystkich beczek
+            const transferButtonHTML = `
+                <button class="btn btn-sm btn-info mt-2 action-btn"
+                         data-action="open-transfer-modal"
+                         data-sprzet-id="${b.id}"
+                         data-sprzet-nazwa="${b.nazwa}"
+                         data-partia-waga="${b.partia ? b.partia.waga_kg : '0'}">
+                    <i class="fas fa-exchange-alt me-1"></i> Przelej
+                 </button>`;
+
             const itemHTML = `
                 <div class="list-group-item">
                     <div class="d-flex w-100 justify-content-between">
@@ -188,7 +190,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <small>${b.stan_sprzetu}</small>
                     </div>
                     <p class="mb-1">
-                        ${b.partia ? `Zawartość: <strong>${b.partia.kod}</strong> (${(b.partia.waga_kg/1000)} t)` : '<em>Pusta</em>'}
+                        ${b.partia ? `Zawartość: <strong>${b.partia.kod}</strong> (${(b.partia.waga_kg/1000).toFixed(1)} t)` : '<em>Pusta</em>'}
                     </p>
                     ${transferButtonHTML}
                 </div>`;
@@ -285,16 +287,23 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    beczkiBrudneContainer.addEventListener('click', (e) => {
+    // Ujednolicona obsługa kliknięć dla obu typów beczek
+    const handleTankClick = (e) => {
         const button = e.target.closest('.action-btn');
         if (!button) return;
+    
         const action = button.dataset.action;
-        if (action === 'plan-transfer') {
-            const sourceId = button.dataset.sourceId;
-            const sourceName = button.dataset.sourceName;
-            handlePlanTransfer(sourceId, sourceName);
+        if (action === 'open-transfer-modal') {
+            const sprzetId = button.dataset.sprzetId;
+            const sprzetNazwa = button.dataset.sprzetNazwa;
+            const wagaPartii = button.dataset.partiaWaga;
+            handleOpenTransferModal(sprzetId, sprzetNazwa, wagaPartii);
         }
-    });
+    };
+    
+    beczkiBrudneContainer.addEventListener('click', handleTankClick);
+    beczkiCzysteContainer.addEventListener('click', handleTankClick);
+
 
     // --- FUNKCJE OBSŁUGUJĄCE AKCJE ---
 
@@ -341,7 +350,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 groupedDestinations[type].forEach(dest => {
                     const option = document.createElement('option');
                     option.value = dest.id;
-                    option.textContent = dest.nazwa_unikalna;
+                    
+                    let label = dest.nazwa_unikalna;
+                    if (dest.mix_info && dest.mix_info.total_weight > 0.01) {
+                        const waga_w_tonach = (dest.mix_info.total_weight / 1000).toFixed(2);
+                        const materialTypes = dest.mix_info.components.map(c => c.material_type).join(', ');
+                        label += ` (${waga_w_tonach} t, ${materialTypes})`;
+                    } else {
+                        label += ` (Pusty)`;
+                    }
+                    option.textContent = label;
+
                     optgroup.appendChild(option);
                 });
                 destinationSelect.appendChild(optgroup);

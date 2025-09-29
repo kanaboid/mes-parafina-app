@@ -8,6 +8,10 @@ from .apollo_service import ApolloService
 from .sensors import SensorService
 import mysql.connector
 from decimal import Decimal, InvalidOperation
+from .extensions import db
+from .models import Sprzet
+from .batch_management_service import BatchManagementService
+from sqlalchemy.orm import joinedload
 
 def get_sensor_service():
     """Pobiera instancję serwisu SensorService z kontekstu aplikacji."""
@@ -289,36 +293,45 @@ def get_dostepne_zrodla():
 
 @sprzet_bp.route('/dostepne-cele', methods=['GET'])
 def get_dostepne_cele():
-    """Zwraca listę wszystkich reaktorów i beczek brudnych jako potencjalnych celów transferu."""
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-    
+    """Zwraca listę wszystkich reaktorów i beczek jako potencjalnych celów transferu, używając nowego systemu TankMixes."""
     try:
-        # LEFT JOIN z partiami, aby uzyskać informacje o zawartości
-        query = """
-            SELECT 
-                s.id, 
-                s.nazwa_unikalna, 
-                s.typ_sprzetu, 
-                s.stan_sprzetu,
-                s.pojemnosc_kg,
-                p.waga_aktualna_kg,
-                p.typ_surowca
-            FROM sprzet s
-            LEFT JOIN partie_surowca p ON s.id = p.id_sprzetu
-            WHERE s.typ_sprzetu IN ('reaktor', 'beczka_brudna', 'beczka_czysta')
-            ORDER BY s.typ_sprzetu, s.nazwa_unikalna
-        """
-        cursor.execute(query)
+        sprzet_q = db.select(Sprzet).options(
+            joinedload(Sprzet.active_mix)
+        ).where(
+            Sprzet.typ_sprzetu.in_(['reaktor', 'beczka_brudna', 'beczka_czysta'])
+        ).order_by(Sprzet.typ_sprzetu, Sprzet.nazwa_unikalna)
         
-        cele = cursor.fetchall()
-        return jsonify(cele)
+        wszystkie_cele = db.session.execute(sprzet_q).scalars().unique().all()
+        
+        cele_data = []
+        for sprzet in wszystkie_cele:
+            cel = {
+                "id": sprzet.id,
+                "nazwa_unikalna": sprzet.nazwa_unikalna,
+                "typ_sprzetu": sprzet.typ_sprzetu,
+                "stan_sprzetu": sprzet.stan_sprzetu,
+                "mix_info": None
+            }
+            
+            if sprzet.active_mix:
+                composition = BatchManagementService.get_mix_composition(sprzet.active_mix.id)
+                
+                cel['mix_info'] = {
+                    "total_weight": float(composition.get('total_weight', Decimal('0.0'))),
+                    "components": [
+                        {'material_type': item['material_type']}
+                        for item in composition.get('summary_by_material', [])
+                    ]
+                }
+            cele_data.append(cel)
+            
+        return jsonify(cele_data)
         
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': f'Błąd pobierania celów: {str(e)}'}), 500
-    finally:
-        cursor.close()
-        conn.close()
+
 @sprzet_bp.route('/stan-partii', methods=['GET'])
 def get_stan_partii_w_sprzecie():
     """
