@@ -24,8 +24,7 @@ class DashboardService:
         
         wszystkie_urzadzenia = db.session.execute(sprzet_q).scalars().unique().all()
 
-        reaktory_w_procesie_data = []
-        reaktory_puste_data = []
+        all_reactors_data = []
         beczki_brudne_data = []
         beczki_czyste_data = []
 
@@ -67,10 +66,7 @@ class DashboardService:
                 }
             
             if sprzet.typ_sprzetu == 'reaktor':
-                if sprzet.active_mix:
-                    reaktory_w_procesie_data.append(sprzet_data)
-                else:
-                    reaktory_puste_data.append(sprzet_data)
+                all_reactors_data.append(sprzet_data)
             elif sprzet.typ_sprzetu == 'beczka_brudna':
                 beczki_brudne_data.append(sprzet_data)
             elif sprzet.typ_sprzetu == 'beczka_czysta':
@@ -102,8 +98,7 @@ class DashboardService:
         alarmy_data = [{ "id": a.id, "typ": a.typ_alarmu, "sprzet": a.nazwa_sprzetu, "wartosc": float(a.wartosc), "limit": float(a.limit_przekroczenia), "czas": a.czas_wystapienia.isoformat() + 'Z' } for a in alarmy]
 
         return {
-            "reaktory_w_procesie": reaktory_w_procesie_data,
-            "reaktory_puste": reaktory_puste_data,
+            "all_reactors": all_reactors_data,
             "beczki_brudne": beczki_brudne_data,
             "beczki_czyste": beczki_czyste_data,
             "alarmy": alarmy_data,

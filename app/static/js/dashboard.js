@@ -5,7 +5,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- ELEMENTY DOM, MODALE, FORMULARZE ---
     let latestDashboardData = {}; // Globalne przechowywanie danych
     const reaktoryContainer = document.getElementById('reaktory-container');
-    const pusteReaktoryContainer = document.getElementById('puste-reaktory-container');
     const beczkiBrudneContainer = document.getElementById('beczki-brudne-container');
     const beczkiCzysteContainer = document.getElementById('beczki-czyste-container');
     const alarmsContainer = document.getElementById('alarms-container');
@@ -37,8 +36,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- GŁÓWNA FUNKCJA AKTUALIZUJĄCA UI ---
     function updateUI(data) {
-        renderReaktory(data.reaktory_w_procesie); // <-- Użyj nowego klucza
-        renderPusteReaktory(data.reaktory_puste);   // <-- Użyj nowego klucza
+        renderReaktory(data.all_reactors);
         renderBeczki(data.beczki_brudne, beczkiBrudneContainer, true);
         renderBeczki(data.beczki_czyste, beczkiCzysteContainer, false);
         renderAlarms(data.alarmy);
@@ -50,7 +48,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderReaktory(reaktory) {
         reaktoryContainer.innerHTML = '';
         if (!reaktory || reaktory.length === 0) {
-            reaktoryContainer.innerHTML = '<div class="col"><p class="text-muted">Brak reaktorów w aktywnym procesie.</p></div>';
+            reaktoryContainer.innerHTML = '<div class="col"><p class="text-muted">Brak reaktorów w systemie.</p></div>';
             return;
         }
 
@@ -165,19 +163,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
             </div>`;
             reaktoryContainer.innerHTML += cardHTML;
-        });
-    }
-
-    function renderPusteReaktory(puste_reaktory) { // Zmieniamy nazwę argumentu dla jasności
-        pusteReaktoryContainer.innerHTML = '';
-        
-        // Nie musimy już filtrować!
-        if (!puste_reaktory || puste_reaktory.length === 0) {
-            pusteReaktoryContainer.innerHTML = '<span class="badge bg-warning text-dark">Brak wolnych reaktorów</span>';
-            return;
-        }
-        puste_reaktory.forEach(r => {
-            pusteReaktoryContainer.innerHTML += `<span class="badge bg-success">${r.nazwa}</span>`;
         });
     }
 
