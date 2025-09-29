@@ -239,27 +239,57 @@ document.addEventListener('DOMContentLoaded', () => {
                 <thead class="table-light">
                     <tr>
                         <th>Typ Surowca</th>
-                        <th class="text-end">W Magazynie Brudnym (t)</th>
-                        <th class="text-end">W Magazynie Czystym (t)</th>
+                        <th class="text-end">Strefa Brudna (t)</th>
+                        <th class="text-end">W Reaktorach (t)</th>
+                        <th class="text-end">Strefa Czysta (t)</th>
+                        <th class="text-end fw-bold">Suma (t)</th>
                     </tr>
                 </thead>
                 <tbody>
         `;
 
-        // Sortujemy alfabetycznie po typie surowca
         summaryData.sort((a, b) => a.material_type.localeCompare(b.material_type));
 
+        let totalDirty = 0;
+        let totalClean = 0;
+        let totalReactors = 0;
+        let grandTotal = 0;
+
         summaryData.forEach(item => {
+            const dirtyTonnes = (item.dirty_stock_kg || 0) / 1000;
+            const cleanTonnes = (item.clean_stock_kg || 0) / 1000;
+            const reactorsTonnes = (item.reactors_stock_kg || 0) / 1000;
+            const rowTotal = dirtyTonnes + cleanTonnes + reactorsTonnes;
+
+            totalDirty += dirtyTonnes;
+            totalClean += cleanTonnes;
+            totalReactors += reactorsTonnes;
+            grandTotal += rowTotal;
+
             tableHTML += `
                 <tr>
                     <td><strong>${item.material_type}</strong></td>
-                    <td class="text-end">${(item.dirty_stock_kg/1000).toFixed(1)}</td>
-                    <td class="text-end">${(item.clean_stock_kg/1000).toFixed(1)}</td>
+                    <td class="text-end">${dirtyTonnes.toFixed(2)}</td>
+                    <td class="text-end">${reactorsTonnes.toFixed(2)}</td>
+                    <td class="text-end">${cleanTonnes.toFixed(2)}</td>
+                    <td class="text-end fw-bold">${rowTotal.toFixed(2)}</td>
                 </tr>
             `;
         });
 
-        tableHTML += '</tbody></table>';
+        tableHTML += `
+                </tbody>
+                <tfoot class="table-group-divider">
+                    <tr class="table-secondary fw-bold">
+                        <td>SUMA CAŁKOWITA</td>
+                        <td class="text-end">${totalDirty.toFixed(2)}</td>
+                        <td class="text-end">${totalReactors.toFixed(2)}</td>
+                        <td class="text-end">${totalClean.toFixed(2)}</td>
+                        <td class="text-end bg-dark text-white">${grandTotal.toFixed(2)}</td>
+                    </tr>
+                </tfoot>
+            </table>
+        `;
         stockSummaryContainer.innerHTML = tableHTML;
     }
 

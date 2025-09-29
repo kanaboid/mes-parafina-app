@@ -72,24 +72,37 @@ class DashboardService:
             elif sprzet.typ_sprzetu == 'beczka_czysta':
                 beczki_czyste_data.append(sprzet_data)
 
-        stock_summary = defaultdict(lambda: {'brudny': Decimal('0.0'), 'czysty': Decimal('0.0')})
+        stock_summary = defaultdict(lambda: {'brudny': Decimal('0.0'), 'czysty': Decimal('0.0'), 'reaktory': Decimal('0.0')})
 
         for beczka in beczki_brudne_data:
             if beczka.get('partia') and beczka['partia'].get('sklad'):
                 for material_info in beczka['partia']['sklad']:
                     mat_type = material_info['material_type']
-                    mat_quantity = Decimal(material_info.get('total_quantity', '0.0'))
+                    mat_quantity = Decimal(str(material_info.get('total_quantity', '0.0'))) # Bezpieczna konwersja
                     stock_summary[mat_type]['brudny'] += mat_quantity
 
         for beczka in beczki_czyste_data:
             if beczka.get('partia') and beczka['partia'].get('sklad'):
                 for material_info in beczka['partia']['sklad']:
                     mat_type = material_info['material_type']
-                    mat_quantity = Decimal(material_info.get('total_quantity', '0.0'))
+                    mat_quantity = Decimal(str(material_info.get('total_quantity', '0.0'))) # Bezpieczna konwersja
                     stock_summary[mat_type]['czysty'] += mat_quantity
         
+        # NOWA LOGIKA: Dodaj materiał z reaktorów do podsumowania
+        for reaktor in all_reactors_data:
+            if reaktor.get('partia') and reaktor['partia'].get('sklad'):
+                for material_info in reaktor['partia']['sklad']:
+                    mat_type = material_info['material_type']
+                    mat_quantity = Decimal(str(material_info.get('total_quantity', '0.0'))) # Bezpieczna konwersja
+                    stock_summary[mat_type]['reaktory'] += mat_quantity
+
         stock_summary_list = sorted([
-            {'material_type': k, 'dirty_stock_kg': float(v['brudny']), 'clean_stock_kg': float(v['czysty'])}
+            {
+                'material_type': k, 
+                'dirty_stock_kg': float(v['brudny']), 
+                'clean_stock_kg': float(v['czysty']),
+                'reactors_stock_kg': float(v['reaktory'])
+            }
             for k, v in stock_summary.items()
         ], key=lambda x: x['material_type'])
         
