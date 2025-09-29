@@ -159,6 +159,34 @@
     </div>
 </div>
 
+<!-- NOWY MODAL: Przelej Między Zbiornikami -->
+<div class="modal fade" id="transfer-tank-to-tank-modal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Przelej z <span class="fw-bold" id="transfer-source-name"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="transfer-tank-to-tank-form">
+                    <input type="hidden" id="transfer-source-id">
+                    <div class="mb-3">
+                        <label for="transfer-destination-id" class="form-label">Zbiornik docelowy:</label>
+                        <select id="transfer-destination-id" class="form-select" required>
+                            <!-- Opcje ładowane dynamicznie -->
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="transfer-quantity" class="form-label">Ilość do przelania (kg):</label>
+                        <input type="number" id="transfer-quantity" class="form-control" step="0.01" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Wykonaj Przelew</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Modal Harmonogramu Zadań -->
 <div class="modal fade" id="scheduler-modal" tabindex="-1">
     <div class="modal-dialog modal-xl">

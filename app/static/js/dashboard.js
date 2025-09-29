@@ -15,12 +15,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const modals = {
         planTransfer: new bootstrap.Modal(document.getElementById('plan-transfer-modal')),
         startHeating: new bootstrap.Modal(document.getElementById('start-heating-modal')),
-        simulationSettings: new bootstrap.Modal(document.getElementById('simulation-settings-modal'))
+        simulationSettings: new bootstrap.Modal(document.getElementById('simulation-settings-modal')),
+        transferTankToTank: new bootstrap.Modal(document.getElementById('transfer-tank-to-tank-modal')) // NOWY MODAL
     };
     const forms = {
         planTransfer: document.getElementById('plan-transfer-form'),
         startHeating: document.getElementById('start-heating-form'),
-        simulationSettings: document.getElementById('simulation-settings-form')
+        simulationSettings: document.getElementById('simulation-settings-form'),
+        transferTankToTank: document.getElementById('transfer-tank-to-tank-form') // NOWY FORMULARZ
     };
     
     // --- SOCKET.IO ---
@@ -56,24 +58,35 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // --- LOGIKA DLA PRZYCISKÓW ---
             let actionButtonsHTML = `
-                <button class="btn btn-primary action-btn btn-lg" 
+                <button class="btn btn-primary action-btn" 
                         data-action="show-details" 
                         data-sprzet-id="${r.id}"
                         data-sprzet-nazwa="${r.nazwa}">
-                    Szczegóły
+                    <i class="fas fa-info-circle"></i>
                 </button>
-                <button class="btn btn-secondary action-btn btn-lg" 
+                <button class="btn btn-secondary action-btn" 
                         data-action="open-simulation-settings" 
                         data-sprzet-id="${r.id}"
                         data-sprzet-nazwa="${r.nazwa}">
-                    Ustawienia
+                    <i class="fas fa-sliders-h"></i>
                 </button>
             `;
             
+            // Przycisk "Przelej" - zawsze widoczny
+            actionButtonsHTML += `
+            <button class="btn btn-info action-btn" 
+                    data-action="open-transfer-modal" 
+                    data-sprzet-id="${r.id}"
+                    data-sprzet-nazwa="${r.nazwa}"
+                    data-partia-waga="${r.partia ? r.partia.waga_kg : '0'}">
+                <i class="fas fa-exchange-alt"></i>
+            </button>`;
+
+
             // Sprawdź, czy należy dodać przycisk kontekstowy
             if (r.partia && r.partia.process_status === 'SUROWY') {
                 actionButtonsHTML += `
-                    <button class="btn btn-warning action-btn btn-lg" 
+                    <button class="btn btn-warning action-btn" 
                             data-action="start-heating" 
                             data-sprzet-id="${r.id}"
                             data-sprzet-nazwa="${r.nazwa}">
@@ -145,7 +158,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         ${burnerSwitchHTML}
                     </div>
                     <div class="card-footer p-2">
-                        <div class="btn-group w-100" role="group">
+                        <div class="btn-group w-100" role="group" aria-label="Akcje dla reaktora">
                             ${actionButtonsHTML}
                         </div>
                     </div>
@@ -281,6 +294,9 @@ document.addEventListener('DOMContentLoaded', () => {
             handleToggleBurner(sprzetId, newState);
         } else if (action === 'open-simulation-settings') {
             handleOpenSimulationSettings(sprzetId, sprzetNazwa);
+        } else if (action === 'open-transfer-modal') { // NOWA AKCJA
+            const wagaPartii = targetElement.dataset.partiaWaga;
+            handleOpenTransferModal(sprzetId, sprzetNazwa, wagaPartii);
         }
     });
 
@@ -296,6 +312,65 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // --- FUNKCJE OBSŁUGUJĄCE AKCJE ---
+
+    // Przeniesiona definicja funkcji, aby zapewnić jej dostępność
+    async function handleOpenTransferModal(sourceId, sourceName, wagaPartii) {
+        // Ustaw wartości w modalu
+        document.getElementById('transfer-source-id').value = sourceId;
+        document.getElementById('transfer-source-name').textContent = sourceName;
+        // Ustaw domyślną ilość, ale tylko jeśli jest większa od zera
+        document.getElementById('transfer-quantity').value = parseFloat(wagaPartii) > 0 ? wagaPartii : '';
+        
+        const destinationSelect = document.getElementById('transfer-destination-id');
+        destinationSelect.innerHTML = '<option>Ładowanie celów...</option>';
+        destinationSelect.disabled = true;
+
+        modals.transferTankToTank.show();
+
+        try {
+            const response = await fetch('/api/sprzet/dostepne-cele');
+            if (!response.ok) throw new Error('Błąd ładowania listy celów');
+            
+            const destinations = await response.json();
+            
+            destinationSelect.innerHTML = '<option value="">-- Wybierz cel --</option>';
+
+            // Grupuj cele
+            const groupedDestinations = destinations.reduce((acc, dest) => {
+                // Nie pokazuj samego siebie jako celu
+                if (dest.id.toString() === sourceId.toString()) {
+                    return acc;
+                }
+                const type = dest.typ_sprzetu;
+                if (!acc[type]) {
+                    acc[type] = [];
+                }
+                acc[type].push(dest);
+                return acc;
+            }, {});
+            
+            // Renderuj opcje
+            for (const type in groupedDestinations) {
+                const optgroup = document.createElement('optgroup');
+                optgroup.label = type;
+                groupedDestinations[type].forEach(dest => {
+                    const option = document.createElement('option');
+                    option.value = dest.id;
+                    option.textContent = dest.nazwa_unikalna;
+                    optgroup.appendChild(option);
+                });
+                destinationSelect.appendChild(optgroup);
+            }
+
+            destinationSelect.disabled = false;
+
+        } catch (error) {
+            console.error(error);
+            destinationSelect.innerHTML = `<option value="">Błąd: ${error.message}</option>`;
+            showToast(error.message, 'error');
+        }
+    }
+    
     function handleShowDetails(id, nazwa) {
         window.location.href = `/sprzet/${id}/details`;
     }
@@ -419,6 +494,42 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 alert(`Błąd: ${error.message}`);
             }
+        }
+    });
+
+    // NOWA OBSŁUGA FORMULARZA: Przelej między zbiornikami
+    forms.transferTankToTank.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const sourceId = document.getElementById('transfer-source-id').value;
+        const destinationId = document.getElementById('transfer-destination-id').value;
+        const quantity = document.getElementById('transfer-quantity').value;
+
+        if (!destinationId) {
+            showToast('Proszę wybrać zbiornik docelowy.', 'error');
+            return;
+        }
+
+        const payload = {
+            source_tank_id: parseInt(sourceId),
+            destination_tank_id: parseInt(destinationId),
+            quantity_kg: parseFloat(quantity)
+        };
+
+        try {
+            const response = await fetch('/api/batches/transfer/tank-to-tank', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.message || 'Błąd serwera');
+
+            showToast(`Transfer z ID ${sourceId} do ID ${destinationId} został pomyślnie zainicjowany.`, 'success');
+            modals.transferTankToTank.hide();
+        } catch (error) {
+            console.error('Błąd podczas transferu:', error);
+            showToast(`Błąd transferu: ${error.message}`, 'error');
         }
     });
 
