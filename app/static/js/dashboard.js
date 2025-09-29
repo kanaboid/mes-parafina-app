@@ -127,13 +127,16 @@ document.addEventListener('DOMContentLoaded', () => {
             // --- NOWA, POPRAWIONA LOGIKA DLA WAGI ---
             const wagaHTML = r.partia ? `<p><strong>Waga:</strong> ${(r.partia.waga_kg/1000).toFixed(1)} t</p>` : '';
 
-            // --- NOWA LOGIKA DLA TYPU MATERIAŁU ---
+        // --- ZMODYFIKOWANA LOGIKA DLA TYPU MATERIAŁU ---
         let materialTypeHTML = '';
         if (r.partia && r.partia.sklad && r.partia.sklad.length > 0) {
-            // Pobierz unikalne typy materiałów
             const materialTypes = [...new Set(r.partia.sklad.map(item => item.material_type))];
-            const materialTypesText = materialTypes.join(', ');
-            materialTypeHTML = `<p><strong>Typ materiału:</strong> ${materialTypesText}</p>`;
+            const materialTypesText = materialTypes.join(' + '); // Łącznik dla mieszanin
+            materialTypeHTML = `
+                <div class="text-center bg-light p-2 rounded mb-3">
+                    <h4 class="mb-0 text-primary fw-bold">${materialTypesText}</h4>
+                </div>
+            `;
         }
 
         // --- Kompletny szablon karty ---
@@ -145,9 +148,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         <span class="badge bg-info text-dark">${r.stan_sprzetu || 'Brak stanu'}</span>
                     </div>
                     <div class="card-body">
+                        ${materialTypeHTML}
                         <p><strong>Partia:</strong> ${r.partia ? r.partia.kod : '<em>Pusty</em>'}</p>
                         ${wagaHTML}
-                        ${materialTypeHTML}
                         <p class="mb-1"><strong>Temperatura:</strong> ${r.temperatura_aktualna ? r.temperatura_aktualna.toFixed(2) : 'N/A'}°C / ${r.temperatura_docelowa || 'N/A'}°C</p>
                         ${tempProgressBar}
                         
@@ -183,12 +186,25 @@ document.addEventListener('DOMContentLoaded', () => {
                     <i class="fas fa-exchange-alt me-1"></i> Przelej
                  </button>`;
 
+            // NOWA LOGIKA: Wyświetlanie typu materiału
+            let materialTypeHTML = '';
+            if (b.partia && b.partia.sklad && b.partia.sklad.length > 0) {
+                const materialTypes = [...new Set(b.partia.sklad.map(item => item.material_type))];
+                const materialTypesText = materialTypes.join(' + ');
+                materialTypeHTML = `
+                    <div class="text-center bg-light p-1 rounded mt-2 mb-1">
+                        <strong class="text-primary">${materialTypesText}</strong>
+                    </div>
+                `;
+            }
+
             const itemHTML = `
                 <div class="list-group-item">
                     <div class="d-flex w-100 justify-content-between">
                         <h6 class="mb-1">${b.nazwa}</h6>
                         <small>${b.stan_sprzetu}</small>
                     </div>
+                    ${materialTypeHTML}
                     <p class="mb-1">
                         ${b.partia ? `Zawartość: <strong>${b.partia.kod}</strong> (${(b.partia.waga_kg/1000).toFixed(1)} t)` : '<em>Pusta</em>'}
                     </p>
