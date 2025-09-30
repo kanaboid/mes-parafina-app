@@ -8,6 +8,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const beczkiBrudneContainer = document.getElementById('beczki-brudne-container');
     const beczkiCzysteContainer = document.getElementById('beczki-czyste-container');
     const alarmsContainer = document.getElementById('alarms-container');
+    const activeOperationsContainer = document.getElementById('active-operations-log'); // Nowy element
     const lastUpdatedTime = document.getElementById('last-updated-time');
     const stockSummaryContainer = document.getElementById('stock-summary-container');
 
@@ -41,6 +42,7 @@ document.addEventListener('DOMContentLoaded', () => {
         renderBeczki(data.beczki_czyste, beczkiCzysteContainer, false);
         renderAlarms(data.alarmy);
         renderStockSummary(data.stock_summary);
+        renderActiveOperations(data.active_operations); // Nowe wywołanie
         lastUpdatedTime.textContent = `Ostatnia aktualizacja: ${new Date().toLocaleTimeString()}`;
     }
 
@@ -291,6 +293,34 @@ document.addEventListener('DOMContentLoaded', () => {
             </table>
         `;
         stockSummaryContainer.innerHTML = tableHTML;
+    }
+
+    // NOWA FUNKCJA: Renderowanie logu aktywnych operacji
+    function renderActiveOperations(operations) {
+        activeOperationsContainer.innerHTML = '';
+        if (!operations || operations.length === 0) {
+            activeOperationsContainer.innerHTML = '<div class="list-group-item"><p class="text-muted mb-0">Brak aktywnych operacji.</p></div>';
+            return;
+        }
+
+        operations.forEach(op => {
+            const startTime = new Date(op.czas_rozpoczecia);
+            const timeSince = Math.round((new Date() - startTime) / 1000 / 60); // minuty temu
+
+            const itemHTML = `
+                <div class="list-group-item">
+                    <div class="d-flex w-100 justify-content-between">
+                        <h6 class="mb-1 text-info">${op.opis}</h6>
+                        <small class="text-muted">${timeSince} min temu</small>
+                    </div>
+                    <p class="mb-1 small">
+                        <span class="badge bg-secondary">${op.zrodlo}</span>
+                        <i class="fas fa-long-arrow-alt-right mx-2"></i>
+                        <span class="badge bg-success">${op.cel}</span>
+                    </p>
+                </div>`;
+            activeOperationsContainer.innerHTML += itemHTML;
+        });
     }
 
     // --- OBSŁUGA ZDARZEŃ ---

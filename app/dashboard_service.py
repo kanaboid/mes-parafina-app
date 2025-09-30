@@ -1,7 +1,7 @@
 # app/dashboard_service.py
 
 from .extensions import db
-from .models import Sprzet, Alarmy, TankMixes
+from .models import Sprzet, Alarmy, TankMixes, OperacjeLog
 from .batch_management_service import BatchManagementService
 from sqlalchemy import func
 from sqlalchemy.orm import joinedload
@@ -110,10 +110,29 @@ class DashboardService:
         alarmy = db.session.execute(alarmy_q).scalars().all()
         alarmy_data = [{ "id": a.id, "typ": a.typ_alarmu, "sprzet": a.nazwa_sprzetu, "wartosc": float(a.wartosc), "limit": float(a.limit_przekroczenia), "czas": a.czas_wystapienia.isoformat() + 'Z' } for a in alarmy]
 
+        # NOWA LOGIKA: Pobierz aktywne operacje
+        active_ops_q = db.select(OperacjeLog).options(
+            joinedload(OperacjeLog.sprzet_zrodlowy),
+            joinedload(OperacjeLog.sprzet_docelowy)
+        ).where(OperacjeLog.status_operacji == 'aktywna').order_by(OperacjeLog.czas_rozpoczecia.desc())
+        
+        active_ops = db.session.execute(active_ops_q).scalars().all()
+        
+        active_operations_data = [
+            {
+                "id": op.id,
+                "opis": op.opis or "Transfer",
+                "zrodlo": op.sprzet_zrodlowy.nazwa_unikalna if op.sprzet_zrodlowy else 'System',
+                "cel": op.sprzet_docelowy.nazwa_unikalna if op.sprzet_docelowy else 'System',
+                "czas_rozpoczecia": op.czas_rozpoczecia.isoformat() + 'Z' if op.czas_rozpoczecia else 'N/A'
+            } for op in active_ops
+        ]
+
         return {
             "all_reactors": all_reactors_data,
             "beczki_brudne": beczki_brudne_data,
             "beczki_czyste": beczki_czyste_data,
             "alarmy": alarmy_data,
-            "stock_summary": stock_summary_list
+            "stock_summary": stock_summary_list,
+            "active_operations": active_operations_data
         }
