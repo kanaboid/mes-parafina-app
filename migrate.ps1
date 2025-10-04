@@ -1,5 +1,6 @@
 # migrate.ps1
-# Wersja finalna, używająca zmiennych środowiskowych i zawierająca komendę stamp-test.
+# Wersja z uv - używa 'uv run alembic' do uruchamiania migracji
+# Używa zmiennych środowiskowych i zawiera komendę stamp-test.
 
 param (
     [Parameter(Mandatory=$true, Position=0)]
@@ -28,18 +29,18 @@ if ($Command -eq "generate") {
         exit 1
     }
     Write-Output "--- Generowanie nowej migracji... ---"
-    alembic revision --autogenerate -m "$Message"
+    uv run alembic revision --autogenerate -m "$Message"
 
 } elseif ($Command -eq "upgrade") {
     Write-Output "--- Aktualizacja bazy DEWELOPERSKIEJ do najnowszej wersji... ---"
-    alembic upgrade head
+    uv run alembic upgrade head
     Check-Last-Success
 
     Write-Output ""
     Write-Output "--- Aktualizacja bazy TESTOWEJ do najnowszej wersji... ---"
     try {
         $env:ALEMBIC_TEST_MODE = "true"
-        alembic upgrade head
+        uv run alembic upgrade head
     } finally {
         $env:ALEMBIC_TEST_MODE = $null
     }
@@ -47,14 +48,14 @@ if ($Command -eq "generate") {
 
 } elseif ($Command -eq "downgrade") {
     Write-Output "--- Wycofanie ostatniej migracji z bazy DEWELOPERSKIEJ... ---"
-    alembic downgrade -1
+    uv run alembic downgrade -1
     Check-Last-Success
 
     Write-Output ""
     Write-Output "--- Wycofanie ostatniej migracji z bazy TESTOWEJ... ---"
     try {
         $env:ALEMBIC_TEST_MODE = "true"
-        alembic downgrade -1
+        uv run alembic downgrade -1
     } finally {
         $env:ALEMBIC_TEST_MODE = $null
     }
@@ -62,17 +63,17 @@ if ($Command -eq "generate") {
 
 } elseif ($Command -eq "history") {
     Write-Output "--- Historia migracji... ---"
-    alembic history
+    uv run alembic history
 
 } elseif ($Command -eq "current") {
     Write-Output "--- Aktualna wersja bazy deweloperskiej... ---"
-    alembic current
+    uv run alembic current
     
     Write-Output ""
     Write-Output "--- Aktualna wersja bazy testowej... ---"
     try {
         $env:ALEMBIC_TEST_MODE = "true"
-        alembic current
+        uv run alembic current
     } finally {
         $env:ALEMBIC_TEST_MODE = $null
     }
@@ -80,7 +81,7 @@ if ($Command -eq "generate") {
     Write-Output "--- Stemplowanie bazy TESTOWEJ do najnowszej wersji (head)... ---"
     try {
         $env:ALEMBIC_TEST_MODE = "true"
-        alembic stamp head
+        uv run alembic stamp head
     } finally {
         $env:ALEMBIC_TEST_MODE = $null
     }

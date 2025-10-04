@@ -1,0 +1,28 @@
+[project]
+name = "mes-parafina-app"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.11"
+dependencies = [
+    "alembic>=1.13.1",
+    "celery>=5.5.3",
+    "eventlet>=0.40.2",
+    "flask>=3.1.1",
+    "flask-admin>=1.6.1",
+    "flask-apscheduler>=1.12.3",
+    "flask-cors>=6.0.1",
+    "flask-socketio>=5.5.1",
+    "flask-sqlalchemy>=3.1.1",
+    "flower>=2.0.1",
+    "gunicorn>=23.0.0",
+    "memory-profiler>=0.61.0",
+    "mysql-connector-python>=9.3.0",
+    "networkx>=3.5",
+    "pytest>=8.4.1",
+    "python-dotenv>=1.1.1",
+    "pytz>=2025.2",
+    "pywin32==310 ; sys_platform == 'win32'",
+    "pyyaml>=6.0.2",
+    "redis>=6.4.0",
+    "tabulate>=0.9.0",
+]

@@ -2,10 +2,10 @@
 
 services:
   web:
-    build: .
+    build: .  # Używa Dockerfile z uv do budowania
     container_name: mes-parafina-app-compose
     restart: always
-    command: gunicorn --worker-class eventlet -w 1 --bind 0.0.0.0:5000 --reload --preload "run:app"
+    command: ["uv", "run", "gunicorn", "--worker-class", "eventlet", "-w", "1", "--bind", "0.0.0.0:5000", "--reload", "--preload", "run:app"]
     ports:
       - "8080:5000" # Aplikacja webowa powinna być dostępna na porcie 8080
     volumes:
@@ -53,9 +53,9 @@ services:
       - mes-parafina-net
 
   celery-worker:
-    build: .
+    build: .  # Używa Dockerfile z uv do budowania
     restart: always
-    command: ["celery", "-A", "celery_app.celery", "worker", "-B", "-E", "-l", "info", "--scheduler", "celery_sqlalchemy_scheduler.schedulers.DatabaseScheduler", "--concurrency=2"]
+    command: ["uv", "run", "celery", "-A", "celery_app.celery", "worker", "-B", "-E", "-l", "info", "--scheduler", "celery_sqlalchemy_scheduler.schedulers.DatabaseScheduler", "--concurrency=2"]
     environment:
       - SECRET_KEY=${SECRET_KEY}
       - MYSQLUSER=${MYSQLUSER}
@@ -75,9 +75,9 @@ services:
       - redis
 
   flower:
-    build: .
+    build: .  # Używa Dockerfile z uv do budowania
     restart: always
-    command: ["celery", "-A", "celery_app.celery", "flower", "--port=5555", "--broker=redis://redis:6379/0", "--persistent=true"]
+    command: ["uv", "run", "celery", "-A", "celery_app.celery", "flower", "--port=5555", "--broker=redis://redis:6379/0", "--persistent=true"]
     ports:
       - "5555:5555"
     environment:

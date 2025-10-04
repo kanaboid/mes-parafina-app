@@ -1,4 +1,14 @@
 # requirements.in
+# =====================================================
+# DEPRECATED - Ten plik nie jest już używany
+# =====================================================
+# Projekt został przeniesiony na zarządzanie przez uv.
+# Wszystkie zależności są teraz w: pyproject.toml
+# Lockfile znajduje się w: uv.lock
+# 
+# Ten plik jest zachowany tylko dla kompatybilności.
+# Aby dodać nowe zależności użyj: uv add <package>
+# =====================================================
 
 # Main dependencies
 flask
