@@ -3,7 +3,7 @@
     "deploy": 
         {
             
-            "startCommand": "uv run gunicorn --worker-class eventlet --bind 0.0.0.0:5000 -w 1 --timeout 120 --graceful-timeout 120 --preload 'run:app'"
+            "startCommand": "uv run gunicorn --worker-class eventlet -w 1 --timeout 120 --graceful-timeout 120 --preload 'run:app'"
         }
     
 }
