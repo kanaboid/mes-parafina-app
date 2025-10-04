@@ -3,7 +3,7 @@
     "deploy": 
         {
             
-            "startCommand": "gunicorn --worker-class eventlet --bind 0.0.0.0:5000 -w 1 --timeout 120 --graceful-timeout 120 --preload run:app"
+            "startCommand": "gunicorn --worker-class eventlet --bind 0.0.0.0:5000 -w 1 --timeout 120 --graceful-timeout 120 --keep-alive 5 --worker-connections 1000 run:app"
         }
     
 }
