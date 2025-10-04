@@ -27,7 +27,7 @@ socketio = SocketIO(
     #logger=True,
     #engineio_logger=True,
     message_queue=redis_url,
-    ping_timeout=60,        # Zwiększone dla stabilności w production
-    ping_interval=25        # Zwiększone dla stabilności w production
+    ping_timeout=20,
+    ping_interval=10
 
 )

@@ -82,8 +82,16 @@ def create_app(config_class=None):
             return response
     
     # --- OSTATECZNA POPRAWKA: Konfiguracja SocketIO z Redis Manager ---
-    # SocketIO jest już skonfigurowany w extensions.py, tutaj tylko inicjalizujemy z app
-    socketio.init_app(app)
+    # To jest kluczowy element dla komunikacji między Celery a Gunicornem
+    REDIS_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
+    if "REDIS_URL" not in os.environ:
+        try:
+            import socket
+            socket.gethostbyname('redis')
+            REDIS_URL = 'redis://redis:6379/0'
+        except socket.error:
+            pass
+    socketio.init_app(app, message_queue=REDIS_URL)
     # --------------------------------------------------------------------
 
     db.init_app(app)
