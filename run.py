@@ -2,6 +2,10 @@
 import eventlet
 eventlet.monkey_patch()
 
+# Stłumienie warnings dla engineio socket errors (głównie EBADF)
+import warnings
+warnings.filterwarnings('ignore', message='socket shutdown error')
+
 from app import create_app, socketio
 
 app = create_app()
