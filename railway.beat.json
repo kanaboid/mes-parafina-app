@@ -3,7 +3,7 @@
     "deploy": 
         {
             
-            "startCommand": "uv run celery -A celery_app.celery beat -l info --scheduler celery_sqlalchemy_scheduler.schedulers.DatabaseScheduler"
+            "startCommand": "celery -A celery_app.celery beat -l info --scheduler celery_sqlalchemy_scheduler.schedulers.DatabaseScheduler"
         }
     
 }

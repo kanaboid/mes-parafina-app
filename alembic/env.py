@@ -4,10 +4,7 @@
 import sys
 from os.path import abspath, dirname, realpath, join
 # Dodajemy główny folder projektu do ścieżki Pythona. Robimy to tylko raz.
-project_root = dirname(dirname(abspath(__file__)))
-sys.path.insert(0, project_root)
-# Dodajemy local_libs do ścieżki dla lokalnych, zmodyfikowanych pakietów
-sys.path.insert(0, join(project_root, 'local_libs'))
+sys.path.insert(0, dirname(dirname(abspath(__file__))))
 
 from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
