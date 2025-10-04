@@ -1,0 +1,9 @@
+{
+    "$schema": "https://railway.com/railway.schema.json",
+    "deploy": 
+        {
+            
+            "startCommand": "gunicorn --worker-class eventlet -w 1 --timeout 120 --graceful-timeout 120 --preload run:app"
+        }
+    
+}

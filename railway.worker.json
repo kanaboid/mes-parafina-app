@@ -1,0 +1,9 @@
+{
+    "$schema": "https://railway.com/railway.schema.json",
+    "deploy": 
+        {
+            
+            "startCommand": "celery -A celery_app.celery worker --loglevel=info --max-tasks-per-child 100 --concurrency=2"
+        }
+    
+}

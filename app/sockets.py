@@ -21,6 +21,17 @@ def handle_connect():
     emit('response', {'data': 'Połączono z serwerem. Witaj w konsoli administracyjnej!'})
     emit('response', {'data': 'Wpisz "help", aby zobaczyć dostępne komendy.'})
 
+@socketio.on('disconnect')
+def handle_disconnect():
+    """Graceful handling dla rozłączeń klienta."""
+    print('Klient rozłączony - zamykanie połączenia...')
+
+@socketio.on_error_default
+def default_error_handler(e):
+    """Obsługa błędów WebSocket - logowanie bez pełnego stacktrace."""
+    print(f'WebSocket error: {type(e).__name__}: {str(e)}')
+    # Nie rzucamy wyjątku dalej - graceful degradation
+
 @socketio.on('request_dashboard_update')
 def handle_request_dashboard_update():
     """
