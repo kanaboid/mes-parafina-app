@@ -101,24 +101,99 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Aktualizuj istniejącą kartę reaktora
     function updateReactorCard(card, reactor) {
-        // Aktualizuj temperaturę
-        const tempElement = card.querySelector('.progress-bar[role="progressbar"]');
-        if (tempElement && reactor.temperatura_aktualna) {
-            const tempPercent = reactor.temperatura_max ? (reactor.temperatura_aktualna / reactor.temperatura_max) * 100 : 0;
-            tempElement.style.width = `${tempPercent}%`;
+        // Aktualizuj progress bar zapełnienia reaktora (jeśli istnieje)
+        const capacityProgressBar = card.querySelector('.progress-bar.bg-info, .progress-bar.bg-warning, .progress-bar.bg-danger');
+        if (capacityProgressBar && reactor.partia && reactor.partia.waga_kg && reactor.pojemnosc_kg) {
+            const fillPercent = (reactor.partia.waga_kg / reactor.pojemnosc_kg) * 100;
+            capacityProgressBar.style.width = `${fillPercent}%`;
+            capacityProgressBar.setAttribute('aria-valuenow', fillPercent);
+            
+            // Aktualizuj procent w tekście
+            const percentText = capacityProgressBar.closest('.mb-3').querySelector('.fw-bold.text-primary');
+            if (percentText) {
+                percentText.textContent = `${fillPercent.toFixed(1)}%`;
+            }
+            
+            // Aktualizuj kolor progress bara
+            capacityProgressBar.className = 'progress-bar';
+            if (fillPercent > 95) capacityProgressBar.classList.add('bg-danger');
+            else if (fillPercent > 80) capacityProgressBar.classList.add('bg-warning');
+            else capacityProgressBar.classList.add('bg-info');
         }
         
-        // Aktualizuj ciśnienie
-        const pressureElements = card.querySelectorAll('.progress-bar');
-        if (pressureElements[1] && reactor.cisnienie_aktualne) {
-            const pressurePercent = reactor.cisnienie_max ? (reactor.cisnienie_aktualne / reactor.cisnienie_max) * 100 : 0;
-            pressureElements[1].style.width = `${pressurePercent}%`;
-        }
+        // Aktualizuj progress bar temperatury
+        const tempProgressBars = card.querySelectorAll('.progress-bar');
+        tempProgressBars.forEach(bar => {
+            const progressContainer = bar.closest('.progress');
+            if (progressContainer && progressContainer.previousElementSibling) {
+                const label = progressContainer.previousElementSibling.querySelector('small');
+                if (label && label.textContent.includes('Temperatura')) {
+                    const tempPercent = reactor.temperatura_max ? (reactor.temperatura_aktualna / reactor.temperatura_max) * 100 : 0;
+                    bar.style.width = `${tempPercent}%`;
+                    
+                    // Aktualizuj tekst temperatury
+                    const tempText = label.querySelector('.fw-semibold');
+                    if (tempText) {
+                        tempText.textContent = `${reactor.temperatura_aktualna ? reactor.temperatura_aktualna.toFixed(1) : 'N/A'}°C / ${reactor.temperatura_docelowa || 'N/A'}°C`;
+                    }
+                    
+                    // Aktualizuj kolor
+                    bar.className = 'progress-bar';
+                    if (tempPercent > 95) bar.classList.add('bg-danger');
+                    else if (tempPercent > 80) bar.classList.add('bg-warning');
+                    else bar.classList.add('bg-success');
+                }
+            }
+        });
+        
+        // Aktualizuj progress bar ciśnienia
+        tempProgressBars.forEach(bar => {
+            const progressContainer = bar.closest('.progress');
+            if (progressContainer && progressContainer.previousElementSibling) {
+                const label = progressContainer.previousElementSibling.querySelector('small');
+                if (label && label.textContent.includes('Ciśnienie')) {
+                    const pressurePercent = reactor.cisnienie_max ? (reactor.cisnienie_aktualne / reactor.cisnienie_max) * 100 : 0;
+                    bar.style.width = `${pressurePercent}%`;
+                    
+                    // Aktualizuj tekst ciśnienia
+                    const pressureText = label.querySelector('.fw-semibold');
+                    if (pressureText) {
+                        pressureText.textContent = `${reactor.cisnienie_aktualne || 'N/A'} bar`;
+                    }
+                    
+                    // Aktualizuj kolor
+                    bar.className = 'progress-bar';
+                    if (pressurePercent > 95) bar.classList.add('bg-danger');
+                    else if (pressurePercent > 80) bar.classList.add('bg-warning');
+                    else bar.classList.add('bg-success');
+                }
+            }
+        });
         
         // Aktualizuj stan palnika
         const burnerSwitch = card.querySelector('.form-check-input[data-action="toggle-burner"]');
         if (burnerSwitch) {
             burnerSwitch.checked = reactor.stan_palnika === 'WLACZONY';
+            
+            // Aktualizuj tekst palnika
+            const burnerLabel = burnerSwitch.nextElementSibling;
+            if (burnerLabel) {
+                const isOn = reactor.stan_palnika === 'WLACZONY';
+                burnerLabel.innerHTML = `Palnik ${isOn ? '<span class="text-danger fw-bold">WŁĄCZONY</span>' : '<span class="text-muted">WYŁĄCZONY</span>'}`;
+            }
+            
+            // Aktualizuj ikonę palnika
+            const burnerIcon = card.querySelector('.fas.fa-fire');
+            if (burnerIcon) {
+                burnerIcon.className = `fas fa-fire ${reactor.stan_palnika === 'WLACZONY' ? 'text-danger' : 'text-muted'} fs-4`;
+            }
+        }
+        
+        // Aktualizuj wagę jeśli istnieje
+        const weightText = card.querySelector('.fs-3.fw-bold.text-primary');
+        if (weightText && reactor.partia && reactor.partia.waga_kg) {
+            const wagaTonnes = (reactor.partia.waga_kg / 1000).toFixed(2);
+            weightText.textContent = `${wagaTonnes} t`;
         }
     }
 
