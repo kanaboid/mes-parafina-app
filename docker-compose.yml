@@ -15,7 +15,6 @@ services:
       - MYSQLUSER=${MYSQLUSER}
       - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
       - MYSQLHOST=db # Hostem jest nazwa usługi bazy danych
-      - REDIS_URL=redis://redis:6379/0
       - TZ=UTC
       - FLASK_ENV=production
     networks:

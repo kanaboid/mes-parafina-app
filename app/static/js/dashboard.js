@@ -32,9 +32,7 @@ document.addEventListener('DOMContentLoaded', () => {
     socket.on('dashboard_update', (data) => {
         console.log("Otrzymano aktualizację dashboardu:", data);
         latestDashboardData = data; // Zapisz najnowsze dane
-        
-        // Opcja 1: Aktualizuj tylko zmienione elementy (bez przebudowy całego DOM)
-        updateUIIncremental(data);
+        updateUI(data);
     });
 
     // --- GŁÓWNA FUNKCJA AKTUALIZUJĄCA UI ---
@@ -46,118 +44,6 @@ document.addEventListener('DOMContentLoaded', () => {
         renderStockSummary(data.stock_summary);
         renderActiveOperations(data.active_operations); // Nowe wywołanie
         lastUpdatedTime.textContent = `Ostatnia aktualizacja: ${new Date().toLocaleTimeString()}`;
-    }
-
-    // --- FUNKCJA AKTUALIZACJI PRZYROSTOWEJ ---
-    function updateUIIncremental(data) {
-        // Aktualizuj tylko czas - zawsze bezpieczne
-        lastUpdatedTime.textContent = `Ostatnia aktualizacja: ${new Date().toLocaleTimeString()}`;
-        
-        // Aktualizuj alarmy - nie mają efektów hover
-        renderAlarms(data.alarmy);
-        
-        // Aktualizuj log operacji - nie ma efektów hover
-        renderActiveOperations(data.active_operations);
-        
-        // Aktualizuj tylko wartości w istniejących kartach (bez przebudowy DOM)
-        updateExistingCards(data);
-        
-        // Aktualizuj tylko wartości w tabeli (bez przebudowy DOM)
-        updateExistingTable(data.stock_summary);
-    }
-
-    // Aktualizuj istniejące karty bez przebudowy DOM
-    function updateExistingCards(data) {
-        // Aktualizuj reaktory
-        if (data.all_reactors) {
-            data.all_reactors.forEach(reactor => {
-                const card = document.querySelector(`[data-sprzet-id="${reactor.id}"]`)?.closest('.card-reaktor');
-                if (card) {
-                    updateReactorCard(card, reactor);
-                }
-            });
-        }
-        
-        // Aktualizuj beczki brudne
-        if (data.beczki_brudne) {
-            data.beczki_brudne.forEach(beczka => {
-                const card = document.querySelector(`[data-sprzet-id="${beczka.id}"]`)?.closest('.card');
-                if (card) {
-                    updateBeczkaCard(card, beczka, true);
-                }
-            });
-        }
-        
-        // Aktualizuj beczki czyste
-        if (data.beczki_czyste) {
-            data.beczki_czyste.forEach(beczka => {
-                const card = document.querySelector(`[data-sprzet-id="${beczka.id}"]`)?.closest('.card');
-                if (card) {
-                    updateBeczkaCard(card, beczka, false);
-                }
-            });
-        }
-    }
-
-    // Aktualizuj istniejącą kartę reaktora
-    function updateReactorCard(card, reactor) {
-        // Aktualizuj temperaturę
-        const tempElement = card.querySelector('.progress-bar[role="progressbar"]');
-        if (tempElement && reactor.temperatura_aktualna) {
-            const tempPercent = reactor.temperatura_max ? (reactor.temperatura_aktualna / reactor.temperatura_max) * 100 : 0;
-            tempElement.style.width = `${tempPercent}%`;
-        }
-        
-        // Aktualizuj ciśnienie
-        const pressureElements = card.querySelectorAll('.progress-bar');
-        if (pressureElements[1] && reactor.cisnienie_aktualne) {
-            const pressurePercent = reactor.cisnienie_max ? (reactor.cisnienie_aktualne / reactor.cisnienie_max) * 100 : 0;
-            pressureElements[1].style.width = `${pressurePercent}%`;
-        }
-        
-        // Aktualizuj stan palnika
-        const burnerSwitch = card.querySelector('.form-check-input[data-action="toggle-burner"]');
-        if (burnerSwitch) {
-            burnerSwitch.checked = reactor.stan_palnika === 'WLACZONY';
-        }
-    }
-
-    // Aktualizuj istniejącą kartę beczki
-    function updateBeczkaCard(card, beczka, isBrudna) {
-        // Aktualizuj progress bar zapełnienia
-        const progressBar = card.querySelector('.progress-bar');
-        if (progressBar && beczka.partia && beczka.partia.waga_kg && beczka.pojemnosc_kg) {
-            const fillPercent = (beczka.partia.waga_kg / beczka.pojemnosc_kg) * 100;
-            progressBar.style.width = `${fillPercent}%`;
-        }
-    }
-
-    // Aktualizuj istniejącą tabelę bez przebudowy DOM
-    function updateExistingTable(summaryData) {
-        if (!summaryData || summaryData.length === 0) return;
-        
-        summaryData.forEach(item => {
-            // Znajdź wiersz tabeli dla danego typu materiału
-            const rows = document.querySelectorAll('.stock-summary-table tbody tr');
-            rows.forEach(row => {
-                const materialTypeElement = row.querySelector('.badge');
-                if (materialTypeElement && materialTypeElement.textContent === item.material_type) {
-                    // Aktualizuj tylko wartości liczbowe
-                    const cells = row.querySelectorAll('td');
-                    if (cells.length >= 5) {
-                        const dirtyTonnes = (item.dirty_stock_kg || 0) / 1000;
-                        const cleanTonnes = (item.clean_stock_kg || 0) / 1000;
-                        const reactorsTonnes = (item.reactors_stock_kg || 0) / 1000;
-                        const rowTotal = dirtyTonnes + cleanTonnes + reactorsTonnes;
-                        
-                        cells[1].querySelector('span').textContent = dirtyTonnes.toFixed(0);
-                        cells[2].querySelector('span').textContent = reactorsTonnes.toFixed(0);
-                        cells[3].querySelector('span').textContent = cleanTonnes.toFixed(0);
-                        cells[4].querySelector('span').textContent = rowTotal.toFixed(0);
-                    }
-                }
-            });
-        });
     }
 
     // --- FUNKCJE RENDERUJĄCE ---
@@ -653,7 +539,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         return;
     }
-    
     
     reaktoryContainer.addEventListener('click', (e) => {
         if (console && console.log) {
