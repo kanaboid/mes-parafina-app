@@ -55,6 +55,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         reaktory.forEach(r => {
+            // Debug: Sprawdź dane reaktora
+            console.log('Renderowanie reaktora:', r.nazwa, 'Partia:', r.partia);
+            if (r.partia) {
+                console.log('Skład partii:', r.partia.sklad);
+            }
             
             // --- LOGIKA DLA PRZYCISKÓW ---
             let actionButtonsHTML = `
@@ -82,7 +87,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 <i class="fas fa-exchange-alt"></i>
             </button>`;
 
-
             // Sprawdź, czy należy dodać przycisk kontekstowy
             if (r.partia && r.partia.process_status === 'SUROWY') {
                 actionButtonsHTML += `
@@ -93,70 +97,159 @@ document.addEventListener('DOMContentLoaded', () => {
                         Wlącz palnik(INFO)
                     </button>`;
             }
-            // W przyszłości można tu dodać inne warunki:
-            // else if (r.partia && r.partia.process_status === 'OCZEKUJE_NA_OCENE') { ... }
             
+            // --- Logika dla statusu ---
+            const isEmpty = !r.partia;
+            const statusClass = r.stan_sprzetu === 'W transferze' ? 'status-alarm' : (r.partia ? 'status-ok' : 'status-idle');
             
-            // --- Logika dla pasków postępu (bez zmian) ---
+            // --- TYP MATERIAŁU - WYEKSPONOWANY ---
+            let materialTypeHTML = '';
+            console.log('Sprawdzanie typu materiału dla reaktora:', r.nazwa);
+            console.log('  - r.partia:', r.partia);
+            console.log('  - r.partia?.sklad:', r.partia?.sklad);
+            console.log('  - r.partia?.sklad?.length:', r.partia?.sklad?.length);
             
+            if (r.partia && r.partia.sklad && r.partia.sklad.length > 0) {
+                console.log('  ✓ Typ materiału ZNALEZIONY dla:', r.nazwa);
+                const materialTypes = [...new Set(r.partia.sklad.map(item => item.material_type))];
+                const materialTypesText = materialTypes.join(' + ');
+                console.log('  - Material types text:', materialTypesText);
+                
+                materialTypeHTML = `
+                    <div class="text-center p-3 rounded-3 mb-3 shadow-sm" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;">
+                        <div class="d-flex align-items-center justify-content-center">
+                            <i class="fas fa-flask fs-3 me-3" style="color: white !important;"></i>
+                            <h3 class="mb-0 fw-bold" style="color: white !important;">${materialTypesText}</h3>
+                        </div>
+                    </div>
+                `;
+                console.log('  - Generated HTML:', materialTypeHTML);
+            } else {
+                console.log('  ✗ Typ materiału NIE ZNALEZIONY dla:', r.nazwa);
+                if (!r.partia) console.log('    Powód: brak partii');
+                else if (!r.partia.sklad) console.log('    Powód: brak pola sklad w partii');
+                else if (r.partia.sklad.length === 0) console.log('    Powód: sklad jest pustą tablicą');
+            }
+
+            // --- WAGA - WYEKSPONOWANA Z PROGRESS BAREM ---
+            let wagaHTML = '';
+            let capacityProgressHTML = '';
             
+            if (r.partia && r.partia.waga_kg > 0) {
+                const wagaTonnes = (r.partia.waga_kg / 1000).toFixed(2);
+                const pojemnoscTonnes = r.pojemnosc_kg ? (r.pojemnosc_kg / 1000).toFixed(2) : null;
+                
+                wagaHTML = `
+                    <div class="bg-light p-3 rounded-3 mb-3 border border-primary border-opacity-25">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div class="d-flex align-items-center">
+                                <i class="fas fa-weight-hanging text-primary fs-4 me-2"></i>
+                                <span class="text-muted">Waga:</span>
+                            </div>
+                            <div class="text-end">
+                                <span class="fs-3 fw-bold text-primary">${wagaTonnes} t</span>
+                                ${pojemnoscTonnes ? `<span class="text-muted"> / ${pojemnoscTonnes} t</span>` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                // Progress bar zapełnienia reaktora
+                if (r.pojemnosc_kg && r.pojemnosc_kg > 0) {
+                    const fillPercent = (r.partia.waga_kg / r.pojemnosc_kg) * 100;
+                    let fillColorClass = 'bg-info';
+                    if (fillPercent > 95) fillColorClass = 'bg-danger';
+                    else if (fillPercent > 80) fillColorClass = 'bg-warning';
+                    
+                    capacityProgressHTML = `
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between mb-1">
+                                <small class="text-muted"><i class="fas fa-chart-line me-1"></i>Zapełnienie reaktora</small>
+                                <small class="fw-bold text-primary">${fillPercent.toFixed(1)}%</small>
+                            </div>
+                            <div class="progress" style="height: 10px;">
+                                <div class="progress-bar ${fillColorClass}" role="progressbar" 
+                                     style="width: ${fillPercent}%;" 
+                                     aria-valuenow="${fillPercent}" aria-valuemin="0" aria-valuemax="100"></div>
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+
+            // --- KOD PARTII ---
+            const partiaHTML = r.partia ? `
+                <div class="d-flex align-items-center mb-3">
+                    <i class="fas fa-barcode text-muted me-2"></i>
+                    <span class="text-muted me-2">Partia:</span>
+                    <span class="fw-semibold">${r.partia.kod}</span>
+                </div>
+            ` : '<p class="text-center text-muted fst-italic mb-3"><i class="fas fa-inbox me-2"></i>Reaktor pusty</p>';
+            
+            // --- TEMPERATURA Z PROGRESS BAREM ---
             let tempPercent = (r.temperatura_aktualna && r.temperatura_max) ? (r.temperatura_aktualna / r.temperatura_max) * 100 : 0;
             let tempColorClass = 'bg-success';
             if (tempPercent > 95) tempColorClass = 'bg-danger';
             else if (tempPercent > 80) tempColorClass = 'bg-warning';
-            const tempProgressBar = `<div class="progress" style="height: 10px;"><div class="progress-bar ${tempColorClass}" role="progressbar" style="width: ${tempPercent}%;"></div></div>`;
             
+            const tempProgressBar = `
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <small class="text-muted"><i class="fas fa-thermometer-half me-1"></i>Temperatura</small>
+                        <small class="fw-semibold">${r.temperatura_aktualna ? r.temperatura_aktualna.toFixed(1) : 'N/A'}°C / ${r.temperatura_docelowa || 'N/A'}°C</small>
+                    </div>
+                    <div class="progress" style="height: 10px;">
+                        <div class="progress-bar ${tempColorClass}" role="progressbar" style="width: ${tempPercent}%;"></div>
+                    </div>
+                </div>
+            `;
+            
+            // --- CIŚNIENIE Z PROGRESS BAREM ---
             let pressurePercent = (r.cisnienie_aktualne && r.cisnienie_max) ? (r.cisnienie_aktualne / r.cisnienie_max) * 100 : 0;
             let pressureColorClass = 'bg-success';
             if (pressurePercent > 95) pressureColorClass = 'bg-danger';
             else if (pressurePercent > 80) pressureColorClass = 'bg-warning';
-            const pressureProgressBar = `<div class="progress" style="height: 10px;"><div class="progress-bar ${pressureColorClass}" role="progressbar" style="width: ${pressurePercent}%;"></div></div>`;
             
-            // --- Logika dla przełącznika palnika (bez zmian) ---
-            const isBurnerOn = r.stan_palnika === 'WLACZONY';
-            const burnerSwitchHTML = `
-                <div class="form-check form-switch mt-3">
-                    <input class="form-check-input action-btn" type="checkbox" role="switch" id="burner-switch-${r.id}"
-                           data-action="toggle-burner" data-sprzet-id="${r.id}" ${isBurnerOn ? 'checked' : ''}>
-                    <label class="form-check-label" for="burner-switch-${r.id}">
-                        Palnik ${isBurnerOn ? '<span class="text-success fw-bold">WŁĄCZONY</span>' : '<span class="text-muted">WYŁĄCZONY</span>'}
-                    </label>
-                </div>`;
-            
-            // --- Logika dla statusu i partii (bez zmian) ---
-            const statusClass = r.stan_sprzetu === 'W transferze' ? 'status-alarm' : (r.partia ? 'status-ok' : 'status-idle');
-            
-            // --- NOWA, POPRAWIONA LOGIKA DLA WAGI ---
-            const wagaHTML = r.partia ? `<p><strong>Waga:</strong> ${(r.partia.waga_kg/1000).toFixed(1)} t</p>` : '';
-
-        // --- ZMODYFIKOWANA LOGIKA DLA TYPU MATERIAŁU ---
-        let materialTypeHTML = '';
-        if (r.partia && r.partia.sklad && r.partia.sklad.length > 0) {
-            const materialTypes = [...new Set(r.partia.sklad.map(item => item.material_type))];
-            const materialTypesText = materialTypes.join(' + '); // Łącznik dla mieszanin
-            materialTypeHTML = `
-                <div class="text-center bg-light p-2 rounded mb-3">
-                    <h4 class="mb-0 text-primary fw-bold">${materialTypesText}</h4>
+            const pressureProgressBar = `
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <small class="text-muted"><i class="fas fa-tachometer-alt me-1"></i>Ciśnienie</small>
+                        <small class="fw-semibold">${r.cisnienie_aktualne || 'N/A'} bar</small>
+                    </div>
+                    <div class="progress" style="height: 10px;">
+                        <div class="progress-bar ${pressureColorClass}" role="progressbar" style="width: ${pressurePercent}%;"></div>
+                    </div>
                 </div>
             `;
-        }
+            
+            // --- PALNIK Z IKONĄ ---
+            const isBurnerOn = r.stan_palnika === 'WLACZONY';
+            const burnerSwitchHTML = `
+                <div class="d-flex justify-content-between align-items-center mt-3 p-2 bg-light rounded">
+                    <div class="form-check form-switch mb-0">
+                        <input class="form-check-input action-btn" type="checkbox" role="switch" id="burner-switch-${r.id}"
+                               data-action="toggle-burner" data-sprzet-id="${r.id}" ${isBurnerOn ? 'checked' : ''}>
+                        <label class="form-check-label" for="burner-switch-${r.id}">
+                            Palnik ${isBurnerOn ? '<span class="text-danger fw-bold">WŁĄCZONY</span>' : '<span class="text-muted">WYŁĄCZONY</span>'}
+                        </label>
+                    </div>
+                    <i class="fas fa-fire ${isBurnerOn ? 'text-danger' : 'text-muted'} fs-4"></i>
+                </div>`;
 
         // --- Kompletny szablon karty ---
         const cardHTML = `
             <div class="col-xl-4 col-lg-6 mb-4">
-                <div class="card h-100 card-reaktor">
-                    <div class="card-header d-flex justify-content-between">
+                <div class="card h-100 card-reaktor shadow-sm">
+                    <div class="card-header d-flex justify-content-between align-items-center">
                         <h5 class="mb-0"><span class="status-indicator ${statusClass}"></span>${r.nazwa}</h5>
-                        <span class="badge bg-info text-dark">${r.stan_sprzetu || 'Brak stanu'}</span>
+                        <span class="badge ${isEmpty ? 'bg-secondary' : 'bg-success'}">${r.stan_sprzetu || 'Gotowy'}</span>
                     </div>
                     <div class="card-body">
                         ${materialTypeHTML}
-                        <p><strong>Partia:</strong> ${r.partia ? r.partia.kod : '<em>Pusty</em>'}</p>
                         ${wagaHTML}
-                        <p class="mb-1"><strong>Temperatura:</strong> ${r.temperatura_aktualna ? r.temperatura_aktualna.toFixed(2) : 'N/A'}°C / ${r.temperatura_docelowa || 'N/A'}°C</p>
+                        ${capacityProgressHTML}
+                        ${partiaHTML}
                         ${tempProgressBar}
-                        
-                        <p class="mb-1 mt-3"><strong>Ciśnienie:</strong> ${r.cisnienie_aktualne || 'N/A'} bar</p>
                         ${pressureProgressBar}
                         ${burnerSwitchHTML}
                     </div>

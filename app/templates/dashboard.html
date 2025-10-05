@@ -14,7 +14,44 @@
     .status-ok { background-color: #28a745; }
     .status-idle { background-color: #ffc107; }
     .status-alarm { background-color: #dc3545; }
-    .card-reaktor .card-body { font-size: 1.1rem; }
+    
+    /* Style dla kart reaktorów */
+    .card-reaktor {
+        transition: all 0.3s ease;
+        border: 1px solid rgba(0, 0, 0, 0.125);
+    }
+    
+    .card-reaktor:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
+    }
+    
+    .card-reaktor .card-body {
+        font-size: 0.95rem;
+        padding: 1.25rem;
+    }
+    
+    .card-reaktor .progress {
+        background-color: rgba(0, 0, 0, 0.1);
+        border-radius: 6px;
+    }
+    
+    .card-reaktor .progress-bar {
+        transition: width 0.6s ease;
+        border-radius: 6px;
+    }
+    
+    /* Style dla przełącznika palnika */
+    .card-reaktor .form-switch .form-check-input {
+        width: 3em;
+        height: 1.5em;
+        cursor: pointer;
+    }
+    
+    .card-reaktor .form-switch .form-check-input:checked {
+        background-color: #dc3545;
+        border-color: #dc3545;
+    }
     
     /* Nowe style dla beczek */
     #beczki-brudne-container .card,
