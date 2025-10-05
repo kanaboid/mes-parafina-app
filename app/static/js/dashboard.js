@@ -444,16 +444,16 @@ document.addEventListener('DOMContentLoaded', () => {
                         </div>
                     </td>
                     <td class="text-center bg-danger bg-opacity-10 align-middle">
-                        <span class="fs-5 fw-bold text-danger">${dirtyTonnes.toFixed(2)}</span>
+                        <span class="fs-5 fw-bold text-danger">${dirtyTonnes.toFixed(0)}</span>
                     </td>
                     <td class="text-center align-middle" style="background-color: rgba(245, 222, 179, 0.25);">
-                        <span class="fs-5 fw-bold" style="color: #856404;">${reactorsTonnes.toFixed(2)}</span>
+                        <span class="fs-5 fw-bold" style="color: #856404;">${reactorsTonnes.toFixed(0)}</span>
                     </td>
                     <td class="text-center bg-success bg-opacity-10 align-middle">
-                        <span class="fs-5 fw-bold text-success">${cleanTonnes.toFixed(2)}</span>
+                        <span class="fs-5 fw-bold text-success">${cleanTonnes.toFixed(0)}</span>
                     </td>
                     <td class="text-center bg-primary bg-opacity-10 align-middle">
-                        <span class="fs-4 fw-bold text-primary">${rowTotal.toFixed(2)}</span>
+                        <span class="fs-4 fw-bold text-primary">${rowTotal.toFixed(0)}</span>
                     </td>
                 </tr>
             `;
@@ -482,19 +482,19 @@ document.addEventListener('DOMContentLoaded', () => {
                             </div>
                         </td>
                         <td class="text-center text-white py-3" style="background-color: #dc3545;">
-                            <div class="fs-4 fw-bold">${totalDirty.toFixed(2)}</div>
+                            <div class="fs-4 fw-bold">${totalDirty.toFixed(0)}</div>
                             <small>${totalDirtyPercent.toFixed(1)}%</small>
                         </td>
                         <td class="text-center py-3" style="background-color: #d4a574;">
-                            <div class="fs-4 fw-bold" style="color: #4a2f0f;">${totalReactors.toFixed(2)}</div>
+                            <div class="fs-4 fw-bold" style="color: #4a2f0f;">${totalReactors.toFixed(0)}</div>
                             <small style="color: #4a2f0f;">${totalReactorsPercent.toFixed(1)}%</small>
                         </td>
                         <td class="text-center bg-success text-white py-3">
-                            <div class="fs-4 fw-bold">${totalClean.toFixed(2)}</div>
+                            <div class="fs-4 fw-bold">${totalClean.toFixed(0)}</div>
                             <small>${totalCleanPercent.toFixed(1)}%</small>
                         </td>
                         <td class="text-center bg-primary text-white py-3">
-                            <div class="fs-3 fw-bold">${grandTotal.toFixed(2)}</div>
+                            <div class="fs-3 fw-bold">${grandTotal.toFixed(0)}</div>
                             <small>100%</small>
                         </td>
                     </tr>

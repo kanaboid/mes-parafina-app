@@ -262,3 +262,228 @@ h2 { color: #2980b9; border-bottom: 2px solid #ecf0f1; padding-bottom: 0.5rem; }
     max-width: 350px;
     width: 100%;
 }
+
+/* ===== STYLE DASHBOARD ===== */
+
+/* Status indicators */
+.status-indicator {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin-right: 8px;
+}
+.status-ok { background-color: #28a745; }
+.status-idle { background-color: #ffc107; }
+.status-alarm { background-color: #dc3545; }
+
+/* Style dla kart reaktorów */
+.card-reaktor {
+    transition: all 0.3s ease;
+    border: 1px solid rgba(0, 0, 0, 0.125);
+}
+
+.card-reaktor:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 0.75rem 1.5rem rgba(0, 0, 0, 0.25) !important;
+}
+
+.card-reaktor .card-body {
+    font-size: 0.95rem;
+    padding: 1.25rem;
+}
+
+.card-reaktor .progress {
+    background-color: rgba(0, 0, 0, 0.1);
+    border-radius: 6px;
+}
+
+.card-reaktor .progress-bar {
+    transition: width 0.6s ease;
+    border-radius: 6px;
+}
+
+/* Style dla przełącznika palnika */
+.card-reaktor .form-switch .form-check-input {
+    width: 3em;
+    height: 1.5em;
+    cursor: pointer;
+}
+
+.card-reaktor .form-switch .form-check-input:checked {
+    background-color: #dc3545;
+    border-color: #dc3545;
+}
+
+/* Style dla beczek */
+#beczki-brudne-container .card,
+#beczki-czyste-container .card {
+    transition: all 0.3s ease;
+    min-height: 280px;
+}
+
+#beczki-brudne-container .card:hover,
+#beczki-czyste-container .card:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 0.75rem 1.5rem rgba(0, 0, 0, 0.25) !important;
+}
+
+#beczki-brudne-container .card-header,
+#beczki-czyste-container .card-header {
+    padding: 0.75rem 1rem;
+}
+
+#beczki-brudne-container .card-body,
+#beczki-czyste-container .card-body {
+    padding: 1rem;
+}
+
+/* Dodatkowy styl dla pustych beczek */
+#beczki-brudne-container .card.border-secondary,
+#beczki-czyste-container .card.border-secondary {
+    opacity: 0.85;
+}
+
+/* Progress bar dla beczek */
+#beczki-brudne-container .progress,
+#beczki-czyste-container .progress {
+    background-color: rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+#beczki-brudne-container .progress-bar,
+#beczki-czyste-container .progress-bar {
+    transition: width 0.6s ease;
+    border-radius: 8px;
+}
+
+/* Style dla tabeli magazynowej */
+.stock-summary-table {
+    font-size: 0.95rem;
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.stock-summary-table thead th {
+    padding: 1rem 0.75rem;
+    font-weight: 600;
+    border: none;
+    vertical-align: middle;
+    font-size: 0.9rem;
+}
+
+.stock-summary-table thead .text-dark {
+    color: #212529 !important;
+}
+
+.stock-summary-table tbody td {
+    padding: 1rem 0.75rem;
+    border-color: rgba(0, 0, 0, 0.05);
+    vertical-align: middle;
+}
+
+.stock-summary-table .table-row-even {
+    background-color: rgba(248, 249, 250, 0.5);
+}
+
+.stock-summary-table .table-row-odd {
+    background-color: white;
+}
+
+.stock-summary-table tfoot td {
+    padding: 1.25rem 0.75rem;
+    font-size: 1.1rem;
+    border: none;
+}
+
+.stock-summary-table .progress {
+    background-color: rgba(0, 0, 0, 0.1);
+    border-radius: 6px;
+}
+
+.stock-summary-table .progress-bar {
+    transition: width 0.6s ease;
+}
+
+.stock-summary-table .badge {
+    font-size: 1.1rem;
+    padding: 0.5rem 1rem;
+    min-width: 80px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+/* Efekt hover dla tabeli magazynowej */
+.stock-summary-table tbody tr {
+    transition: all 0.2s ease;
+}
+
+.stock-summary-table tbody tr:hover {
+    transform: scale(1.01) !important;
+    box-shadow: 0 1rem 2rem rgba(0, 0, 0, 0.5) !important;
+    position: relative !important;
+    z-index: 10 !important;
+    background-color: rgba(4, 107, 251, 0.33) !important;
+    
+    /* border-left: 6px solid #0d6efd !important;
+    border-right: 2px solid rgba(13, 110, 253, 0.3) !important; */
+    transition: all 0.3s ease !important;
+    font-weight: 600 !important;
+}
+
+/* Dodatkowy bardzo specyficzny selektor dla hover
+table.stock-summary-table tbody tr.table-row-even:hover,
+table.stock-summary-table tbody tr.table-row-odd:hover {
+    transform: scale(1.1) !important;
+    box-shadow: 0 1rem 2rem rgba(0, 0, 0, 0.5) !important;
+    background-color: rgba(135, 133, 135, 0.467) !important;
+     border-left: 8px solid #0d6efd !important;
+    border-right: 3px solid rgba(13, 110, 253, 0.4) !important;
+    padding-left: 20px !important;
+    padding-right: 10px !important; 
+    font-weight: 700 !important;
+    color: #0d6efd !important;
+} 
+*/
+
+/* Kolor fioletowy dla reaktorów */
+.bg-reactor {
+    background-color: #667eea !important;
+}
+
+.bg-reactor.bg-opacity-25 {
+    background-color: rgba(102, 126, 234, 0.25) !important;
+}
+
+.bg-reactor.bg-opacity-10 {
+    background-color: rgba(102, 126, 234, 0.1) !important;
+}
+
+.text-reactor {
+    color: #667eea !important;
+}
+
+.stock-summary-table .progress-bar.bg-reactor {
+    background-color: #667eea !important;
+}
+
+/* Stonowane kolory dla kolumny "Suma" */
+.stock-summary-table thead th:last-child {
+    background-color: rgba(108, 117, 125, 0.25) !important;
+}
+
+.stock-summary-table tbody td:last-child {
+    background-color: rgba(108, 117, 125, 0.1) !important;
+}
+
+.stock-summary-table tfoot td:last-child {
+    background-color: #6c757d !important;
+    color: white !important;
+}
+
+.stock-summary-table tbody td:last-child span {
+    color: #495057 !important;
+    font-weight: 600 !important;
+}
