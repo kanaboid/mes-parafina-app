@@ -55,11 +55,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         reaktory.forEach(r => {
-            // Debug: Sprawdź dane reaktora
-            console.log('Renderowanie reaktora:', r.nazwa, 'Partia:', r.partia);
-            if (r.partia) {
-                console.log('Skład partii:', r.partia.sklad);
-            }
             
             // --- LOGIKA DLA PRZYCISKÓW ---
             let actionButtonsHTML = `
@@ -104,31 +99,18 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // --- TYP MATERIAŁU - WYEKSPONOWANY ---
             let materialTypeHTML = '';
-            console.log('Sprawdzanie typu materiału dla reaktora:', r.nazwa);
-            console.log('  - r.partia:', r.partia);
-            console.log('  - r.partia?.sklad:', r.partia?.sklad);
-            console.log('  - r.partia?.sklad?.length:', r.partia?.sklad?.length);
-            
             if (r.partia && r.partia.sklad && r.partia.sklad.length > 0) {
-                console.log('  ✓ Typ materiału ZNALEZIONY dla:', r.nazwa);
                 const materialTypes = [...new Set(r.partia.sklad.map(item => item.material_type))];
                 const materialTypesText = materialTypes.join(' + ');
-                console.log('  - Material types text:', materialTypesText);
                 
                 materialTypeHTML = `
-                    <div class="text-center p-3 rounded-3 mb-3 shadow-sm" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;">
+                    <div class="text-center p-3 rounded-3 mb-3 shadow-sm" style="background-color: #f5deb3;">
                         <div class="d-flex align-items-center justify-content-center">
-                            <i class="fas fa-flask fs-3 me-3" style="color: white !important;"></i>
-                            <h3 class="mb-0 fw-bold" style="color: white !important;">${materialTypesText}</h3>
+                            <i class="fas fa-flask fs-3 me-3" style="color: #856404;"></i>
+                            <h3 class="mb-0 fw-bold" style="color: #856404;">${materialTypesText}</h3>
                         </div>
                     </div>
                 `;
-                console.log('  - Generated HTML:', materialTypeHTML);
-            } else {
-                console.log('  ✗ Typ materiału NIE ZNALEZIONY dla:', r.nazwa);
-                if (!r.partia) console.log('    Powód: brak partii');
-                else if (!r.partia.sklad) console.log('    Powód: brak pola sklad w partii');
-                else if (r.partia.sklad.length === 0) console.log('    Powód: sklad jest pustą tablicą');
             }
 
             // --- WAGA - WYEKSPONOWANA Z PROGRESS BAREM ---
@@ -148,7 +130,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             </div>
                             <div class="text-end">
                                 <span class="fs-3 fw-bold text-primary">${wagaTonnes} t</span>
-                                ${pojemnoscTonnes ? `<span class="text-muted"> / ${pojemnoscTonnes} t</span>` : ''}
+                                ${pojemnoscTonnes ? `<span class="text-muted" style="font-weight: normal; opacity: 0.7;"> / ${pojemnoscTonnes} t</span>` : ''}
                             </div>
                         </div>
                     </div>
@@ -272,9 +254,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         beczki.forEach(b => {
-            // Debug: Sprawdź dane beczki
-            console.log('Renderowanie beczki:', b.nazwa, 'Pojemność:', b.pojemnosc_kg, 'Waga partii:', b.partia?.waga_kg);
-            
             // Określ status wizualny beczki
             const isEmpty = !b.partia || !b.partia.waga_kg || b.partia.waga_kg === 0;
             const statusClass = isEmpty ? 'border-secondary' : (isBrudna ? 'border-danger' : 'border-success');
@@ -304,7 +283,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 wagaHTML = `
                     <div class="d-flex justify-content-between align-items-center mb-2">
                         <span class="text-muted"><i class="fas fa-weight-hanging me-2"></i>Waga:</span>
-                        <span class="fs-5 fw-bold">${wagaTonnes} t ${b.pojemnosc_kg ? `/ ${pojemnoscTonnes} t` : ''}</span>
+                        <span class="fs-5 fw-bold">${wagaTonnes} t ${b.pojemnosc_kg ? `<span style="font-weight: normal; opacity: 0.7;">/ ${pojemnoscTonnes} t</span>` : ''}</span>
                     </div>
                 `;
                 
@@ -314,8 +293,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     let fillColorClass = 'bg-success';
                     if (fillPercent > 95) fillColorClass = 'bg-danger';
                     else if (fillPercent > 80) fillColorClass = 'bg-warning';
-                    
-                    console.log(`Progress bar dla ${b.nazwa}: ${fillPercent.toFixed(1)}% (${b.partia.waga_kg} kg / ${b.pojemnosc_kg} kg)`);
                     
                     progressBarHTML = `
                         <div class="mb-3">
@@ -330,8 +307,6 @@ document.addEventListener('DOMContentLoaded', () => {
                             </div>
                         </div>
                     `;
-                } else {
-                    console.log(`Brak progress bara dla ${b.nazwa}: pojemnosc_kg = ${b.pojemnosc_kg}`);
                 }
             }
 
@@ -361,13 +336,13 @@ document.addEventListener('DOMContentLoaded', () => {
                             ${wagaHTML}
                             ${progressBarHTML}
                         </div>
-                        <div class="card-footer bg-white border-0 pt-0 pb-3">
-                            <button class="btn btn-info w-100 action-btn"
+                        <div class="card-footer p-2">
+                            <button class="btn btn-info w-100 action-btn" 
                                      data-action="open-transfer-modal"
                                      data-sprzet-id="${b.id}"
                                      data-sprzet-nazwa="${b.nazwa}"
                                      data-partia-waga="${b.partia ? b.partia.waga_kg : '0'}">
-                                <i class="fas fa-exchange-alt me-2"></i>Przelej zawartość
+                                <i class="fas fa-exchange-alt me-1"></i>Przelej
                             </button>
                         </div>
                     </div>
@@ -398,14 +373,33 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         let tableHTML = `
-            <table class="table table-sm table-bordered">
-                <thead class="table-light">
-                    <tr>
-                        <th>Typ Surowca</th>
-                        <th class="text-end">Strefa Brudna (t)</th>
-                        <th class="text-end">W Reaktorach (t)</th>
-                        <th class="text-end">Strefa Czysta (t)</th>
-                        <th class="text-end fw-bold">Suma (t)</th>
+            <table class="table table-hover stock-summary-table">
+                <thead>
+                    <tr class="table-dark">
+                        <th class="align-middle" style="width: 35%;">
+                            <i class="fas fa-flask me-2 text-white"></i>
+                            <span class="text-white">Typ Surowca</span>
+                        </th>
+                        <th class="text-center bg-danger bg-opacity-25" style="width: 16.25%;">
+                            <i class="fas fa-warehouse me-1 text-danger"></i>
+                            <div class="text-dark fw-semibold">Strefa Brudna</div>
+                            <small class="text-muted">(tony)</small>
+                        </th>
+                        <th class="text-center" style="width: 16.25%; background-color: rgba(245, 222, 179, 0.4) !important;">
+                            <i class="fas fa-industry me-1" style="color: #856404;"></i>
+                            <div class="text-dark fw-semibold">W Reaktorach</div>
+                            <small class="text-muted">(tony)</small>
+                        </th>
+                        <th class="text-center bg-success bg-opacity-25" style="width: 16.25%;">
+                            <i class="fas fa-check-circle me-1 text-success"></i>
+                            <div class="text-dark fw-semibold">Strefa Czysta</div>
+                            <small class="text-muted">(tony)</small>
+                        </th>
+                        <th class="text-center bg-primary bg-opacity-25" style="width: 16.25%;">
+                            <i class="fas fa-calculator me-1 text-primary"></i>
+                            <div class="text-dark fw-bold">SUMA</div>
+                            <small class="text-muted">(tony)</small>
+                        </th>
                     </tr>
                 </thead>
                 <tbody>
@@ -418,7 +412,7 @@ document.addEventListener('DOMContentLoaded', () => {
         let totalReactors = 0;
         let grandTotal = 0;
 
-        summaryData.forEach(item => {
+        summaryData.forEach((item, index) => {
             const dirtyTonnes = (item.dirty_stock_kg || 0) / 1000;
             const cleanTonnes = (item.clean_stock_kg || 0) / 1000;
             const reactorsTonnes = (item.reactors_stock_kg || 0) / 1000;
@@ -429,26 +423,80 @@ document.addEventListener('DOMContentLoaded', () => {
             totalReactors += reactorsTonnes;
             grandTotal += rowTotal;
 
+            // Oblicz procenty dla progress bara
+            const dirtyPercent = rowTotal > 0 ? (dirtyTonnes / rowTotal * 100) : 0;
+            const reactorsPercent = rowTotal > 0 ? (reactorsTonnes / rowTotal * 100) : 0;
+            const cleanPercent = rowTotal > 0 ? (cleanTonnes / rowTotal * 100) : 0;
+
+            const rowClass = index % 2 === 0 ? 'table-row-even' : 'table-row-odd';
+            const rowBgColor = index % 2 === 0 ? 'background-color: rgba(0, 0, 0, 0.03);' : 'background-color: white;';
+
             tableHTML += `
-                <tr>
-                    <td><strong>${item.material_type}</strong></td>
-                    <td class="text-end">${dirtyTonnes.toFixed(2)}</td>
-                    <td class="text-end">${reactorsTonnes.toFixed(2)}</td>
-                    <td class="text-end">${cleanTonnes.toFixed(2)}</td>
-                    <td class="text-end fw-bold">${rowTotal.toFixed(2)}</td>
+                <tr class="${rowClass}" style="${rowBgColor}">
+                    <td class="align-middle">
+                        <div class="d-flex align-items-center justify-content-between">
+                            <span class="badge fs-5 py-2 px-3 me-3" style="min-width: 80px; background-color: #f5deb3; color: #856404; font-weight: 600;">${item.material_type}</span>
+                            <div class="progress" style="height: 10px; width: 200px;">
+                                <div class="progress-bar" style="width: ${dirtyPercent}%; background-color: #dc3545;" title="Brudna: ${dirtyPercent.toFixed(1)}%"></div>
+                                <div class="progress-bar" style="width: ${reactorsPercent}%; background-color: #f5deb3;" title="Reaktory: ${reactorsPercent.toFixed(1)}%"></div>
+                                <div class="progress-bar" style="width: ${cleanPercent}%; background-color: #28a745;" title="Czysta: ${cleanPercent.toFixed(1)}%"></div>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="text-center bg-danger bg-opacity-10 align-middle">
+                        <span class="fs-5 fw-bold text-danger">${dirtyTonnes.toFixed(2)}</span>
+                    </td>
+                    <td class="text-center align-middle" style="background-color: rgba(245, 222, 179, 0.25);">
+                        <span class="fs-5 fw-bold" style="color: #856404;">${reactorsTonnes.toFixed(2)}</span>
+                    </td>
+                    <td class="text-center bg-success bg-opacity-10 align-middle">
+                        <span class="fs-5 fw-bold text-success">${cleanTonnes.toFixed(2)}</span>
+                    </td>
+                    <td class="text-center bg-primary bg-opacity-10 align-middle">
+                        <span class="fs-4 fw-bold text-primary">${rowTotal.toFixed(2)}</span>
+                    </td>
                 </tr>
             `;
         });
 
+        // Oblicz procenty dla wiersza sum
+        const totalDirtyPercent = grandTotal > 0 ? (totalDirty / grandTotal * 100) : 0;
+        const totalReactorsPercent = grandTotal > 0 ? (totalReactors / grandTotal * 100) : 0;
+        const totalCleanPercent = grandTotal > 0 ? (totalClean / grandTotal * 100) : 0;
+
         tableHTML += `
                 </tbody>
-                <tfoot class="table-group-divider">
-                    <tr class="table-secondary fw-bold">
-                        <td>SUMA CAŁKOWITA</td>
-                        <td class="text-end">${totalDirty.toFixed(2)}</td>
-                        <td class="text-end">${totalReactors.toFixed(2)}</td>
-                        <td class="text-end">${totalClean.toFixed(2)}</td>
-                        <td class="text-end bg-dark text-white">${grandTotal.toFixed(2)}</td>
+                <tfoot>
+                    <tr class="table-dark border-top border-3">
+                        <td class="align-middle py-3">
+                            <div class="d-flex align-items-center justify-content-between">
+                                <div class="d-flex align-items-center">
+                                    <i class="fas fa-chart-pie me-2 fs-5 text-white"></i>
+                                    <strong class="fs-5 text-white">SUMA CAŁKOWITA</strong>
+                                </div>
+                                <div class="progress" style="height: 12px; width: 200px;">
+                                    <div class="progress-bar" style="width: ${totalDirtyPercent}%; background-color: #dc3545;" title="Brudna: ${totalDirtyPercent.toFixed(1)}%"></div>
+                                    <div class="progress-bar" style="width: ${totalReactorsPercent}%; background-color: #f5deb3;" title="Reaktory: ${totalReactorsPercent.toFixed(1)}%"></div>
+                                    <div class="progress-bar" style="width: ${totalCleanPercent}%; background-color: #28a745;" title="Czysta: ${totalCleanPercent.toFixed(1)}%"></div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="text-center text-white py-3" style="background-color: #dc3545;">
+                            <div class="fs-4 fw-bold">${totalDirty.toFixed(2)}</div>
+                            <small>${totalDirtyPercent.toFixed(1)}%</small>
+                        </td>
+                        <td class="text-center py-3" style="background-color: #d4a574;">
+                            <div class="fs-4 fw-bold" style="color: #4a2f0f;">${totalReactors.toFixed(2)}</div>
+                            <small style="color: #4a2f0f;">${totalReactorsPercent.toFixed(1)}%</small>
+                        </td>
+                        <td class="text-center bg-success text-white py-3">
+                            <div class="fs-4 fw-bold">${totalClean.toFixed(2)}</div>
+                            <small>${totalCleanPercent.toFixed(1)}%</small>
+                        </td>
+                        <td class="text-center bg-primary text-white py-3">
+                            <div class="fs-3 fw-bold">${grandTotal.toFixed(2)}</div>
+                            <small>100%</small>
+                        </td>
                     </tr>
                 </tfoot>
             </table>
