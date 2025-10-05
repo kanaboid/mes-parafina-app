@@ -33,6 +33,7 @@ class DashboardService:
                 "id": sprzet.id,
                 "nazwa": sprzet.nazwa_unikalna,
                 "stan_sprzetu": sprzet.stan_sprzetu,
+                "pojemnosc_kg": float(sprzet.pojemnosc_kg) if sprzet.pojemnosc_kg else None,
                 "partia": None
             }
             if sprzet.typ_sprzetu == 'reaktor':

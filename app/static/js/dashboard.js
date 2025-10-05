@@ -174,45 +174,113 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderBeczki(beczki, container, isBrudna) {
         container.innerHTML = '';
         if (!beczki || beczki.length === 0) {
-            container.innerHTML = '<div class="list-group-item">Brak danych.</div>';
+            container.innerHTML = '<div class="col"><p class="text-muted">Brak danych.</p></div>';
             return;
         }
+        
         beczki.forEach(b => {
-            // Zawsze pokazuj przycisk transferu dla wszystkich beczek
-            const transferButtonHTML = `
-                <button class="btn btn-sm btn-info mt-2 action-btn"
-                         data-action="open-transfer-modal"
-                         data-sprzet-id="${b.id}"
-                         data-sprzet-nazwa="${b.nazwa}"
-                         data-partia-waga="${b.partia ? b.partia.waga_kg : '0'}">
-                    <i class="fas fa-exchange-alt me-1"></i> Przelej
-                 </button>`;
-
-            // NOWA LOGIKA: Wyświetlanie typu materiału
+            // Debug: Sprawdź dane beczki
+            console.log('Renderowanie beczki:', b.nazwa, 'Pojemność:', b.pojemnosc_kg, 'Waga partii:', b.partia?.waga_kg);
+            
+            // Określ status wizualny beczki
+            const isEmpty = !b.partia || !b.partia.waga_kg || b.partia.waga_kg === 0;
+            const statusClass = isEmpty ? 'border-secondary' : (isBrudna ? 'border-danger' : 'border-success');
+            const statusBgClass = isEmpty ? 'bg-light' : (isBrudna ? 'bg-danger bg-opacity-10' : 'bg-success bg-opacity-10');
+            const statusIcon = isEmpty ? 'fa-circle text-secondary' : (isBrudna ? 'fa-circle text-danger' : 'fa-circle text-success');
+            
+            // Typ materiału
             let materialTypeHTML = '';
             if (b.partia && b.partia.sklad && b.partia.sklad.length > 0) {
                 const materialTypes = [...new Set(b.partia.sklad.map(item => item.material_type))];
                 const materialTypesText = materialTypes.join(' + ');
                 materialTypeHTML = `
-                    <div class="text-center bg-light p-1 rounded mt-2 mb-1">
-                        <strong class="text-primary">${materialTypesText}</strong>
+                    <div class="text-center bg-white p-2 rounded mb-2 border border-primary border-opacity-25">
+                        <h5 class="mb-0 text-primary fw-bold">${materialTypesText}</h5>
                     </div>
                 `;
             }
 
-            const itemHTML = `
-                <div class="list-group-item">
-                    <div class="d-flex w-100 justify-content-between">
-                        <h6 class="mb-1">${b.nazwa}</h6>
-                        <small>${b.stan_sprzetu}</small>
+            // Waga w tonach i progress bar
+            let wagaHTML = '';
+            let progressBarHTML = '';
+            
+            if (b.partia && b.partia.waga_kg > 0) {
+                const wagaTonnes = (b.partia.waga_kg / 1000).toFixed(2);
+                const pojemnoscTonnes = b.pojemnosc_kg ? (b.pojemnosc_kg / 1000).toFixed(2) : 'N/A';
+                
+                wagaHTML = `
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="text-muted"><i class="fas fa-weight-hanging me-2"></i>Waga:</span>
+                        <span class="fs-5 fw-bold">${wagaTonnes} t ${b.pojemnosc_kg ? `/ ${pojemnoscTonnes} t` : ''}</span>
                     </div>
-                    ${materialTypeHTML}
-                    <p class="mb-1">
-                        ${b.partia ? `Zawartość: <strong>${b.partia.kod}</strong> (${(b.partia.waga_kg/1000).toFixed(1)} t)` : '<em>Pusta</em>'}
-                    </p>
-                    ${transferButtonHTML}
-                </div>`;
-            container.innerHTML += itemHTML;
+                `;
+                
+                // Progress bar zapełnienia
+                if (b.pojemnosc_kg && b.pojemnosc_kg > 0) {
+                    const fillPercent = (b.partia.waga_kg / b.pojemnosc_kg) * 100;
+                    let fillColorClass = 'bg-success';
+                    if (fillPercent > 95) fillColorClass = 'bg-danger';
+                    else if (fillPercent > 80) fillColorClass = 'bg-warning';
+                    
+                    console.log(`Progress bar dla ${b.nazwa}: ${fillPercent.toFixed(1)}% (${b.partia.waga_kg} kg / ${b.pojemnosc_kg} kg)`);
+                    
+                    progressBarHTML = `
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between mb-1">
+                                <small class="text-muted"><i class="fas fa-chart-bar me-1"></i>Zapełnienie</small>
+                                <small class="fw-bold text-primary">${fillPercent.toFixed(1)}%</small>
+                            </div>
+                            <div class="progress" style="height: 12px;">
+                                <div class="progress-bar ${fillColorClass}" role="progressbar" 
+                                     style="width: ${fillPercent}%;" 
+                                     aria-valuenow="${fillPercent}" aria-valuemin="0" aria-valuemax="100"></div>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    console.log(`Brak progress bara dla ${b.nazwa}: pojemnosc_kg = ${b.pojemnosc_kg}`);
+                }
+            }
+
+            // Kod partii
+            const partiaHTML = b.partia && b.partia.kod ? `
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="text-muted"><i class="fas fa-barcode me-2"></i>Partia:</span>
+                    <span class="fw-semibold">${b.partia.kod}</span>
+                </div>
+            ` : '<p class="text-center text-muted fst-italic mb-2"><i class="fas fa-inbox me-2"></i>Pusta</p>';
+
+            const cardHTML = `
+                <div class="col-xl-3 col-lg-4 col-md-6">
+                    <div class="card h-100 shadow-sm ${statusClass} border-2 ${statusBgClass}">
+                        <div class="card-header ${statusBgClass} d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0 fw-bold">
+                                <i class="fas ${statusIcon} me-2"></i>
+                                ${b.nazwa}
+                            </h6>
+                            <span class="badge ${isEmpty ? 'bg-secondary' : (isBrudna ? 'bg-danger' : 'bg-success')}">
+                                ${b.stan_sprzetu || 'Gotowy'}
+                            </span>
+                        </div>
+                        <div class="card-body">
+                            ${materialTypeHTML}
+                            ${partiaHTML}
+                            ${wagaHTML}
+                            ${progressBarHTML}
+                        </div>
+                        <div class="card-footer bg-white border-0 pt-0 pb-3">
+                            <button class="btn btn-info w-100 action-btn"
+                                     data-action="open-transfer-modal"
+                                     data-sprzet-id="${b.id}"
+                                     data-sprzet-nazwa="${b.nazwa}"
+                                     data-partia-waga="${b.partia ? b.partia.waga_kg : '0'}">
+                                <i class="fas fa-exchange-alt me-2"></i>Przelej zawartość
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            container.innerHTML += cardHTML;
         });
     }
 
