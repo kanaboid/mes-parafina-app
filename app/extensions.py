@@ -19,17 +19,23 @@ def set_utc_timezone(dbapi_connection, connection_record):
     cursor.execute("SET time_zone = '+00:00'")
     cursor.close()
 
-redis_url = os.environ.get('REDIS_URL')
+# WAŻNE: Inicjalizujemy SocketIO tylko jeśli nie jesteśmy w trybie migracji Alembic
+# Dzięki temu Alembic może importować models bez błędów SocketIO
+if not os.environ.get('ALEMBIC_MIGRATION_MODE'):
+    redis_url = os.environ.get('REDIS_URL')
 
-socketio = SocketIO(
-    async_mode='eventlet',
-    cors_allowed_origins="*",
-    #logger=True,
-    #engineio_logger=True,
-    message_queue=redis_url,
-    ping_timeout=60,        # Zwiększone dla stabilności na Railway (było 20s)
-    ping_interval=25,       # Zwiększone dla stabilności na Railway (było 10s)
-    always_connect=True,    # Zawsze pozwalaj na połączenia
-    manage_session=True     # Zarządzaj sesjami automatycznie
-
-)
+    socketio = SocketIO(
+        async_mode='eventlet',
+        cors_allowed_origins="*",
+        #logger=True,
+        #engineio_logger=True,
+        message_queue=redis_url,
+        ping_timeout=60,        # Zwiększone dla stabilności na Railway (było 20s)
+        ping_interval=25,       # Zwiększone dla stabilności na Railway (było 10s)
+        always_connect=True,    # Zawsze pozwalaj na połączenia
+        manage_session=True     # Zarządzaj sesjami automatycznie
+    )
+else:
+    # W trybie migracji Alembic tworzymy "mock" socketio
+    socketio = None
+    print("ℹ️  SocketIO pominięte - tryb migracji Alembic")

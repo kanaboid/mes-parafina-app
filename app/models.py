@@ -629,3 +629,21 @@ class AuditTrail(db.Model):
     operation_type: Mapped[str] = mapped_column(String(50), nullable=False, comment='Np. CREATE, UPDATE, DELETE, CORRECTION')
     reason: Mapped[Optional[str]] = mapped_column(Text)
 
+
+class EarthPallets(db.Model):
+    """Model dla palet ze zużytą ziemią filtracyjną"""
+    __tablename__ = 'earth_pallets'
+    __table_args__ = (
+        Index('lp_unique', 'lp', unique=True),
+        {'comment': 'Palety ze zużytą ziemią filtracyjną'}
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    lp: Mapped[str] = mapped_column(VARCHAR(10), comment='Numer palety, np. B1, B99, C1')
+    waga: Mapped[decimal.Decimal] = mapped_column(DECIMAL(10, 2), comment='Waga w kilogramach')
+    zwazyl: Mapped[Optional[str]] = mapped_column(VARCHAR(100), comment='Nazwisko osoby ważącej')
+    data_wazenia: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=func.now(), comment='Data i czas ważenia')
+    uwagi: Mapped[Optional[str]] = mapped_column(Text, comment='Dodatkowe uwagi')
+
+    def __repr__(self):
+        return f"<EarthPallet {self.lp} - {self.waga}kg>"

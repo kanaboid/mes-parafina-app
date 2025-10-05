@@ -481,3 +481,68 @@ table.stock-summary-table tbody tr.table-row-odd:hover {
     color: #495057 !important;
     font-weight: 600 !important;
 }
+
+/* ===== STYLE DLA PALET ZIEMI ===== */
+
+/* Karty statystyk palet */
+.earth-pallet-stat-card {
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.2);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.earth-pallet-stat-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 0.5rem 1rem rgba(32, 221, 117, 0.3);
+}
+
+/* Nadpisanie stylów h2 dla statystyk palet - bardzo specyficzne selektory */
+.card.earth-pallet-stat-card .card-body h2,
+.card.earth-pallet-stat-card h2,
+div.earth-pallet-stat-card h2,
+.earth-pallet-stat-card h2 {
+    color: #ffffff !important;
+    border-bottom: none !important;
+    padding-bottom: 0 !important;
+    font-weight: 700 !important;
+    font-size: 2.5rem !important;
+    background: transparent !important;
+}
+
+/* Nadpisanie dla specyficznych ID */
+#stat-total-count,
+#stat-total-weight,
+#stat-average-weight {
+    color: #ffffff !important;
+    border-bottom: none !important;
+    padding-bottom: 0 !important;
+}
+
+.card.earth-pallet-stat-card .card-body h5,
+.card.earth-pallet-stat-card h5,
+.earth-pallet-stat-card h5 {
+    color: #ffffff !important;
+    font-weight: 500 !important;
+    margin-bottom: 0.75rem !important;
+}
+
+.earth-pallet-stat-card .card-body {
+    padding: 1.5rem !important;
+}
+
+/* Hover dla wierszy w tabeli Historia Palet */
+#pallets-table tbody tr {
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+#pallets-table tbody tr:hover {
+    background-color: rgba(32, 221, 117, 0.15) !important;
+    transform: scale(1.01);
+    box-shadow: 0 0.25rem 0.5rem rgba(32, 221, 117, 0.3);
+    border-left: 4px solid rgba(32, 221, 117, 0.8);
+}
+
+/* Dodatkowy styl dla przycisków w tabeli przy hover */
+#pallets-table tbody tr:hover .btn {
+    transform: scale(1.05);
+}

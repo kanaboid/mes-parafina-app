@@ -84,7 +84,9 @@ def create_app(config_class=None):
     # --- OSTATECZNA POPRAWKA: Konfiguracja SocketIO z Redis Manager ---
     # SocketIO jest już skonfigurowany z message_queue w extensions.py
     # Tutaj tylko łączymy go z kontekstem aplikacji Flask
-    socketio.init_app(app)
+    # WAŻNE: W trybie migracji Alembic socketio może być None
+    if socketio:
+        socketio.init_app(app)
     # --------------------------------------------------------------------
 
     db.init_app(app)
@@ -117,6 +119,7 @@ def create_app(config_class=None):
     from .batch_routes import batch_bp
     from .sprzet_routes import sprzet_bp
     from .scheduler_routes import scheduler_bp
+    from .earth_pallets_routes import bp as earth_pallets_bp
     app.register_blueprint(routes.bp)
     app.register_blueprint(cykle_bp)
     app.register_blueprint(topology_bp)
@@ -124,6 +127,7 @@ def create_app(config_class=None):
     app.register_blueprint(batch_bp)
     app.register_blueprint(sprzet_bp)
     app.register_blueprint(scheduler_bp)
+    app.register_blueprint(earth_pallets_bp)
     @app.route('/hello')
     def hello():
         return "Witaj w aplikacji MES!"
@@ -146,6 +150,7 @@ def create_app(config_class=None):
     admin.add_view(ModelView(models.TankMixes, db.session, name="Mieszaniny w Zbiornikach"))
     admin.add_view(ModelView(models.MixComponents, db.session, name="Składniki Mieszanin"))
     admin.add_view(ModelView(models.AuditTrail, db.session, name="Ślad Audytowy"))
+    admin.add_view(ModelView(models.EarthPallets, db.session, name="Palety Ziemi"))
 
     
 

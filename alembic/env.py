@@ -3,19 +3,29 @@
 # --- KROK 1: Konfiguracja ścieżek i podstawowe importy ---
 import sys
 from os.path import abspath, dirname, realpath, join
-# Dodajemy główny folder projektu do ścieżki Pythona. Robimy to tylko raz.
-sys.path.insert(0, dirname(dirname(abspath(__file__))))
+
+# Dodajemy główny folder projektu do ścieżki Pythona
+project_root = dirname(dirname(abspath(__file__)))
+sys.path.insert(0, project_root)
+
+# WAŻNE: Dodajemy również folder local_libs dla lokalnych bibliotek
+local_libs_path = join(project_root, 'local_libs')
+sys.path.insert(0, local_libs_path)
 
 from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 from alembic import context
 import os
 
+# KLUCZOWE: Ustawiamy zmienną środowiskową aby pominąć inicjalizację SocketIO
+os.environ['ALEMBIC_MIGRATION_MODE'] = 'true'
+
 # --- KROK 2: Import metadanych z obu źródeł ---
-# Importujemy obiekt `db` z Twojej aplikacji, aby uzyskać dostęp do Twoich modeli
-from app.extensions import db  # Zakładam, że db jest w extensions.py, jeśli nie, zmień ścieżkę
-# Importujemy `ModelBase` z biblioteki schedulera, zgodnie z tym, co odkryliśmy
+# Importujemy `ModelBase` z biblioteki schedulera
 from celery_sqlalchemy_scheduler.session import ModelBase as SchedulerModelBase
+
+# TERAZ możemy bezpiecznie zaimportować db z extensions (SocketIO będzie pominięty)
+from app.extensions import db
 
 # --- KROK 3: Konfiguracja Alembic i logiki URI ---
 config = context.config
@@ -23,7 +33,7 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Logika wyboru URI - jest dobra, zostawiamy ją
+# Logika wyboru URI
 DB_USER = os.environ.get('MYSQLUSER', 'root')
 DB_PASSWORD = os.environ.get('MYSQL_ROOT_PASSWORD', '')
 DB_HOST = os.environ.get('MYSQLHOST', 'localhost')
@@ -36,12 +46,13 @@ else:
 config.set_main_option('sqlalchemy.url', database_uri)
 
 # --- KROK 4: Zdefiniowanie celu dla Alembic ---
-# To jest najważniejsza część. Tworzymy listę obiektów MetaData.
-# Alembic musi wiedzieć o WSZYSTKICH modelach, aby działać poprawnie.
-# Import `from app import models` zapewnia, że SQLAlchemy "widzi" Twoje tabele.
+# KLUCZOWE: Importujemy wszystkie modele aby zostały zarejestrowane w db.metadata
+# To MUSI być PRZED target_metadata!
 from app import models
+
+# Teraz db.metadata zawiera wszystkie tabele z app/models.py
 target_metadata = [
-    db.metadata,                   # Metadane z Twojej aplikacji
+    db.metadata,                   # Metadane z Twojej aplikacji (wszystkie modele)
     SchedulerModelBase.metadata    # Metadane z biblioteki Celery
 ]
 

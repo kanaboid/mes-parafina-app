@@ -1,0 +1,472 @@
+{% extends "base.html" %}
+
+{% block title %}Palety ze Zużytą Ziemią{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="fas fa-pallet me-2"></i>Palety ze Zużytą Ziemią Filtracyjną</h1>
+        <button class="btn btn-primary btn-lg" id="btn-add-pallet">
+            <i class="fas fa-plus me-2"></i>Dodaj Nową Paletę
+        </button>
+    </div>
+
+    <!-- Statystyki -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card bg-primary text-white earth-pallet-stat-card">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="fas fa-boxes me-2"></i>Łączna Liczba Palet</h5>
+                    <h2 class="mb-0" id="stat-total-count">-</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-success text-white earth-pallet-stat-card">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="fas fa-weight me-2"></i>Łączna Waga</h5>
+                    <h2 class="mb-0" id="stat-total-weight">-</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-info text-white earth-pallet-stat-card">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="fas fa-balance-scale me-2"></i>Średnia Waga</h5>
+                    <h2 class="mb-0" id="stat-average-weight">-</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabela z paletami -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">Historia Palet</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover" id="pallets-table">
+                    <thead>
+                        <tr>
+                            <th>LP</th>
+                            <th>Waga (kg)</th>
+                            <th>Zważył</th>
+                            <th>Data Ważenia</th>
+                            <th>Uwagi</th>
+                            <th>Akcje</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pallets-tbody">
+                        <tr>
+                            <td colspan="6" class="text-center text-muted">
+                                <div class="spinner-border spinner-border-sm me-2" role="status">
+                                    <span class="visually-hidden">Ładowanie...</span>
+                                </div>
+                                Ładowanie danych...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal dodawania nowej palety -->
+<div class="modal fade" id="add-pallet-modal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-plus-circle me-2"></i>Dodaj Nową Paletę
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="add-pallet-form">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Numer Palety (LP)</label>
+                        <input type="text" class="form-control form-control-lg text-center fw-bold bg-light" 
+                               id="input-lp" readonly>
+                        <small class="form-text text-muted">
+                            Numer generowany automatycznie
+                        </small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="input-waga" class="form-label fw-bold">
+                            Waga <span class="text-danger">*</span>
+                        </label>
+                        <div class="input-group input-group-lg">
+                            <input type="number" step="0.01" min="0.01" class="form-control" 
+                                   id="input-waga" placeholder="np. 1000" required autofocus>
+                            <span class="input-group-text">kg</span>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="input-zwazyl" class="form-label">Zważył (Nazwisko)</label>
+                        <input type="text" class="form-control" id="input-zwazyl" 
+                               placeholder="np. Kowalski">
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="input-uwagi" class="form-label">Uwagi</label>
+                        <textarea class="form-control" id="input-uwagi" rows="2" 
+                                  placeholder="Dodatkowe uwagi (opcjonalne)"></textarea>
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary btn-lg">
+                            <i class="fas fa-save me-2"></i>Zapisz Paletę
+                        </button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                            Anuluj
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal edycji palety -->
+<div class="modal fade" id="edit-pallet-modal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-warning">
+                <h5 class="modal-title">
+                    <i class="fas fa-edit me-2"></i>Edytuj Paletę <span id="edit-pallet-lp"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="edit-pallet-form">
+                    <input type="hidden" id="edit-pallet-id">
+                    
+                    <div class="mb-3">
+                        <label for="edit-input-waga" class="form-label fw-bold">
+                            Waga <span class="text-danger">*</span>
+                        </label>
+                        <div class="input-group">
+                            <input type="number" step="0.01" min="0.01" class="form-control" 
+                                   id="edit-input-waga" required>
+                            <span class="input-group-text">kg</span>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="edit-input-zwazyl" class="form-label">Zważył (Nazwisko)</label>
+                        <input type="text" class="form-control" id="edit-input-zwazyl">
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="edit-input-uwagi" class="form-label">Uwagi</label>
+                        <textarea class="form-control" id="edit-input-uwagi" rows="2"></textarea>
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-warning">
+                            <i class="fas fa-save me-2"></i>Zapisz Zmiany
+                        </button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                            Anuluj
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+$(document).ready(function() {
+    let addPalletModal = null;
+    let editPalletModal = null;
+
+    // Załaduj dane przy starcie strony
+    loadPallets();
+
+    // Przycisk "Dodaj Nową Paletę"
+    $('#btn-add-pallet').on('click', function() {
+        openAddPalletModal();
+    });
+
+    // Obsługa formularza dodawania
+    $('#add-pallet-form').on('submit', function(e) {
+        e.preventDefault();
+        addPallet();
+    });
+
+    // Obsługa formularza edycji
+    $('#edit-pallet-form').on('submit', function(e) {
+        e.preventDefault();
+        updatePallet();
+    });
+
+    // Funkcja otwierająca modal dodawania
+    function openAddPalletModal() {
+        // Pobierz kolejny numer LP
+        $.ajax({
+            url: '/earth-pallets/api/next-lp',
+            method: 'GET',
+            success: function(response) {
+                if (response.success) {
+                    $('#input-lp').val(response.next_lp);
+                    $('#input-waga').val('');
+                    $('#input-zwazyl').val('');
+                    $('#input-uwagi').val('');
+                    
+                    // Otwórz modal
+                    addPalletModal = new bootstrap.Modal(document.getElementById('add-pallet-modal'));
+                    addPalletModal.show();
+                    
+                    // Ustaw focus na polu wagi
+                    $('#add-pallet-modal').on('shown.bs.modal', function() {
+                        $('#input-waga').focus();
+                    });
+                } else {
+                    showToast('Błąd', 'Nie udało się pobrać kolejnego numeru LP', 'error');
+                }
+            },
+            error: function() {
+                showToast('Błąd', 'Błąd połączenia z serwerem', 'error');
+            }
+        });
+    }
+
+    // Funkcja dodająca nową paletę
+    function addPallet() {
+        const data = {
+            lp: $('#input-lp').val(),
+            waga: parseFloat($('#input-waga').val()),
+            zwazyl: $('#input-zwazyl').val(),
+            uwagi: $('#input-uwagi').val()
+        };
+
+        // Walidacja
+        if (!data.waga || data.waga <= 0) {
+            showToast('Błąd', 'Waga musi być większa od 0', 'error');
+            return;
+        }
+
+        $.ajax({
+            url: '/earth-pallets/api/pallets',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(data),
+            success: function(response) {
+                if (response.success) {
+                    showToast('Sukces', response.message, 'success');
+                    addPalletModal.hide();
+                    loadPallets(); // Odśwież listę
+                } else {
+                    showToast('Błąd', response.error, 'error');
+                }
+            },
+            error: function(xhr) {
+                const error = xhr.responseJSON ? xhr.responseJSON.error : 'Błąd dodawania palety';
+                showToast('Błąd', error, 'error');
+            }
+        });
+    }
+
+    // Funkcja ładująca listę palet
+    function loadPallets() {
+        $.ajax({
+            url: '/earth-pallets/api/pallets',
+            method: 'GET',
+            success: function(response) {
+                if (response.success) {
+                    renderPallets(response.pallets);
+                    updateStatistics(response.statistics);
+                } else {
+                    showToast('Błąd', 'Nie udało się załadować danych', 'error');
+                }
+            },
+            error: function() {
+                $('#pallets-tbody').html('<tr><td colspan="6" class="text-center text-danger">Błąd ładowania danych</td></tr>');
+            }
+        });
+    }
+
+    // Funkcja renderująca tabelę
+    function renderPallets(pallets) {
+        const tbody = $('#pallets-tbody');
+        tbody.empty();
+
+        if (pallets.length === 0) {
+            tbody.html('<tr><td colspan="6" class="text-center text-muted">Brak palet w bazie danych</td></tr>');
+            return;
+        }
+
+        pallets.forEach(function(pallet) {
+            const row = `
+                <tr data-pallet-id="${pallet.id}">
+                    <td class="fw-bold">${pallet.lp}</td>
+                    <td>${pallet.waga.toFixed(0)} kg</td>
+                    <td>${pallet.zwazyl || '<span class="text-muted">-</span>'}</td>
+                    <td>${formatDateTime(pallet.data_wazenia)}</td>
+                    <td>${pallet.uwagi || '<span class="text-muted">-</span>'}</td>
+                    <td>
+                        <button class="btn btn-sm btn-warning btn-edit" data-id="${pallet.id}">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="btn btn-sm btn-danger btn-delete" data-id="${pallet.id}" data-lp="${pallet.lp}">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            `;
+            tbody.append(row);
+        });
+
+        // Obsługa przycisków edycji
+        $('.btn-edit').on('click', function() {
+            const palletId = $(this).data('id');
+            openEditModal(palletId);
+        });
+
+        // Obsługa przycisków usuwania
+        $('.btn-delete').on('click', function() {
+            const palletId = $(this).data('id');
+            const palletLp = $(this).data('lp');
+            deletePallet(palletId, palletLp);
+        });
+    }
+
+    // Funkcja otwierająca modal edycji
+    function openEditModal(palletId) {
+        // Znajdź paletę w DOM
+        const row = $(`tr[data-pallet-id="${palletId}"]`);
+        const lp = row.find('td:eq(0)').text().trim();
+        const waga = parseFloat(row.find('td:eq(1)').text());
+        const zwazyl = row.find('td:eq(2)').text().trim();
+        const uwagi = row.find('td:eq(4)').text().trim();
+
+        $('#edit-pallet-id').val(palletId);
+        $('#edit-pallet-lp').text(lp);
+        $('#edit-input-waga').val(waga);
+        $('#edit-input-zwazyl').val(zwazyl === '-' ? '' : zwazyl);
+        $('#edit-input-uwagi').val(uwagi === '-' ? '' : uwagi);
+
+        editPalletModal = new bootstrap.Modal(document.getElementById('edit-pallet-modal'));
+        editPalletModal.show();
+    }
+
+    // Funkcja aktualizująca paletę
+    function updatePallet() {
+        const palletId = $('#edit-pallet-id').val();
+        const data = {
+            waga: parseFloat($('#edit-input-waga').val()),
+            zwazyl: $('#edit-input-zwazyl').val(),
+            uwagi: $('#edit-input-uwagi').val()
+        };
+
+        $.ajax({
+            url: `/earth-pallets/api/pallets/${palletId}`,
+            method: 'PUT',
+            contentType: 'application/json',
+            data: JSON.stringify(data),
+            success: function(response) {
+                if (response.success) {
+                    showToast('Sukces', response.message, 'success');
+                    editPalletModal.hide();
+                    loadPallets();
+                } else {
+                    showToast('Błąd', response.error, 'error');
+                }
+            },
+            error: function(xhr) {
+                const error = xhr.responseJSON ? xhr.responseJSON.error : 'Błąd aktualizacji';
+                showToast('Błąd', error, 'error');
+            }
+        });
+    }
+
+    // Funkcja usuwająca paletę
+    function deletePallet(palletId, palletLp) {
+        if (!confirm(`Czy na pewno chcesz usunąć paletę ${palletLp}? Ta operacja jest nieodwracalna.`)) {
+            return;
+        }
+
+        $.ajax({
+            url: `/earth-pallets/api/pallets/${palletId}`,
+            method: 'DELETE',
+            success: function(response) {
+                if (response.success) {
+                    showToast('Sukces', response.message, 'success');
+                    loadPallets();
+                } else {
+                    showToast('Błąd', response.error, 'error');
+                }
+            },
+            error: function(xhr) {
+                const error = xhr.responseJSON ? xhr.responseJSON.error : 'Błąd usuwania';
+                showToast('Błąd', error, 'error');
+            }
+        });
+    }
+
+    // Funkcja aktualizująca statystyki
+    function updateStatistics(stats) {
+        $('#stat-total-count').text(stats.total_count);
+        $('#stat-total-weight').text(stats.total_weight.toFixed(0) + ' kg');
+        $('#stat-average-weight').text(stats.average_weight.toFixed(0) + ' kg');
+    }
+
+    // Funkcja formatująca datę i czas w strefie czasowej użytkownika
+    function formatDateTime(dateString) {
+        if (!dateString) return '-';
+        
+        try {
+            // Tworzymy obiekt Date z stringa (obsługuje format ISO z Z)
+            const date = new Date(dateString);
+            
+            // Sprawdzamy czy data jest poprawna
+            if (isNaN(date.getTime())) {
+                return 'Nieprawidłowa data';
+            }
+            
+            // Formatujemy w strefie czasowej użytkownika
+            return date.toLocaleString('pl-PL', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                timeZoneName: 'short'  // Pokaże strefę czasową (np. CET, CEST)
+            });
+        } catch (error) {
+            console.error('Błąd formatowania daty:', error, 'Input:', dateString);
+            return 'Błąd daty';
+        }
+    }
+
+    // Funkcja pokazująca toast (powiadomienie)
+    function showToast(title, message, type) {
+        const bgColor = type === 'success' ? 'linear-gradient(to right, #00b09b, #96c93d)' :
+                       type === 'error' ? 'linear-gradient(to right, #ff5f6d, #ffc371)' :
+                       'linear-gradient(to right, #4facfe, #00f2fe)';
+        
+        Toastify({
+            text: `<strong>${title}</strong><br>${message}`,
+            duration: 3000,
+            gravity: 'top',
+            position: 'right',
+            stopOnFocus: true,
+            escapeMarkup: false,
+            style: {
+                background: bgColor
+            }
+        }).showToast();
+    }
+});
+</script>
+{% endblock %}
+
