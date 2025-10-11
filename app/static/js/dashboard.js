@@ -35,6 +35,27 @@ document.addEventListener('DOMContentLoaded', () => {
         updateUI(data);
     });
 
+    socket.on('heating_completed', (data) => {
+        console.log("Otrzymano powiadomienie o zakończeniu podgrzewania:", data);
+        
+        // Wyświetl powiadomienie toast
+        showToast(
+            data.message || `Reaktor ${data.nazwa} osiągnął temperaturę docelową!`,
+            'success', // Użyj stylu 'success' dla zielonego koloru
+            false
+        );
+        
+        // Opcjonalnie: możemy dodać wizualne wyróżnienie na karcie reaktora
+        const reactorCard = document.getElementById(`reaktor-card-${data.sprzet_id}`); // Zakładając, że karty mają ID
+        if (reactorCard) {
+            reactorCard.classList.add('border-success', 'border-3');
+            // Usuń wyróżnienie po kilku sekundach
+            setTimeout(() => {
+                reactorCard.classList.remove('border-success', 'border-3');
+            }, 10000); // 10 sekund
+        }
+    });
+
     // --- GŁÓWNA FUNKCJA AKTUALIZUJĄCA UI ---
     function updateUI(data) {
         renderReaktory(data.all_reactors);
@@ -178,7 +199,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="mb-3">
                     <div class="d-flex justify-content-between align-items-center mb-1">
                         <small class="text-muted"><i class="fas fa-thermometer-half me-1"></i>Temperatura</small>
-                        <small class="fw-semibold">${r.temperatura_aktualna ? r.temperatura_aktualna.toFixed(1) : 'N/A'}°C / ${r.temperatura_docelowa || 'N/A'}°C</small>
+                        <small class="fw-semibold">${r.temperatura_aktualna ? r.temperatura_aktualna.toFixed(4) : 'N/A'}°C / ${r.temperatura_docelowa || 'N/A'}°C</small>
                     </div>
                     <div class="progress" style="height: 10px;">
                         <div class="progress-bar ${tempColorClass}" role="progressbar" style="width: ${tempPercent}%;"></div>
@@ -220,7 +241,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // --- Kompletny szablon karty ---
         const cardHTML = `
-            <div class="col-xl-4 col-lg-6 mb-4">
+            <div class="col-xl-4 col-lg-6 mb-4" id="reaktor-card-${r.id}">
                 <div class="card h-100 card-reaktor shadow-sm">
                     <div class="card-header d-flex justify-content-between align-items-center">
                         <h5 class="mb-0"><span class="status-indicator ${statusClass}"></span>${r.nazwa}</h5>
@@ -891,12 +912,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Funkcja do wyświetlania powiadomień
-    function showToast(message, type = 'info') {
+    function showToast(message, type = 'info', autoClose = true) {
         // Sprawdź czy Bootstrap Toast jest dostępny
         if (typeof bootstrap !== 'undefined' && bootstrap.Toast) {
-            // Stwórz dynamicznie toast
+            // Dynamicznie określ klasę koloru na podstawie typu
+            const bgClass = type === 'error' ? 'bg-danger' : type === 'success' ? 'bg-success' : 'bg-info';
+            
+            // Zbuduj HTML dla toasta
             const toastHTML = `
-                <div class="toast align-items-center text-white bg-${type === 'error' ? 'danger' : type === 'success' ? 'success' : 'info'} border-0" role="alert" aria-live="assertive" aria-atomic="true">
+                <div class="toast align-items-center text-white ${bgClass} border-0" role="alert" aria-live="assertive" aria-atomic="true">
                     <div class="d-flex">
                         <div class="toast-body">
                             ${message}
@@ -906,26 +930,41 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
             `;
             
-            const toastContainer = document.createElement('div');
-            toastContainer.className = 'toast-container position-fixed top-0 end-0 p-3';
-            toastContainer.style.zIndex = '9999';
-            toastContainer.innerHTML = toastHTML;
+            // Stwórz kontener, jeśli jeszcze nie istnieje
+            let toastContainer = document.querySelector('.toast-container');
+            if (!toastContainer) {
+                toastContainer = document.createElement('div');
+                toastContainer.className = 'toast-container position-fixed top-0 end-0 p-3';
+                toastContainer.style.zIndex = '9999';
+                document.body.appendChild(toastContainer);
+            }
             
-            document.body.appendChild(toastContainer);
+            // Dodaj nowy toast do kontenera
+            const toastWrapper = document.createElement('div');
+            toastWrapper.innerHTML = toastHTML;
+            const toastElement = toastWrapper.querySelector('.toast');
+            toastContainer.appendChild(toastElement);
             
-            const toastElement = toastContainer.querySelector('.toast');
-            const toast = new bootstrap.Toast(toastElement);
+            // === KLUCZOWA ZMIANA JEST TUTAJ ===
+            // Stwórz obiekt opcji dla konstruktora Bootstrap Toast
+            const bootstrapToastOptions = {
+                autohide: autoClose, // Użyj bezpośrednio parametru funkcji
+                delay: 5000          // Domyślny czas znikania, jeśli autohide=true
+            };
+
+            // Zainicjuj i pokaż toast z odpowiednimi opcjami
+            const toast = new bootstrap.Toast(toastElement, bootstrapToastOptions);
             toast.show();
             
-            // Usuń toast po zakończeniu
+            // Usuń element toasta z DOM po jego ukryciu, aby nie zaśmiecać
             toastElement.addEventListener('hidden.bs.toast', () => {
-                document.body.removeChild(toastContainer);
+                toastElement.remove();
             });
         } else {
-            // Fallback - użyj alert jeśli Bootstrap nie jest dostępny
+            // Fallback - użyj alert jeśli Bootstrap lub Toastify nie są dostępne
             alert(message);
         }
-    }
+    }   
 
     // === FUNKCJONALNOŚĆ HARMONOGRAMU ZADAŃ ===
     

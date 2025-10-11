@@ -93,6 +93,8 @@ class Sprzet(db.Model):
         uselist=False,
         post_update=True # Ważne dla cyklicznych zależności
     )
+    historia_podgrzewania: Mapped[List['HistoriaPodgrzewania']] = relationship(back_populates='sprzet')
+
 
     def __repr__(self):
         # Ta metoda pomaga w debugowaniu, ładnie wyświetlając obiekt
@@ -343,6 +345,8 @@ class OperacjeLog(db.Model):
     opis: Mapped[Optional[str]] = mapped_column(Text)
     punkt_startowy: Mapped[Optional[str]] = mapped_column(VARCHAR(50))
     punkt_docelowy: Mapped[Optional[str]] = mapped_column(VARCHAR(50))
+    id_tank_mix: Mapped[Optional[int]] = mapped_column(ForeignKey('tank_mixes.id'), nullable=True, index=True)
+
 
     apollo_sesje: Mapped[Optional['ApolloSesje']] = relationship('ApolloSesje', back_populates='operacje_log')
     partie_surowca: Mapped[Optional['PartieSurowca']] = relationship('PartieSurowca', back_populates='operacje_log')
@@ -352,6 +356,8 @@ class OperacjeLog(db.Model):
     apollo_tracking: Mapped[List['ApolloTracking']] = relationship('ApolloTracking', back_populates='operacje_log')
     partie_historia: Mapped[List['PartieHistoria']] = relationship('PartieHistoria', back_populates='operacje_log')
     partie_powiazania: Mapped[List['PartiePowiazania']] = relationship('PartiePowiazania', back_populates='operacje_log')
+    mix: Mapped[Optional['TankMixes']] = relationship(back_populates='operacje_log')
+
 
 
 class PartieProbki(db.Model):
@@ -591,14 +597,19 @@ class TankMixes(db.Model):
     bleaching_earth_bags_total: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     whiteboard_id: Mapped[Optional[str]] = mapped_column(String(10), comment="Identyfikator z whiteboardu, np. (A), (B)")
     is_wydmuch_mix: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, comment='Oznacza, czy ta mieszanina składa się wyłącznie z wydmuchów.')
+    
+    # Relacje zwrotne
+    historia_podgrzewania: Mapped[List['HistoriaPodgrzewania']] = relationship(back_populates='mieszanina')
+
     # Relacja do sprzętu (zbiornika)
+    
     tank: Mapped["Sprzet"] = relationship(
         back_populates="mixes",
         foreign_keys=[tank_id]
     )
     # Relacja do składników
     components: Mapped[List['MixComponents']] = relationship(back_populates='mix')
-
+    operacje_log: Mapped[List['OperacjeLog']] = relationship(back_populates='mix')
 class MixComponents(db.Model):
     __tablename__ = 'mix_components'
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -647,3 +658,22 @@ class EarthPallets(db.Model):
 
     def __repr__(self):
         return f"<EarthPallet {self.lp} - {self.waga}kg>"
+
+class HistoriaPodgrzewania(db.Model):
+    __tablename__ = 'historia_podgrzewania'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    id_sprzetu: Mapped[int] = mapped_column(ForeignKey('sprzet.id'), nullable=False, index=True)
+    id_mieszaniny: Mapped[int] = mapped_column(ForeignKey('tank_mixes.id'), nullable=False, index=True)
+    
+    czas_startu: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    temp_startowa: Mapped[Optional[decimal.Decimal]] = mapped_column(DECIMAL(10, 2))
+    
+    czas_konca: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    temp_koncowa: Mapped[Optional[decimal.Decimal]] = mapped_column(DECIMAL(10, 2))
+    
+    temperatura_zewnetrzna: Mapped[Optional[decimal.Decimal]] = mapped_column(DECIMAL(5, 2))
+    waga_wsadu: Mapped[Optional[decimal.Decimal]] = mapped_column(DECIMAL(10, 2))
+
+    # Relacje zwrotne
+    sprzet: Mapped['Sprzet'] = relationship(back_populates='historia_podgrzewania')
+    mieszanina: Mapped['TankMixes'] = relationship(back_populates='historia_podgrzewania')

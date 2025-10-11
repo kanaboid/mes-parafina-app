@@ -120,6 +120,7 @@ def create_app(config_class=None):
     from .sprzet_routes import sprzet_bp
     from .scheduler_routes import scheduler_bp
     from .earth_pallets_routes import bp as earth_pallets_bp
+    from .workflow_routes import workflow_bp
     app.register_blueprint(routes.bp)
     app.register_blueprint(cykle_bp)
     app.register_blueprint(topology_bp)
@@ -128,6 +129,7 @@ def create_app(config_class=None):
     app.register_blueprint(sprzet_bp)
     app.register_blueprint(scheduler_bp)
     app.register_blueprint(earth_pallets_bp)
+    app.register_blueprint(workflow_bp)
     @app.route('/hello')
     def hello():
         return "Witaj w aplikacji MES!"

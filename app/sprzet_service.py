@@ -4,50 +4,42 @@ from .extensions import db
 from .models import Sprzet, TankMixes
 from decimal import Decimal
 from datetime import datetime, timezone
+from .heating_service import HeatingService
 
 class SprzetService:
     @staticmethod
     def set_burner_status(sprzet_id: int, status: str, operator: str = 'SYSTEM'):
         """
-        Ustawia stan palnika dla danego sprzętu i zwraca zaktualizowany obiekt.
-        
-        :param sprzet_id: ID sprzętu (reaktora).
-        :param status: Nowy status, musi być 'WLACZONY' lub 'WYLACZONY'.
-        :param operator: Operator wykonujący akcję.
-        :return: Zaktualizowany obiekt Sprzet.
-        :raises ValueError: Jeśli podano nieprawidłowy status lub sprzęt nie jest reaktorem.
+        Ustawia stan palnika dla danego sprzętu i zarządza logowaniem cyklu grzania.
         """
         if status not in ['WLACZONY', 'WYLACZONY']:
-            raise ValueError("Nieprawidłowy status palnika. Dozwolone wartości: 'WLACZONY', 'WYLACZONY'.")
+            raise ValueError("Nieprawidłowy status palnika. Dozwolone: 'WLACZONY', 'WYLACZONY'.")
             
-        sprzet = db.session.get(Sprzet, sprzet_id)
+        reaktor = db.session.get(Sprzet, sprzet_id)
 
-        if not sprzet:
-            raise ValueError(f"Nie znaleziono sprzętu o ID {sprzet_id}.")
+        if not reaktor or reaktor.typ_sprzetu != 'reaktor':
+            raise ValueError(f"Sprzęt o ID {sprzet_id} nie jest reaktorem.")
+
+        if reaktor.stan_palnika == status:
+            return reaktor # Nic się nie zmienia
+
+        reaktor.stan_palnika = status
         
-        if sprzet.typ_sprzetu != 'reaktor':
-            raise ValueError(f"Sprzęt '{sprzet.nazwa_unikalna}' nie jest reaktorem i nie posiada palnika.")
-            
-        # Jeśli stan się nie zmienia, nic nie rób
-        if sprzet.stan_palnika == status:
-            return sprzet
-
-        sprzet.stan_palnika = status
+        mix = db.session.get(TankMixes, reaktor.active_mix_id) if reaktor.active_mix_id else None
 
         if status == 'WLACZONY':
-            mix = db.session.get(TankMixes, sprzet.active_mix_id) if sprzet.active_mix_id else None
             if mix and mix.process_status == 'SUROWY':
                 mix.process_status = 'PODGRZEWANY'
-                print(f"Automatycznie zmieniono status mieszaniny ID {mix.id} na PODGRZEWANY.")
-        
-        # Opcjonalnie: Możemy tu dodać logowanie do nowej tabeli `historia_palnika`
-        # np. log_burner_activity(sprzet_id, status, operator, datetime.now(timezone.utc))
+            if mix: # Zaczynamy logowanie tylko, jeśli jest mieszanina
+                HeatingService.start_heating_log(reaktor, mix)
+        else: # status == 'WYLACZONY'
+            HeatingService.end_heating_log(reaktor)
         
         db.session.commit()
         
-        print(f"Zmieniono stan palnika dla '{sprzet.nazwa_unikalna}' na {status}.")
+        print(f"Zmieniono stan palnika dla '{reaktor.nazwa_unikalna}' na {status}.")
         
-        return sprzet
+        return reaktor
 
     @staticmethod
     def start_heating_process(sprzet_id: int, start_temperature: Decimal):
