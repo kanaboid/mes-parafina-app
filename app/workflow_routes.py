@@ -1,5 +1,6 @@
 # app/workflow_routes.py
 from flask import Blueprint, jsonify, request
+from decimal import Decimal, InvalidOperation
 from .workflow_service import WorkflowService
 from .extensions import db
 
@@ -24,6 +25,7 @@ def assess_mix_quality_endpoint(mix_id: int):
         return jsonify({'error': 'Pola "decision" oraz "operator" są wymagane.'}), 400
 
     try:
+        # Serwis zwraca bezpośrednio obiekt `mix`
         updated_mix = WorkflowService.assess_mix_quality(
             mix_id=mix_id,
             decision=decision,
@@ -43,7 +45,6 @@ def assess_mix_quality_endpoint(mix_id: int):
     except Exception as e:
         # Pozostałe, nieoczekiwane błędy serwera
         db.session.rollback()
-        # W przyszłości można dodać logowanie błędu
         return jsonify({'error': f'Wystąpił nieoczekiwany błąd serwera: {str(e)}'}), 500
 
 
@@ -51,7 +52,7 @@ def assess_mix_quality_endpoint(mix_id: int):
 def add_bleaching_earth_endpoint(mix_id: int):
     """
     Endpoint API do rejestrowania dodania ziemi bielącej.
-    Oczekuje JSON: {"bags_count": 5, "operator": "nazwa_operatora"}
+    Oczekuje JSON: {"bags_count": 5, "bag_weight": 25.0, "operator": "nazwa_operatora"}
     """
     data = request.get_json()
     if not data:
@@ -59,29 +60,35 @@ def add_bleaching_earth_endpoint(mix_id: int):
 
     try:
         bags_count = int(data.get('bags_count'))
+        # Używamy str(), aby uniknąć problemów z konwersją float -> Decimal
+        bag_weight = Decimal(str(data.get('bag_weight')))
         operator = data.get('operator')
-    except (TypeError, ValueError):
-        return jsonify({'error': 'Pole "bags_count" musi być liczbą całkowitą.'}), 400
+    except (TypeError, ValueError, InvalidOperation, AttributeError):
+        return jsonify({'error': 'Pola "bags_count" i "bag_weight" muszą być poprawnymi liczbami.'}), 400
 
-    if not operator or bags_count <= 0:
-        return jsonify({'error': 'Pola "operator" oraz "bags_count" (większe od 0) są wymagane.'}), 400
+    if not operator or bags_count <= 0 or bag_weight <= 0:
+        return jsonify({'error': 'Pola "operator", "bags_count" (>0) oraz "bag_weight" (>0) są wymagane.'}), 400
 
     try:
-        updated_mix = WorkflowService.add_bleaching_earth(
+        # Serwis zwraca słownik z kluczami 'mix' i 'message'
+        result = WorkflowService.add_bleaching_earth(
             mix_id=mix_id,
             bags_count=bags_count,
+            bag_weight=bag_weight,
             operator=operator
         )
+        updated_mix = result['mix']
+        
         return jsonify({
             'success': True,
-            'message': f"Zarejestrowano dodanie {bags_count} worków ziemi. Status mieszaniny zmieniony na '{updated_mix.process_status}'.",
+            'message': result['message'], # Używamy wiadomości zwróconej przez serwis
             'mix_id': updated_mix.id,
             'new_status': updated_mix.process_status,
             'total_bags': updated_mix.bleaching_earth_bags_total
         }), 200
         
     except ValueError as e:
-        return jsonify({'error': str(e)}), 422 # Błąd logiki biznesowej
+        return jsonify({'error': str(e)}), 422
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': f'Wystąpił nieoczekiwany błąd serwera: {str(e)}'}), 500

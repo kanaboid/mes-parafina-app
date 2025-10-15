@@ -342,6 +342,7 @@ class OperacjeLog(db.Model):
     zmodyfikowane_przez: Mapped[Optional[str]] = mapped_column(String(255, 'utf8mb4_unicode_ci'))
     uwagi: Mapped[Optional[str]] = mapped_column(Text(collation='utf8mb4_unicode_ci'))
     ilosc_kg: Mapped[Optional[decimal.Decimal]] = mapped_column(DECIMAL(10, 2))
+    ilosc_workow: Mapped[Optional[int]] = mapped_column(Integer)
     opis: Mapped[Optional[str]] = mapped_column(Text)
     punkt_startowy: Mapped[Optional[str]] = mapped_column(VARCHAR(50))
     punkt_docelowy: Mapped[Optional[str]] = mapped_column(VARCHAR(50))

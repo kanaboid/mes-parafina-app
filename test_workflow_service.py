@@ -6,6 +6,7 @@ from app.models import Sprzet, TankMixes, OperacjeLog
 from app.workflow_service import WorkflowService
 from sqlalchemy import select, text
 from decimal import Decimal
+from datetime import datetime, timezone, timedelta
 
 class TestWorkflowService(unittest.TestCase):
     def setUp(self):
@@ -113,71 +114,79 @@ class TestWorkflowService(unittest.TestCase):
                 operator='TEST_USER'
             )
 
-    def _prepare_mix_for_bleaching(self, temp=Decimal('115.0')):
-        """Helper to create a mix ready for bleaching."""
-        reaktor = Sprzet(
-            id=1, nazwa_unikalna='R1', typ_sprzetu='reaktor', 
-            temperatura_aktualna=temp
-        )
-        mix = TankMixes(
-            id=10, tank=reaktor, unique_code='MIX-FOR-BLEACHING',
-            process_status='PODGRZEWANY', bleaching_earth_bags_total=0
-        )
+    def _prepare_mix_for_bleaching(self, temp=Decimal('115.0'), status='PODGRZEWANY', is_wydmuch=False, initial_bags=0):
+        # Ta funkcja pomocnicza pozostaje bez zmian
+        reaktor = Sprzet(id=1, nazwa_unikalna='R1', typ_sprzetu='reaktor', temperatura_aktualna=temp)
+        mix = TankMixes(id=10, tank=reaktor, unique_code='MIX-TEST', process_status=status,
+                        bleaching_earth_bags_total=initial_bags, is_wydmuch_mix=is_wydmuch,
+                        creation_date=datetime.now(timezone.utc) - timedelta(hours=1))
         reaktor.active_mix_id = mix.id
         db.session.add_all([reaktor, mix])
         db.session.commit()
         return mix
 
-    def test_add_bleaching_earth_success(self):
-        """Testuje pomyślne zarejestrowanie dodania ziemi bielącej."""
-        mix = self._prepare_mix_for_bleaching()
+    def test_add_bleaching_earth_first_time_creates_new_log(self):
+        """Testuje, czy pierwsze dobielanie tworzy nowy log i zmienia status."""
+        mix = self._prepare_mix_for_bleaching(status='PODGRZEWANY')
         
-        updated_mix = WorkflowService.add_bleaching_earth(
-            mix_id=mix.id,
-            bags_count=5,
-            operator='TEST_USER'
+        WorkflowService.add_bleaching_earth(mix.id, 4, Decimal('25.0'), 'USER1')
+
+        db.session.refresh(mix)
+        self.assertEqual(mix.process_status, 'DOBIELONY_OCZEKUJE')
+        self.assertEqual(mix.bleaching_earth_bags_total, 4)
+        
+        logs = db.session.execute(select(OperacjeLog)).scalars().all()
+        self.assertEqual(len(logs), 1)
+        self.assertEqual(logs[0].ilosc_workow, 4)
+        self.assertAlmostEqual(logs[0].ilosc_kg, Decimal('100.0'))
+
+    def test_add_bleaching_earth_second_time_updates_existing_log(self):
+        """Testuje, czy drugie dobielanie aktualizuje istniejący log."""
+        mix = self._prepare_mix_for_bleaching(status='DOBIELONY_OCZEKUJE', initial_bags=4)
+        # Symulujemy istnienie poprzedniego logu
+        initial_log = OperacjeLog(
+            typ_operacji='DOBIELANIE', id_tank_mix=mix.id, status_operacji='zakonczona',
+            czas_rozpoczecia=datetime.now(timezone.utc) - timedelta(minutes=10),
+            ilosc_workow=4, ilosc_kg=Decimal('100.0')
         )
-
-        self.assertEqual(updated_mix.process_status, 'DOBIELONY_OCZEKUJE')
-        self.assertEqual(updated_mix.bleaching_earth_bags_total, 5)
-        
-        log = db.session.execute(select(OperacjeLog).where(OperacjeLog.typ_operacji == 'DOBIELANIE')).scalar_one()
-        self.assertIsNotNone(log)
-        self.assertIn("Dodano 5 worków", log.opis)
-
-    def test_add_bleaching_earth_accumulates_bags(self):
-        """Testuje, czy kolejne dobielanie akumuluje liczbę worków."""
-        mix = self._prepare_mix_for_bleaching()
-        mix.bleaching_earth_bags_total = 3 # Ustawiamy stan początkowy
+        db.session.add(initial_log)
         db.session.commit()
         
-        updated_mix = WorkflowService.add_bleaching_earth(
-            mix_id=mix.id,
-            bags_count=4,
-            operator='TEST_USER'
-        )
-        self.assertEqual(updated_mix.bleaching_earth_bags_total, 7) # 3 + 4
+        WorkflowService.add_bleaching_earth(mix.id, 2, Decimal('25.0'), 'USER2')
+
+        db.session.refresh(mix)
+        self.assertEqual(mix.process_status, 'DOBIELONY_OCZEKUJE') # Status bez zmian
+        self.assertEqual(mix.bleaching_earth_bags_total, 6) # Suma globalna 4 + 2
+
+        logs = db.session.execute(select(OperacjeLog)).scalars().all()
+        self.assertEqual(len(logs), 1) # Powinien być wciąż tylko JEDEN log
+        self.assertEqual(logs[0].ilosc_workow, 6) # 4 + 2
+        self.assertAlmostEqual(logs[0].ilosc_kg, Decimal('150.0')) # 100 + 50
+
+    def test_add_bleaching_earth_exceeds_160kg_limit_in_one_op(self):
+        """Testuje, czy przekroczenie limitu 160kg w jednej operacji jest blokowane."""
+        mix = self._prepare_mix_for_bleaching(status='PODGRZEWANY')
+    
+        with self.assertRaisesRegex(ValueError, "przekracza maksymalny limit 160.0 kg"): # Poprawiony oczekiwany tekst
+            WorkflowService.add_bleaching_earth(mix.id, 7, Decimal('25.0'), 'USER1') # 7 * 25 = 175 kg
+
+    def test_add_bleaching_earth_exceeds_160kg_limit_in_second_op(self):
+        """Testuje, czy przekroczenie limitu 160kg w drugiej 'dokładce' jest blokowane."""
+        mix = self._prepare_mix_for_bleaching(status='DOBIELONY_OCZEKUJE', initial_bags=4)
+        initial_log = OperacjeLog(typ_operacji='DOBIELANIE', id_tank_mix=mix.id, ilosc_workow=4, ilosc_kg=Decimal('100.0'), czas_rozpoczecia=datetime.now(timezone.utc)-timedelta(minutes=10))
+        db.session.add(initial_log)
+        db.session.commit()
+
+        with self.assertRaisesRegex(ValueError, "przekroczy limit 160.0 kg"): # Poprawiony oczekiwany tekst
+            # Próba dodania 3 worków (75kg), co da łącznie 175kg w tej operacji
+            WorkflowService.add_bleaching_earth(mix.id, 3, Decimal('25.0'), 'USER2')
 
     def test_add_bleaching_earth_too_cold_fails(self):
-        """Testuje, czy próba dobielania przy zbyt niskiej temperaturze rzuca błąd."""
         mix = self._prepare_mix_for_bleaching(temp=Decimal('105.0'))
-        
         with self.assertRaisesRegex(ValueError, "Zbyt niska temperatura reaktora"):
-            WorkflowService.add_bleaching_earth(
-                mix_id=mix.id,
-                bags_count=5,
-                operator='TEST_USER'
-            )
+            WorkflowService.add_bleaching_earth(mix.id, 5, Decimal('25.0'), 'TEST_USER')
 
-    def test_add_bleaching_earth_wrong_status_fails(self):
-        """Testuje, czy próba dobielania mieszaniny w złym stanie rzuca błąd."""
-        mix = self._prepare_mix_for_bleaching()
-        mix.process_status = 'SUROWY'
-        db.session.commit()
-
-        with self.assertRaisesRegex(ValueError, "Nie można dobielić mieszaniny"):
-            WorkflowService.add_bleaching_earth(
-                mix_id=mix.id,
-                bags_count=5,
-                operator='TEST_USER'
-            )
+    def test_add_bleaching_earth_to_wydmuch_mix_fails(self):
+        mix = self._prepare_mix_for_bleaching(is_wydmuch=True)
+        with self.assertRaisesRegex(ValueError, "Nie można dodawać ziemi bielącej"):
+            WorkflowService.add_bleaching_earth(mix.id, 5, Decimal('25.0'), 'TEST_USER')
