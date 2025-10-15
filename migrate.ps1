@@ -1,9 +1,9 @@
 # migrate.ps1
-# Wersja finalna, używająca zmiennych środowiskowych i zawierająca komendę stamp-test.
+# Wersja z obsługą bazy produkcyjnej Railway
 
 param (
     [Parameter(Mandatory=$true, Position=0)]
-    [ValidateSet("generate", "upgrade", "downgrade", "history", "current", "stamp-test")]
+    [ValidateSet("generate", "upgrade", "downgrade", "history", "current", "stamp-test", "stamp-prod", "upgrade-prod", "downgrade-prod")]
     [string]$Command,
 
     [Parameter(Position=1)]
@@ -17,6 +17,7 @@ function Check-Last-Success {
         Write-Output "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
         # Przywróć zmienną środowiskową na wszelki wypadek
         $env:ALEMBIC_TEST_MODE = $null
+        $env:ALEMBIC_PROD_MODE = $null
         exit 1
     }
 }
@@ -45,6 +46,27 @@ if ($Command -eq "generate") {
     }
     Check-Last-Success
 
+    Write-Output ""
+    Write-Output "==================================================="
+    Write-Output "UWAGA: Baza PRODUKCYJNA (Railway) nie jest automatycznie aktualizowana!"
+    Write-Output "Aby zaktualizowac baze produkcyjna, uzyj komendy:"
+    Write-Output "  railway run pwsh migrate.ps1 upgrade-prod"
+    Write-Output "==================================================="
+
+} elseif ($Command -eq "upgrade-prod") {
+    Write-Output "--- UWAGA: Aktualizacja bazy PRODUKCYJNEJ na Railway! ---"
+    Write-Output "Upewnij sie, ze masz ustawiona zmienna DATABASE_URL_PROD."
+    Write-Output "Nacisnij Ctrl+C aby anulowac, lub Enter aby kontynuowac..."
+    Read-Host
+    
+    try {
+        $env:ALEMBIC_PROD_MODE = "true"
+        alembic upgrade head
+    } finally {
+        $env:ALEMBIC_PROD_MODE = $null
+    }
+    Check-Last-Success
+
 } elseif ($Command -eq "downgrade") {
     Write-Output "--- Wycofanie ostatniej migracji z bazy DEWELOPERSKIEJ... ---"
     alembic downgrade -1
@@ -57,6 +79,20 @@ if ($Command -eq "generate") {
         alembic downgrade -1
     } finally {
         $env:ALEMBIC_TEST_MODE = $null
+    }
+    Check-Last-Success
+
+} elseif ($Command -eq "downgrade-prod") {
+    Write-Output "--- UWAGA: Wycofanie migracji z bazy PRODUKCYJNEJ na Railway! ---"
+    Write-Output "To jest NIEBEZPIECZNA operacja!"
+    Write-Output "Nacisnij Ctrl+C aby anulowac, lub Enter aby kontynuowac..."
+    Read-Host
+    
+    try {
+        $env:ALEMBIC_PROD_MODE = "true"
+        alembic downgrade -1
+    } finally {
+        $env:ALEMBIC_PROD_MODE = $null
     }
     Check-Last-Success
 
@@ -76,6 +112,16 @@ if ($Command -eq "generate") {
     } finally {
         $env:ALEMBIC_TEST_MODE = $null
     }
+
+    Write-Output ""
+    Write-Output "--- Aktualna wersja bazy produkcyjnej (Railway)... ---"
+    try {
+        $env:ALEMBIC_PROD_MODE = "true"
+        alembic current
+    } finally {
+        $env:ALEMBIC_PROD_MODE = $null
+    }
+
 } elseif ($Command -eq "stamp-test") {
     Write-Output "--- Stemplowanie bazy TESTOWEJ do najnowszej wersji (head)... ---"
     try {
@@ -83,6 +129,19 @@ if ($Command -eq "generate") {
         alembic stamp head
     } finally {
         $env:ALEMBIC_TEST_MODE = $null
+    }
+    Check-Last-Success
+
+} elseif ($Command -eq "stamp-prod") {
+    Write-Output "--- UWAGA: Stemplowanie bazy PRODUKCYJNEJ (Railway) do head! ---"
+    Write-Output "Nacisnij Ctrl+C aby anulowac, lub Enter aby kontynuowac..."
+    Read-Host
+    
+    try {
+        $env:ALEMBIC_PROD_MODE = "true"
+        alembic stamp head
+    } finally {
+        $env:ALEMBIC_PROD_MODE = $null
     }
     Check-Last-Success
 }
