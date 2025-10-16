@@ -611,6 +611,7 @@ class TankMixes(db.Model):
     # Relacja do składników
     components: Mapped[List['MixComponents']] = relationship(back_populates='mix')
     operacje_log: Mapped[List['OperacjeLog']] = relationship(back_populates='mix')
+
 class MixComponents(db.Model):
     __tablename__ = 'mix_components'
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
