@@ -76,10 +76,11 @@ class Sprzet(db.Model):
     filter_cake_origin_mix_id: Mapped[Optional[int]] = mapped_column(Integer, comment='ID mieszaniny (TankMix), z której pochodzi obecny placek')
     # Relacje
     
+    partie_apollo: Mapped[List['PartieApollo']] = relationship('PartieApollo', back_populates='sprzet')
     apollo_sesje: Mapped[List['ApolloSesje']] = relationship('ApolloSesje', back_populates='sprzet')
     historia_pomiarow: Mapped[List['HistoriaPomiarow']] = relationship('HistoriaPomiarow', back_populates='sprzet')
     operator_temperatures: Mapped[List['OperatorTemperatures']] = relationship('OperatorTemperatures', back_populates='sprzet')
-    partie_surowca: Mapped[List['PartieSurowca']] = relationship('PartieSurowca', back_populates='sprzet')
+    
     porty_sprzetu: Mapped[List['PortySprzetu']] = relationship('PortySprzetu', back_populates='sprzet')
     operacje_docelowe: Mapped[List['OperacjeLog']] = relationship(foreign_keys='OperacjeLog.id_sprzetu_docelowego', back_populates='sprzet_docelowy')
     operacje_zrodlowe: Mapped[List['OperacjeLog']] = relationship(foreign_keys='OperacjeLog.id_sprzetu_zrodlowego', back_populates='sprzet_zrodlowy')
@@ -100,28 +101,27 @@ class Sprzet(db.Model):
         # Ta metoda pomaga w debugowaniu, ładnie wyświetlając obiekt
         return f"<Sprzet id={self.id} nazwa='{self.nazwa_unikalna}'>"
 
-class Statusy(db.Model):
-    __tablename__ = 'statusy'
+class PartieApollo(db.Model):
+    __tablename__ = 'partie_apollo'
     __table_args__ = (
-        Index('nazwa_statusu', 'nazwa_statusu', unique=True),
-        {'comment': 'Słownik możliwych statusów partii surowca'}
+        ForeignKeyConstraint(['id_sprzetu'], ['sprzet.id'], ondelete='SET NULL', name='partie_apollo_ibfk_1'),
+        Index('id_sprzetu', 'id_sprzetu')
     )
-
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    nazwa_statusu: Mapped[str] = mapped_column(VARCHAR(50), comment='Np. Surowy, Filtrowany, Dobielony, Wydmuch')
+    id_sprzetu: Mapped[int] = mapped_column(Integer, nullable=True)
+    zrodlo_pochodzenia: Mapped[str] = mapped_column(ENUM('apollo', 'cysterna'))
+    unikalny_kod: Mapped[str] = mapped_column(VARCHAR(50), nullable=False, unique=True)
+    nazwa_partii: Mapped[str] = mapped_column(VARCHAR(100), nullable=False)
+    typ_surowca: Mapped[str] = mapped_column(VARCHAR(50), nullable=False)
+    waga_poczatkowa_kg: Mapped[decimal.Decimal] = mapped_column(DECIMAL(10, 2), nullable=False)
+    waga_aktualna_kg: Mapped[Optional[decimal.Decimal]] = mapped_column(DECIMAL(10, 2))
+    data_utworzenia: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=func.now())
+    typ_transformacji: Mapped[str] = mapped_column(ENUM('NOWA', 'TRANSFER', 'KOREKTA', 'ZAKONCZENIE'))
+    sprzet: Mapped['Sprzet'] = relationship('Sprzet', back_populates='partie_apollo')
+    status_partii: Mapped[str] = mapped_column(ENUM('Wytapiany','Archiwalna'))
 
-    partie_statusy: Mapped[List['PartieStatusy']] = relationship('PartieStatusy', back_populates='statusy')
 
 
-class StatusyPartii(db.Model):
-    __tablename__ = 'statusy_partii'
-    __table_args__ = (
-        Index('nazwa_statusu', 'nazwa_statusu', unique=True),
-    )
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    nazwa_statusu: Mapped[str] = mapped_column(String(50))
-    opis: Mapped[Optional[str]] = mapped_column(Text)
 
 
 class TypySurowca(db.Model):
@@ -217,57 +217,7 @@ class OperatorTemperatures(db.Model):
     sprzet: Mapped['Sprzet'] = relationship('Sprzet', back_populates='operator_temperatures')
 
 
-class PartieSurowca(db.Model):
-    __tablename__ = 'partie_surowca'
-    __table_args__ = (
-        ForeignKeyConstraint(['id_sprzetu'], ['sprzet.id'], ondelete='SET NULL', name='partie_surowca_ibfk_1'),
-        Index('id_sprzetu', 'id_sprzetu'),
-        Index('idx_etap_procesu', 'etap_procesu'),
-        Index('idx_typ_transformacji', 'typ_transformacji'),
-        Index('nazwa_partii', 'nazwa_partii', unique=True),
-        Index('unikalny_kod', 'unikalny_kod', unique=True),
-        {'comment': 'Każdy wiersz to unikalna partia produkcyjna surowca'}
-    )
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    unikalny_kod: Mapped[str] = mapped_column(VARCHAR(50), comment='Identyfikator partii, np. T10-20231027-1430-APOLLO')
-    zrodlo_pochodzenia: Mapped[str] = mapped_column(ENUM('apollo', 'cysterna'))
-    waga_poczatkowa_kg: Mapped[decimal.Decimal] = mapped_column(DECIMAL(10, 2))
-    nazwa_partii: Mapped[str] = mapped_column(VARCHAR(100))
-    status_partii: Mapped[str] = mapped_column(ENUM('W magazynie brudnym', 'Surowy w reaktorze', 'Budowanie placka', 'Przelewanie', 'Filtrowanie', 'Oczekiwanie na ocenę', 'Do ponownej filtracji', 'Dobielanie', 'Gotowy do wysłania', 'W magazynie czystym', 'Archiwalna'))
-    typ_surowca: Mapped[Optional[str]] = mapped_column(VARCHAR(50))
-    waga_aktualna_kg: Mapped[Optional[decimal.Decimal]] = mapped_column(DECIMAL(10, 2))
-    data_utworzenia: Mapped[Optional[datetime.datetime]] = mapped_column(TIMESTAMP, server_default=text('CURRENT_TIMESTAMP'))
-    id_sprzetu: Mapped[Optional[int]] = mapped_column(Integer)
-    rodzaj_surowca: Mapped[Optional[str]] = mapped_column(VARCHAR(50))
-    id_aktualnego_sprzetu: Mapped[Optional[int]] = mapped_column(Integer)
-    aktualny_etap_procesu: Mapped[Optional[str]] = mapped_column(ENUM('surowy', 'placek', 'przelew', 'w_kole', 'ocena_probki', 'dmuchanie', 'gotowy', 'wydmuch'), server_default=text("'surowy'"))
-    numer_cyklu_aktualnego: Mapped[Optional[int]] = mapped_column(Integer, server_default=text("'0'"))
-    czas_rozpoczecia_etapu: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime)
-    planowany_czas_zakonczenia: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime)
-    id_aktualnego_filtra: Mapped[Optional[str]] = mapped_column(VARCHAR(10))
-    reaktor_docelowy: Mapped[Optional[str]] = mapped_column(VARCHAR(10))
-    ilosc_cykli_filtracyjnych: Mapped[Optional[int]] = mapped_column(Integer, server_default=text("'0'"))
-    historia_operacji: Mapped[Optional[dict]] = mapped_column(JSON)
-    typ_transformacji: Mapped[Optional[str]] = mapped_column(ENUM('NOWA', 'TRANSFER', 'FILTRACJA', 'MIESZANIE', 'DZIELENIE'), server_default=text("'NOWA'"))
-    etap_procesu: Mapped[Optional[str]] = mapped_column(ENUM('SUROWA', 'W_PROCESIE', 'FILTROWANA', 'GOTOWA', 'ZATWIERDZONA', 'ODRZUCONA'), server_default=text("'SUROWA'"))
-    pochodzenie_opis: Mapped[Optional[str]] = mapped_column(Text)
-    data_ostatniej_modyfikacji: Mapped[Optional[datetime.datetime]] = mapped_column(TIMESTAMP, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'))
-    utworzona_przez: Mapped[Optional[str]] = mapped_column(VARCHAR(100))
-    certyfikat_jakosci: Mapped[Optional[str]] = mapped_column(Text)
-    uwagi_operatora: Mapped[Optional[str]] = mapped_column(Text)
-
-    sprzet: Mapped[Optional['Sprzet']] = relationship('Sprzet', back_populates='partie_surowca')
-    cykle_filtracyjne: Mapped[List['CykleFiltracyjne']] = relationship('CykleFiltracyjne', back_populates='partie_surowca')
-    operacje_log: Mapped[List['OperacjeLog']] = relationship('OperacjeLog', back_populates='partie_surowca')
-    partie_probki: Mapped[List['PartieProbki']] = relationship('PartieProbki', back_populates='partie_surowca')
-    partie_skladniki: Mapped[List['PartieSkladniki']] = relationship('PartieSkladniki', foreign_keys='[PartieSkladniki.id_partii_skladowej]', back_populates='partie_surowca')
-    partie_skladniki_: Mapped[List['PartieSkladniki']] = relationship('PartieSkladniki', foreign_keys='[PartieSkladniki.id_partii_wynikowej]', back_populates='partie_surowca_')
-    partie_statusy: Mapped[List['PartieStatusy']] = relationship('PartieStatusy', back_populates='partie_surowca')
-    partie_historia: Mapped[List['PartieHistoria']] = relationship('PartieHistoria', back_populates='partie_surowca')
-    partie_powiazania: Mapped[List['PartiePowiazania']] = relationship('PartiePowiazania', foreign_keys='[PartiePowiazania.partia_docelowa_id]', back_populates='partia_docelowa')
-    partie_powiazania_: Mapped[List['PartiePowiazania']] = relationship('PartiePowiazania', foreign_keys='[PartiePowiazania.partia_zrodlowa_id]', back_populates='partia_zrodlowa')
-    probki_ocena: Mapped[List['ProbkiOcena']] = relationship('ProbkiOcena', back_populates='partie_surowca')
 
 
 class PortySprzetu(db.Model):
@@ -289,41 +239,16 @@ class PortySprzetu(db.Model):
     segmenty_: Mapped[List['Segmenty']] = relationship('Segmenty', foreign_keys='[Segmenty.id_portu_startowego]', back_populates='porty_sprzetu_')
 
 
-class CykleFiltracyjne(db.Model):
-    __tablename__ = 'cykle_filtracyjne'
-    __table_args__ = (
-        ForeignKeyConstraint(['id_partii'], ['partie_surowca.id'], ondelete='CASCADE', name='cykle_filtracyjne_ibfk_1'),
-        Index('idx_filtr_czas', 'id_filtra', 'czas_rozpoczecia'),
-        Index('idx_partia_cykl', 'id_partii', 'numer_cyklu'),
-        {'comment': 'Historia wszystkich cykli filtracyjnych dla każdej partii'}
-    )
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    id_partii: Mapped[Optional[int]] = mapped_column(Integer)
-    numer_cyklu: Mapped[Optional[int]] = mapped_column(Integer)
-    typ_cyklu: Mapped[Optional[str]] = mapped_column(ENUM('placek', 'filtracja', 'dmuchanie'))
-    id_filtra: Mapped[Optional[str]] = mapped_column(VARCHAR(10))
-    reaktor_startowy: Mapped[Optional[str]] = mapped_column(VARCHAR(10))
-    reaktor_docelowy: Mapped[Optional[str]] = mapped_column(VARCHAR(10))
-    czas_rozpoczecia: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime)
-    czas_zakonczenia: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime)
-    czas_trwania_minut: Mapped[Optional[int]] = mapped_column(Integer)
-    wynik_oceny: Mapped[Optional[str]] = mapped_column(ENUM('pozytywna', 'negatywna', 'oczekuje'))
-    komentarz: Mapped[Optional[str]] = mapped_column(Text)
-
-    partie_surowca: Mapped[Optional['PartieSurowca']] = relationship('PartieSurowca', back_populates='cykle_filtracyjne')
-    probki_ocena: Mapped[List['ProbkiOcena']] = relationship('ProbkiOcena', back_populates='cykle_filtracyjne')
 
 
 class OperacjeLog(db.Model):
     __tablename__ = 'operacje_log'
     __table_args__ = (
         ForeignKeyConstraint(['id_apollo_sesji'], ['apollo_sesje.id'], name='fk_operacje_log_apollo_sesje'),
-        ForeignKeyConstraint(['id_partii_surowca'], ['partie_surowca.id'], ondelete='SET NULL', name='operacje_log_ibfk_1'),
         ForeignKeyConstraint(['id_sprzetu_docelowego'], ['sprzet.id'], ondelete='SET NULL', name='operacje_log_ibfk_3'),
         ForeignKeyConstraint(['id_sprzetu_zrodlowego'], ['sprzet.id'], ondelete='SET NULL', name='operacje_log_ibfk_2'),
         Index('fk_operacje_log_apollo_sesje', 'id_apollo_sesji'),
-        Index('id_partii_surowca', 'id_partii_surowca'),
         Index('id_sprzetu_docelowego', 'id_sprzetu_docelowego'),
         Index('id_sprzetu_zrodlowego', 'id_sprzetu_zrodlowego'),
         {'comment': 'Log wszystkich zdarzeń i operacji w procesie'}
@@ -350,79 +275,14 @@ class OperacjeLog(db.Model):
 
 
     apollo_sesje: Mapped[Optional['ApolloSesje']] = relationship('ApolloSesje', back_populates='operacje_log')
-    partie_surowca: Mapped[Optional['PartieSurowca']] = relationship('PartieSurowca', back_populates='operacje_log')
+    
     sprzet_docelowy: Mapped[Optional['Sprzet']] = relationship(foreign_keys=[id_sprzetu_docelowego], back_populates='operacje_docelowe')
     sprzet_zrodlowy: Mapped[Optional['Sprzet']] = relationship(foreign_keys=[id_sprzetu_zrodlowego], back_populates='operacje_zrodlowe')
     segmenty: Mapped[List['Segmenty']] = relationship('Segmenty', secondary='log_uzyte_segmenty', back_populates='operacje_log')
     apollo_tracking: Mapped[List['ApolloTracking']] = relationship('ApolloTracking', back_populates='operacje_log')
-    partie_historia: Mapped[List['PartieHistoria']] = relationship('PartieHistoria', back_populates='operacje_log')
-    partie_powiazania: Mapped[List['PartiePowiazania']] = relationship('PartiePowiazania', back_populates='operacje_log')
+    
     mix: Mapped[Optional['TankMixes']] = relationship(back_populates='operacje_log')
 
-
-
-class PartieProbki(db.Model):
-    __tablename__ = 'partie_probki'
-    __table_args__ = (
-        ForeignKeyConstraint(['id_partii_surowca'], ['partie_surowca.id'], ondelete='CASCADE', name='partie_probki_ibfk_1'),
-        Index('idx_data_pobrania', 'data_pobrania'),
-        Index('idx_numer_probki', 'numer_probki'),
-        Index('idx_partia', 'id_partii_surowca'),
-        Index('idx_status', 'status_probki'),
-        Index('numer_probki', 'numer_probki', unique=True)
-    )
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    id_partii_surowca: Mapped[int] = mapped_column(Integer)
-    numer_probki: Mapped[str] = mapped_column(VARCHAR(50))
-    data_pobrania: Mapped[Optional[datetime.datetime]] = mapped_column(TIMESTAMP, server_default=text('CURRENT_TIMESTAMP'))
-    pobrana_przez: Mapped[Optional[str]] = mapped_column(VARCHAR(100))
-    lokalizacja_pobrania: Mapped[Optional[str]] = mapped_column(VARCHAR(100))
-    typ_probki: Mapped[Optional[str]] = mapped_column(ENUM('RUTYNOWA', 'KONTROLNA', 'REKLAMACYJNA', 'WALIDACYJNA'), server_default=text("'RUTYNOWA'"))
-    status_probki: Mapped[Optional[str]] = mapped_column(ENUM('POBRANA', 'W_ANALIZIE', 'ZATWIERDZONA', 'ODRZUCONA'), server_default=text("'POBRANA'"))
-    wyniki_analizy: Mapped[Optional[dict]] = mapped_column(JSON)
-    data_analizy: Mapped[Optional[datetime.datetime]] = mapped_column(TIMESTAMP)
-    analizowana_przez: Mapped[Optional[str]] = mapped_column(VARCHAR(100))
-    uwagi: Mapped[Optional[str]] = mapped_column(Text)
-
-    partie_surowca: Mapped['PartieSurowca'] = relationship('PartieSurowca', back_populates='partie_probki')
-
-
-class PartieSkladniki(db.Model):
-    __tablename__ = 'partie_skladniki'
-    __table_args__ = (
-        ForeignKeyConstraint(['id_partii_skladowej'], ['partie_surowca.id'], ondelete='RESTRICT', name='fk_partia_skladowa'),
-        ForeignKeyConstraint(['id_partii_wynikowej'], ['partie_surowca.id'], ondelete='CASCADE', name='fk_partia_wynikowa'),
-        Index('idx_partia_skladowa', 'id_partii_skladowej'),
-        Index('idx_partia_wynikowa', 'id_partii_wynikowej'),
-        {'comment': 'Tabela łącząca partie-mieszaniny z ich składnikami.'}
-    )
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    id_partii_wynikowej: Mapped[int] = mapped_column(Integer)
-    id_partii_skladowej: Mapped[int] = mapped_column(Integer)
-    waga_skladowa_kg: Mapped[decimal.Decimal] = mapped_column(DECIMAL(10, 2))
-    data_dodania: Mapped[Optional[datetime.datetime]] = mapped_column(TIMESTAMP, server_default=text('CURRENT_TIMESTAMP'))
-
-    partie_surowca: Mapped['PartieSurowca'] = relationship('PartieSurowca', foreign_keys=[id_partii_skladowej], back_populates='partie_skladniki')
-    partie_surowca_: Mapped['PartieSurowca'] = relationship('PartieSurowca', foreign_keys=[id_partii_wynikowej], back_populates='partie_skladniki_')
-
-
-class PartieStatusy(db.Model):
-    __tablename__ = 'partie_statusy'
-    __table_args__ = (
-        ForeignKeyConstraint(['id_partii'], ['partie_surowca.id'], ondelete='CASCADE', name='partie_statusy_ibfk_1'),
-        ForeignKeyConstraint(['id_statusu'], ['statusy.id'], ondelete='CASCADE', name='partie_statusy_ibfk_2'),
-        Index('id_statusu', 'id_statusu'),
-        {'comment': 'Przypisuje wiele statusów do jednej partii'}
-    )
-
-    id_partii: Mapped[int] = mapped_column(Integer, primary_key=True)
-    id_statusu: Mapped[int] = mapped_column(Integer, primary_key=True)
-    data_nadania: Mapped[Optional[datetime.datetime]] = mapped_column(TIMESTAMP, server_default=text('CURRENT_TIMESTAMP'))
-
-    partie_surowca: Mapped['PartieSurowca'] = relationship('PartieSurowca', back_populates='partie_statusy')
-    statusy: Mapped['Statusy'] = relationship('Statusy', back_populates='partie_statusy')
 
 
 class Segmenty(db.Model):
@@ -490,84 +350,6 @@ t_log_uzyte_segmenty = db.Table(
     comment='Zapisuje, które segmenty były używane w danej operacji z logu'
 )
 
-
-class PartieHistoria(db.Model):
-    __tablename__ = 'partie_historia'
-    __table_args__ = (
-        ForeignKeyConstraint(['id_operacji_log'], ['operacje_log.id'], ondelete='SET NULL', name='partie_historia_ibfk_2'),
-        ForeignKeyConstraint(['id_partii_surowca'], ['partie_surowca.id'], ondelete='CASCADE', name='partie_historia_ibfk_1'),
-        Index('id_operacji_log', 'id_operacji_log'),
-        Index('idx_data_operacji', 'data_operacji'),
-        Index('idx_partia', 'id_partii_surowca'),
-        Index('idx_typ_operacji', 'typ_operacji')
-    )
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    id_partii_surowca: Mapped[int] = mapped_column(Integer)
-    typ_operacji: Mapped[str] = mapped_column(ENUM('UTWORZENIE', 'TRANSFER', 'FILTRACJA', 'MIESZANIE', 'DZIELENIE', 'ZMIANA_STANU', 'POBOR_PROBKI', 'ZATWIERDZENIE'))
-    data_operacji: Mapped[Optional[datetime.datetime]] = mapped_column(TIMESTAMP, server_default=text('CURRENT_TIMESTAMP'))
-    operator: Mapped[Optional[str]] = mapped_column(VARCHAR(100))
-    lokalizacja_przed: Mapped[Optional[str]] = mapped_column(VARCHAR(100))
-    lokalizacja_po: Mapped[Optional[str]] = mapped_column(VARCHAR(100))
-    waga_przed: Mapped[Optional[decimal.Decimal]] = mapped_column(DECIMAL(10, 3))
-    waga_po: Mapped[Optional[decimal.Decimal]] = mapped_column(DECIMAL(10, 3))
-    parametry_operacji: Mapped[Optional[dict]] = mapped_column(JSON)
-    opis_operacji: Mapped[Optional[str]] = mapped_column(Text)
-    id_operacji_log: Mapped[Optional[int]] = mapped_column(Integer)
-
-    operacje_log: Mapped[Optional['OperacjeLog']] = relationship('OperacjeLog', back_populates='partie_historia')
-    partie_surowca: Mapped['PartieSurowca'] = relationship('PartieSurowca', back_populates='partie_historia')
-
-
-class PartiePowiazania(db.Model):
-    __tablename__ = 'partie_powiazania'
-    __table_args__ = (
-        ForeignKeyConstraint(['id_operacji_log'], ['operacje_log.id'], ondelete='SET NULL', name='partie_powiazania_ibfk_3'),
-        ForeignKeyConstraint(['partia_docelowa_id'], ['partie_surowca.id'], ondelete='CASCADE', name='partie_powiazania_ibfk_2'),
-        ForeignKeyConstraint(['partia_zrodlowa_id'], ['partie_surowca.id'], ondelete='CASCADE', name='partie_powiazania_ibfk_1'),
-        Index('id_operacji_log', 'id_operacji_log'),
-        Index('idx_partia_docelowa', 'partia_docelowa_id'),
-        Index('idx_partia_zrodlowa', 'partia_zrodlowa_id'),
-        Index('idx_typ_powiazania', 'typ_powiazania')
-    )
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    partia_zrodlowa_id: Mapped[int] = mapped_column(Integer)
-    partia_docelowa_id: Mapped[int] = mapped_column(Integer)
-    typ_powiazania: Mapped[str] = mapped_column(ENUM('DZIELENIE', 'LACZENIE', 'TRANSFORMACJA'))
-    procent_udzialu: Mapped[Optional[decimal.Decimal]] = mapped_column(DECIMAL(5, 2))
-    data_powiazania: Mapped[Optional[datetime.datetime]] = mapped_column(TIMESTAMP, server_default=text('CURRENT_TIMESTAMP'))
-    id_operacji_log: Mapped[Optional[int]] = mapped_column(Integer)
-    uwagi: Mapped[Optional[str]] = mapped_column(Text)
-
-    operacje_log: Mapped[Optional['OperacjeLog']] = relationship('OperacjeLog', back_populates='partie_powiazania')
-    partia_docelowa: Mapped['PartieSurowca'] = relationship('PartieSurowca', foreign_keys=[partia_docelowa_id], back_populates='partie_powiazania')
-    partia_zrodlowa: Mapped['PartieSurowca'] = relationship('PartieSurowca', foreign_keys=[partia_zrodlowa_id], back_populates='partie_powiazania_')
-
-
-class ProbkiOcena(db.Model):
-    __tablename__ = 'probki_ocena'
-    __table_args__ = (
-        ForeignKeyConstraint(['id_cyklu_filtracyjnego'], ['cykle_filtracyjne.id'], ondelete='CASCADE', name='probki_ocena_ibfk_2'),
-        ForeignKeyConstraint(['id_partii'], ['partie_surowca.id'], ondelete='CASCADE', name='probki_ocena_ibfk_1'),
-        Index('id_cyklu_filtracyjnego', 'id_cyklu_filtracyjnego'),
-        Index('idx_partia_czas', 'id_partii', 'czas_pobrania'),
-        {'comment': 'Rejestr próbek i ich ocen podczas procesu filtracji'}
-    )
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    id_partii: Mapped[int] = mapped_column(Integer)
-    id_cyklu_filtracyjnego: Mapped[int] = mapped_column(Integer)
-    czas_pobrania: Mapped[datetime.datetime] = mapped_column(DateTime)
-    czas_oceny: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime)
-    wynik_oceny: Mapped[Optional[str]] = mapped_column(ENUM('pozytywna', 'negatywna', 'oczekuje'), server_default=text("'oczekuje'"))
-    ocena_koloru: Mapped[Optional[str]] = mapped_column(VARCHAR(50))
-    decyzja: Mapped[Optional[str]] = mapped_column(ENUM('kontynuuj_filtracje', 'wyslij_do_magazynu', 'dodaj_ziemie'))
-    operator_oceniajacy: Mapped[Optional[str]] = mapped_column(VARCHAR(100))
-    uwagi: Mapped[Optional[str]] = mapped_column(Text)
-
-    cykle_filtracyjne: Mapped['CykleFiltracyjne'] = relationship('CykleFiltracyjne', back_populates='probki_ocena')
-    partie_surowca: Mapped['PartieSurowca'] = relationship('PartieSurowca', back_populates='probki_ocena')
 
     
 class Batches(db.Model):
