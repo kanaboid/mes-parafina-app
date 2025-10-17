@@ -8,9 +8,11 @@ from app import create_app, db
 from app.config import TestConfig
 from app.models import Sprzet, Batches, TankMixes, MixComponents, AuditTrail
 from sqlalchemy import select, text
-
+import pytz
 # Zakładamy, że ten plik będzie istniał
 from app.batch_management_service import BatchManagementService
+
+WARSAW_TZ = pytz.timezone('Europe/Warsaw')
 
 class TestBatchManagementService(unittest.TestCase):
     def setUp(self):
@@ -63,8 +65,16 @@ class TestBatchManagementService(unittest.TestCase):
         self.assertEqual(batch_in_db.status, 'ACTIVE')
         
         # 3. Sprawdź, czy unikalny kod został wygenerowany w oczekiwanym formacie
-        today_str = dt.now(timezone.utc).strftime('%y%m%d')
+        now_utc = dt.now(timezone.utc)
+        now_warsaw = now_utc.astimezone(WARSAW_TZ)
+        # 3. Użyj czasu lokalnego do sformatowania stringa
+        today_str = now_warsaw.strftime('%y%m%d')
+        
+        
+        print(today_str)
         expected_prefix = f"S-{source_name}-{material_type}-{today_str}"
+        print(expected_prefix)
+        print(result['unique_code'])
         self.assertTrue(result['unique_code'].startswith(expected_prefix))
 
     def test_02_tank_into_empty_dirty_tank_creates_mix_with_quantity(self):

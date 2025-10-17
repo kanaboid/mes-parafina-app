@@ -34,13 +34,20 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # Logika wyboru URI
-DB_USER = os.environ.get('MYSQLUSER', 'root')
-DB_PASSWORD = os.environ.get('MYSQL_ROOT_PASSWORD', '')
-DB_HOST = os.environ.get('MYSQLHOST', 'localhost')
-
-if os.environ.get('ALEMBIC_TEST_MODE') == 'true':
+if os.environ.get('ALEMBIC_PROD_MODE') == 'true':
+    # Baza produkcyjna na Railway
+    # Możesz użyć zmiennej środowiskowej lub wkleić bezpośrednio
+    database_uri = os.environ.get('DATABASE_URL_PROD', 
+        'mysql+mysqlconnector://root:kBnFdpbmHkhsfZqSjjdzUaldZoEGwaVN@nozomi.proxy.rlwy.net:20865/mes_parafina_db')
+elif os.environ.get('ALEMBIC_TEST_MODE') == 'true':
+    DB_USER = os.environ.get('MYSQLUSER', 'root')
+    DB_PASSWORD = os.environ.get('MYSQL_ROOT_PASSWORD', '')
+    DB_HOST = os.environ.get('MYSQLHOST', 'localhost')
     database_uri = f"mysql+mysqlconnector://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/mes_parafina_db_test"
 else:
+    DB_USER = os.environ.get('MYSQLUSER', 'root')
+    DB_PASSWORD = os.environ.get('MYSQL_ROOT_PASSWORD', '')
+    DB_HOST = os.environ.get('MYSQLHOST', 'localhost')
     database_uri = f"mysql+mysqlconnector://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/mes_parafina_db"
 
 config.set_main_option('sqlalchemy.url', database_uri)

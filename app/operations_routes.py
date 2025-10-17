@@ -11,7 +11,7 @@ from decimal import Decimal
 from .batch_management_service import BatchManagementService
 
 from .extensions import db
-from .models import * #Sprzet, PartieSurowca, PortySprzetu, Segmenty, Zawory, OperacjeLog, t_log_uzyte_segmenty
+from .models import Sprzet, PortySprzetu, Segmenty, Zawory, OperacjeLog, t_log_uzyte_segmenty, ApolloSesje, ApolloTracking, PartieApollo
 from app.sockets import broadcast_apollo_update, broadcast_dashboard_update
 
 # Utworzenie nowego Blueprintu dla operacji
@@ -35,169 +35,7 @@ def get_pathfinder():
 
 
 
-@bp.route('/rozpocznij_trase', methods=['POST'])
-def rozpocznij_trase():
-    dane = request.get_json()
-    if not dane or not all(k in dane for k in ['start', 'cel', 'otwarte_zawory', 'typ_operacji']):
-        return jsonify({"status": "error", "message": "Brak wymaganych pól: start, cel, otwarte_zawory, typ_operacji."}), 400
 
-    start_point = dane['start']
-    end_point = dane['cel']
-    open_valves_list = dane['otwarte_zawory']
-    typ_operacji = dane['typ_operacji']
-    sprzet_posredni = dane.get('sprzet_posredni')
-    
-    pathfinder = get_pathfinder()
-    znaleziona_sciezka_nazwy = []
-
-    # --- Logika PathFinder (teraz kompletna) ---
-    if sprzet_posredni:
-        # Jeśli jest sprzęt pośredni (np. filtr), szukamy trasy w dwóch częściach.
-        posredni_in = f"{sprzet_posredni}_IN"
-        posredni_out = f"{sprzet_posredni}_OUT"
-
-        sciezka_1 = pathfinder.find_path(start_point, posredni_in, open_valves_list)
-        if not sciezka_1:
-            return jsonify({"status": "error", "message": f"Nie znaleziono ścieżki z {start_point} do {posredni_in}."}), 404
-        
-        sciezka_wewnetrzna = pathfinder.find_path(posredni_in, posredni_out, open_valves_list)
-        if not sciezka_wewnetrzna:
-            return jsonify({"status": "error", "message": f"Nie znaleziono ścieżki wewnętrznej w {sprzet_posredni} (z {posredni_in} do {posredni_out})."}), 404
-
-        sciezka_2 = pathfinder.find_path(posredni_out, end_point, open_valves_list)
-        if not sciezka_2:
-            return jsonify({"status": "error", "message": f"Nie znaleziono ścieżki z {posredni_out} do {end_point}."}), 404
-
-        znaleziona_sciezka_nazwy = sciezka_1 + sciezka_wewnetrzna + sciezka_2
-    else:
-        # Jeśli nie ma punktu pośredniego, szukamy jednej, ciągłej ścieżki.
-        znaleziona_sciezka_nazwy = pathfinder.find_path(start_point, end_point, open_valves_list)
-
-    if not znaleziona_sciezka_nazwy:
-        return jsonify({
-            "status": "error",
-            "message": f"Nie znaleziono kompletnej ścieżki z {start_point} do {end_point}."
-        }), 404
-
-    # --- Logika interakcji z bazą danych (WERSJA ORM) ---
-    try:
-        # Krok 1: Znajdź partię w reaktorze startowym
-        partia_query = db.select(PartieSurowca).join(PartieSurowca.sprzet).join(Sprzet.porty_sprzetu).where(PortySprzetu.nazwa_portu == start_point)
-        partia = db.session.execute(partia_query).scalar_one_or_none()
-
-        if not partia:
-            return jsonify({"status": "error", "message": f"W urządzeniu startowym ({start_point}) nie znaleziono żadnej partii."}), 404
-        
-        # Krok 2: Sprawdź konflikty
-        konflikt_query = db.select(Segmenty.nazwa_segmentu).join(Segmenty.operacje_log).where(
-            OperacjeLog.status_operacji == 'aktywna',
-            Segmenty.nazwa_segmentu.in_(znaleziona_sciezka_nazwy)
-        )
-        konflikty = db.session.execute(konflikt_query).scalars().all()
-
-        if konflikty:
-            return jsonify({
-                "status": "error", "message": "Konflikt zasobów.",
-                "zajete_segmenty": konflikty
-            }), 409
-
-        # Krok 3: Uruchomienie operacji w jednej transakcji
-        db.session.execute(
-            db.update(Zawory)
-            .where(Zawory.nazwa_zaworu.in_(open_valves_list))
-            .values(stan='OTWARTY')
-        )
-
-        opis_operacji = f"Operacja {typ_operacji} z {start_point} do {end_point}"
-        nowa_operacja = OperacjeLog(
-            typ_operacji=typ_operacji,
-            id_partii_surowca=partia.id,
-            status_operacji='aktywna',
-            czas_rozpoczecia=dt.now(timezone.utc),
-            opis=opis_operacji,
-            punkt_startowy=start_point,
-            punkt_docelowy=end_point
-        )
-        db.session.add(nowa_operacja)
-
-        segmenty_trasy_query = db.select(Segmenty).where(Segmenty.nazwa_segmentu.in_(znaleziona_sciezka_nazwy))
-        segmenty_trasy = db.session.execute(segmenty_trasy_query).scalars().all()
-        
-        nowa_operacja.segmenty = segmenty_trasy
-
-        db.session.commit()
-        
-        return jsonify({
-            "status": "success",
-            "message": "Operacja została pomyślnie rozpoczęta.",
-            "id_operacji": nowa_operacja.id,
-            "trasa": {
-                "start": start_point,
-                "cel": end_point,
-                "uzyte_segmenty": znaleziona_sciezka_nazwy
-            }
-        }), 201
-
-    except Exception as e:
-        db.session.rollback()
-        import traceback
-        traceback.print_exc()
-        return jsonify({"status": "error", "message": f"Błąd wewnętrzny serwera: {str(e)}"}), 500
-
-
-@bp.route('/zakoncz', methods=['POST'])
-def zakoncz_operacje():
-    dane = request.get_json()
-    if not dane or 'id_operacji' not in dane:
-        return jsonify({"status": "error", "message": "Brak wymaganego pola: id_operacji."}), 400
-
-    id_operacji = dane['id_operacji']
-    try:
-        # Krok 1: Znajdź operację w bazie za pomocą SQLAlchemy
-        operacja = db.session.get(OperacjeLog, id_operacji)
-
-        if not operacja:
-            return jsonify({"status": "error", "message": f"Operacja o ID {id_operacji} nie istnieje."}), 404
-        if operacja.status_operacji != 'aktywna':
-            return jsonify({
-                "status": "error", 
-                "message": f"Nie można zakończyć operacji, która nie jest aktywna (status: {operacja.status_operacji})."
-            }), 409
-
-        # Krok 2: Zmień status operacji
-        operacja.status_operacji = 'zakonczona'
-        operacja.czas_zakonczenia = dt.now(timezone.utc) # Używamy aliasu `dt`
-
-        # Krok 3: Znajdź i zamknij zawory (korzystając z relacji)
-        zawory_do_zamkniecia_nazwy = []
-        if operacja.segmenty:
-            zawory_do_zamkniecia_nazwy = [segment.zawory.nazwa_zaworu for segment in operacja.segmenty if segment.zawory]
-            for segment in operacja.segmenty:
-                if segment.zawory:
-                    segment.zawory.stan = 'ZAMKNIETY'
-        
-        # Krok 4: Aktualizacja lokalizacji partii i stanu sprzętu
-        if operacja.partie_surowca and operacja.id_sprzetu_zrodlowego and operacja.id_sprzetu_docelowego and operacja.id_sprzetu_zrodlowego != operacja.id_sprzetu_docelowego:
-            sprzet_docelowy = operacja.sprzet_docelowy
-            sprzet_zrodlowy = operacja.sprzet_zrodlowy
-            
-            if sprzet_docelowy and sprzet_zrodlowy:
-                operacja.partie_surowca.id_sprzetu = sprzet_docelowy.id
-                sprzet_docelowy.stan_sprzetu = 'Zatankowany'
-                sprzet_zrodlowy.stan_sprzetu = 'Pusty'
-
-        # Krok 5: Zatwierdź transakcję
-        db.session.commit()
-
-        return jsonify({
-            "status": "success",
-            "message": f"Operacja o ID {id_operacji} została pomyślnie zakończona.",
-            "zamkniete_zawory": zawory_do_zamkniecia_nazwy
-        }), 200
-    except Exception as e:
-        db.session.rollback()
-        traceback.print_exc()
-        return jsonify({"status": "error", "message": f"Błąd wewnętrzny serwera: {str(e)}"}), 500
 
 @bp.route('/aktywne', methods=['GET'])
 def get_aktywne_operacje():
@@ -226,59 +64,6 @@ def get_aktywne_operacje():
         # Lepsza obsługa błędów
         return jsonify({"status": "error", "message": f"Błąd serwera: {e}"}), 500
 
-@bp.route('/dobielanie', methods=['POST'])
-def dobielanie():
-    dane = request.get_json()
-    if not dane or not all(k in dane for k in ['id_reaktora', 'ilosc_workow', 'waga_worka_kg']):
-        return jsonify({"status": "error", "message": "Brak wymaganych pól: id_reaktora, ilosc_workow, waga_worka_kg."}), 400
-
-    id_reaktora = dane['id_reaktora']
-    ilosc_workow = dane['ilosc_workow']
-    waga_worka_kg = dane['waga_worka_kg']
-    dodana_waga = ilosc_workow * waga_worka_kg
-
-    conn = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-
-        # Znajdź partię w podanym reaktorze
-        cursor.execute("SELECT id FROM partie_surowca WHERE id_sprzetu = %s", (id_reaktora,))
-        partia = cursor.fetchone()
-        if not partia:
-            return jsonify({"status": "error", "message": f"W reaktorze o ID {id_reaktora} nie znaleziono żadnej partii."}), 404
-        
-        id_partii = partia['id']
-
-        # --- Transakcja ---
-        write_cursor = conn.cursor()
-
-        # 1. Dodaj wpis do operacje_log
-        opis = f"Dodano {ilosc_workow} worków ziemi ({dodana_waga} kg) do partii {id_partii}"
-        sql_log = "INSERT INTO operacje_log (typ_operacji, id_partii_surowca, czas_rozpoczecia, status_operacji, opis, ilosc_kg) VALUES ('DOBIELANIE', %s, NOW(), 'zakonczona', %s, %s)"
-        write_cursor.execute(sql_log, (id_partii, opis, dodana_waga))
-
-        # 2. Zaktualizuj wagę partii
-        sql_waga = "UPDATE partie_surowca SET waga_aktualna_kg = waga_aktualna_kg + %s WHERE id = %s"
-        write_cursor.execute(sql_waga, (dodana_waga, id_partii))
-
-        # 3. Dodaj status "Dobielony" do partii
-        # Załóżmy, że ID statusu "Dobielony" to 3
-        # Używamy INSERT IGNORE, aby uniknąć błędu, jeśli partia już ma ten status
-        sql_status = "INSERT IGNORE INTO partie_statusy (id_partii, id_statusu) VALUES (%s, 3)"
-        write_cursor.execute(sql_status, (id_partii,))
-        
-        conn.commit()
-
-        return jsonify({"status": "success", "message": opis}), 200
-
-    except mysql.connector.Error as err:
-        if conn: conn.rollback()
-        return jsonify({"status": "error", "message": f"Błąd bazy danych: {err}"}), 500
-    finally:
-        if conn and conn.is_connected():
-            cursor.close()
-            conn.close()
 
 
 
@@ -706,13 +491,13 @@ def end_cysterna_transfer():
             cursor.execute(sql_zamknij_zawory, zawory_do_zamkniecia)
         
         # ZARZĄDZANIE PARTIAMI - analogicznie do /apollo-transfer/end
-        cursor.execute("SELECT * FROM partie_surowca WHERE id_sprzetu = %s LIMIT 1", (id_celu,))
+        cursor.execute("SELECT * FROM partie_apollo WHERE id_sprzetu = %s LIMIT 1", (id_celu,))
         partia_w_celu = cursor.fetchone()
 
         # Stworzenie "wirtualnej" partii dla dostawy
         unikalny_kod_dostawy = f"{typ_surowca_dostawy.replace(' ', '_')}-{dt.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}-DOSTAWA"
         cursor.execute("""
-            INSERT INTO partie_surowca (unikalny_kod, nazwa_partii, typ_surowca, waga_aktualna_kg, waga_poczatkowa_kg, id_sprzetu, zrodlo_pochodzenia, pochodzenie_opis, status_partii, data_utworzenia)
+            INSERT INTO partie_apollo (unikalny_kod, nazwa_partii, typ_surowca, waga_aktualna_kg, waga_poczatkowa_kg, id_sprzetu, zrodlo_pochodzenia, pochodzenie_opis, status_partii, data_utworzenia)
             VALUES (%s, %s, %s, %s, %s, NULL, 'cysterna', %s, 'Archiwalna', NOW())
         """, (unikalny_kod_dostawy, unikalny_kod_dostawy, typ_surowca_dostawy, waga_kg, waga_kg, opis_operacji))
         id_partii_z_dostawy = cursor.lastrowid
@@ -720,7 +505,7 @@ def end_cysterna_transfer():
         if partia_w_celu:
             # Mieszanie z istniejącą partią
             # 1. Archiwizuj starą partię w celu
-            cursor.execute("UPDATE partie_surowca SET id_sprzetu = NULL, status_partii = 'Archiwalna' WHERE id = %s", (partia_w_celu['id'],))
+            cursor.execute("UPDATE partie_apollo SET id_sprzetu = NULL, status_partii = 'Archiwalna' WHERE id = %s", (partia_w_celu['id'],))
             
             # 2. Utwórz nowy typ mieszaniny
             typ_surowca_w_celu = partia_w_celu['typ_surowca']
@@ -737,7 +522,7 @@ def end_cysterna_transfer():
             nowa_waga = float(partia_w_celu['waga_aktualna_kg']) + waga_kg
             unikalny_kod_mix = f"MIX-{dt.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
             cursor.execute("""
-                INSERT INTO partie_surowca (unikalny_kod, nazwa_partii, typ_surowca, waga_aktualna_kg, waga_poczatkowa_kg, id_sprzetu, status_partii, typ_transformacji)
+                INSERT INTO partie_apollo (unikalny_kod, nazwa_partii, typ_surowca, waga_aktualna_kg, waga_poczatkowa_kg, id_sprzetu, status_partii, typ_transformacji)
                 VALUES (%s, %s, %s, %s, %s, %s, 'Surowy w reaktorze', 'MIESZANIE')
             """, (unikalny_kod_mix, unikalny_kod_mix, nowy_typ_mieszaniny, nowa_waga, nowa_waga, id_celu))
             id_nowej_partii = cursor.lastrowid
@@ -750,7 +535,7 @@ def end_cysterna_transfer():
             cursor.executemany("INSERT INTO partie_skladniki (id_partii_wynikowej, id_partii_skladowej, waga_skladowa_kg) VALUES (%s, %s, %s)", skladniki)
         else:
             # Cel jest pusty, więc po prostu "przenosimy" partię z dostawy do celu
-            cursor.execute("UPDATE partie_surowca SET id_sprzetu = %s, status_partii = 'Surowy w reaktorze' WHERE id = %s", (id_celu, id_partii_z_dostawy))
+            cursor.execute("UPDATE partie_apollo SET id_sprzetu = %s, status_partii = 'Surowy w reaktorze' WHERE id = %s", (id_celu, id_partii_z_dostawy))
 
         # Aktualizacja stanu sprzętu
         cursor.execute("UPDATE sprzet SET stan_sprzetu = 'Pusty' WHERE id = %s", (id_cysterny,))
@@ -827,3 +612,168 @@ def anuluj_cysterna_transfer():
         if 'cursor' in locals() and cursor: cursor.close()
         if 'write_cursor' in locals() and write_cursor: write_cursor.close()
         if conn and conn.is_connected(): conn.close()
+
+
+@bp.route('/rozpocznij_trase', methods=['POST'])
+def rozpocznij_trase():
+    dane = request.get_json()
+    if not dane or not all(k in dane for k in ['start', 'cel', 'otwarte_zawory', 'typ_operacji']):
+        return jsonify({"status": "error", "message": "Brak wymaganych pól: start, cel, otwarte_zawory, typ_operacji."}), 400
+
+    start_point = dane['start']
+    end_point = dane['cel']
+    open_valves_list = dane['otwarte_zawory']
+    typ_operacji = dane['typ_operacji']
+    sprzet_posredni = dane.get('sprzet_posredni')
+    
+    pathfinder = get_pathfinder()
+    znaleziona_sciezka_nazwy = []
+
+    # --- Logika PathFinder (teraz kompletna) ---
+    if sprzet_posredni:
+        # Jeśli jest sprzęt pośredni (np. filtr), szukamy trasy w dwóch częściach.
+        posredni_in = f"{sprzet_posredni}_IN"
+        posredni_out = f"{sprzet_posredni}_OUT"
+
+        sciezka_1 = pathfinder.find_path(start_point, posredni_in, open_valves_list)
+        if not sciezka_1:
+            return jsonify({"status": "error", "message": f"Nie znaleziono ścieżki z {start_point} do {posredni_in}."}), 404
+        
+        sciezka_wewnetrzna = pathfinder.find_path(posredni_in, posredni_out, open_valves_list)
+        if not sciezka_wewnetrzna:
+            return jsonify({"status": "error", "message": f"Nie znaleziono ścieżki wewnętrznej w {sprzet_posredni} (z {posredni_in} do {posredni_out})."}), 404
+
+        sciezka_2 = pathfinder.find_path(posredni_out, end_point, open_valves_list)
+        if not sciezka_2:
+            return jsonify({"status": "error", "message": f"Nie znaleziono ścieżki z {posredni_out} do {end_point}."}), 404
+
+        znaleziona_sciezka_nazwy = sciezka_1 + sciezka_wewnetrzna + sciezka_2
+    else:
+        # Jeśli nie ma punktu pośredniego, szukamy jednej, ciągłej ścieżki.
+        znaleziona_sciezka_nazwy = pathfinder.find_path(start_point, end_point, open_valves_list)
+
+    if not znaleziona_sciezka_nazwy:
+        return jsonify({
+            "status": "error",
+            "message": f"Nie znaleziono kompletnej ścieżki z {start_point} do {end_point}."
+        }), 404
+
+    # --- Logika interakcji z bazą danych (WERSJA ORM) ---
+    try:
+        # Krok 1: Znajdź partię w reaktorze startowym
+        partia_query = db.select(PartieApollo).join(PartieApollo.sprzet).join(Sprzet.porty_sprzetu).where(PortySprzetu.nazwa_portu == start_point)
+        partia = db.session.execute(partia_query).scalar_one_or_none()
+
+        if not partia:
+            return jsonify({"status": "error", "message": f"W urządzeniu startowym ({start_point}) nie znaleziono żadnej partii."}), 404
+        
+        # Krok 2: Sprawdź konflikty
+        konflikt_query = db.select(Segmenty.nazwa_segmentu).join(Segmenty.operacje_log).where(
+            OperacjeLog.status_operacji == 'aktywna',
+            Segmenty.nazwa_segmentu.in_(znaleziona_sciezka_nazwy)
+        )
+        konflikty = db.session.execute(konflikt_query).scalars().all()
+
+        if konflikty:
+            return jsonify({
+                "status": "error", "message": "Konflikt zasobów.",
+                "zajete_segmenty": konflikty
+            }), 409
+
+        # Krok 3: Uruchomienie operacji w jednej transakcji
+        db.session.execute(
+            db.update(Zawory)
+            .where(Zawory.nazwa_zaworu.in_(open_valves_list))
+            .values(stan='OTWARTY')
+        )
+
+        opis_operacji = f"Operacja {typ_operacji} z {start_point} do {end_point}"
+        nowa_operacja = OperacjeLog(
+            typ_operacji=typ_operacji,
+            id_partii_surowca=partia.id,
+            status_operacji='aktywna',
+            czas_rozpoczecia=dt.now(timezone.utc),
+            opis=opis_operacji,
+            punkt_startowy=start_point,
+            punkt_docelowy=end_point
+        )
+        db.session.add(nowa_operacja)
+
+        segmenty_trasy_query = db.select(Segmenty).where(Segmenty.nazwa_segmentu.in_(znaleziona_sciezka_nazwy))
+        segmenty_trasy = db.session.execute(segmenty_trasy_query).scalars().all()
+        
+        nowa_operacja.segmenty = segmenty_trasy
+
+        db.session.commit()
+        
+        return jsonify({
+            "status": "success",
+            "message": "Operacja została pomyślnie rozpoczęta.",
+            "id_operacji": nowa_operacja.id,
+            "trasa": {
+                "start": start_point,
+                "cel": end_point,
+                "uzyte_segmenty": znaleziona_sciezka_nazwy
+            }
+        }), 201
+
+    except Exception as e:
+        db.session.rollback()
+        import traceback
+        traceback.print_exc()
+        return jsonify({"status": "error", "message": f"Błąd wewnętrzny serwera: {str(e)}"}), 500
+
+
+@bp.route('/zakoncz', methods=['POST'])
+def zakoncz_operacje():
+    dane = request.get_json()
+    if not dane or 'id_operacji' not in dane:
+        return jsonify({"status": "error", "message": "Brak wymaganego pola: id_operacji."}), 400
+
+    id_operacji = dane['id_operacji']
+    try:
+        # Krok 1: Znajdź operację w bazie za pomocą SQLAlchemy
+        operacja = db.session.get(OperacjeLog, id_operacji)
+
+        if not operacja:
+            return jsonify({"status": "error", "message": f"Operacja o ID {id_operacji} nie istnieje."}), 404
+        if operacja.status_operacji != 'aktywna':
+            return jsonify({
+                "status": "error", 
+                "message": f"Nie można zakończyć operacji, która nie jest aktywna (status: {operacja.status_operacji})."
+            }), 409
+
+        # Krok 2: Zmień status operacji
+        operacja.status_operacji = 'zakonczona'
+        operacja.czas_zakonczenia = dt.now(timezone.utc) # Używamy aliasu `dt`
+
+        # Krok 3: Znajdź i zamknij zawory (korzystając z relacji)
+        zawory_do_zamkniecia_nazwy = []
+        if operacja.segmenty:
+            zawory_do_zamkniecia_nazwy = [segment.zawory.nazwa_zaworu for segment in operacja.segmenty if segment.zawory]
+            for segment in operacja.segmenty:
+                if segment.zawory:
+                    segment.zawory.stan = 'ZAMKNIETY'
+        
+        # Krok 4: Aktualizacja lokalizacji partii i stanu sprzętu
+        if operacja.partie_apollo and operacja.id_sprzetu_zrodlowego and operacja.id_sprzetu_docelowego and operacja.id_sprzetu_zrodlowego != operacja.id_sprzetu_docelowego:
+            sprzet_docelowy = operacja.sprzet_docelowy
+            sprzet_zrodlowy = operacja.sprzet_zrodlowy
+            
+            if sprzet_docelowy and sprzet_zrodlowy:
+                operacja.partie_apollo.id_sprzetu = sprzet_docelowy.id
+                sprzet_docelowy.stan_sprzetu = 'Zatankowany'
+                sprzet_zrodlowy.stan_sprzetu = 'Pusty'
+
+        # Krok 5: Zatwierdź transakcję
+        db.session.commit()
+
+        return jsonify({
+            "status": "success",
+            "message": f"Operacja o ID {id_operacji} została pomyślnie zakończona.",
+            "zamkniete_zawory": zawory_do_zamkniecia_nazwy
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        traceback.print_exc()
+        return jsonify({"status": "error", "message": f"Błąd wewnętrzny serwera: {str(e)}"}), 500

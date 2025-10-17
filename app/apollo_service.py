@@ -9,7 +9,7 @@ def _as_aware_utc(dt: datetime | None) -> datetime:
 #from .db import get_db_connection
 #import mysql.connector
 from .extensions import db  # Importujemy obiekt `db` z __init__.py
-from .models import Sprzet, ApolloSesje, ApolloTracking, PartieSurowca, OperacjeLog
+from .models import Sprzet, ApolloSesje, ApolloTracking, PartieApollo, OperacjeLog
 from decimal import Decimal
 from sqlalchemy import func
 
@@ -49,10 +49,10 @@ class ApolloService:
             unikalny_kod_partii = f"{nazwa_sprzetu}-{timestamp_str}"
             nazwa_partii = f"Partia w {nazwa_sprzetu} ({typ_surowca}) - {timestamp_str}"
 
-            nowa_partia = PartieSurowca(
+            nowa_partia = PartieApollo(
                 unikalny_kod=unikalny_kod_partii, nazwa_partii=nazwa_partii, typ_surowca=typ_surowca,
                 waga_poczatkowa_kg=waga_kg, waga_aktualna_kg=waga_kg, id_sprzetu=id_sprzetu,
-                zrodlo_pochodzenia='apollo', status_partii='Surowy w reaktorze', typ_transformacji='NOWA'
+                zrodlo_pochodzenia='apollo', status_partii='Wytapiany', typ_transformacji='NOWA'
             )
 
             db.session.add_all([nowa_sesja, poczatek_trackingu, nowa_partia])
@@ -79,7 +79,7 @@ class ApolloService:
             db.session.add(nowy_tracking)
             
             partia = db.session.execute(
-                db.select(PartieSurowca).filter_by(id_sprzetu=id_sprzetu)
+                db.select(PartieApollo).filter_by(id_sprzetu=id_sprzetu)
             ).scalar_one_or_none()
             if partia:
                 partia.waga_aktualna_kg += Decimal(waga_kg)
@@ -90,10 +90,10 @@ class ApolloService:
                 timestamp_str = czas_zdarzenia.strftime('%Y%m%d-%H%M%S')
                 unikalny_kod_partii = f"{nazwa_sprzetu}-{timestamp_str}-AUTOCREATED"
                 nazwa_partii = f"Partia w {nazwa_sprzetu} ({sesja.typ_surowca}) - {timestamp_str}"
-                partia_awaryjna = PartieSurowca(
+                partia_awaryjna = PartieApollo(
                     unikalny_kod=unikalny_kod_partii, nazwa_partii=nazwa_partii, typ_surowca=sesja.typ_surowca,
                     waga_poczatkowa_kg=waga_kg, waga_aktualna_kg=waga_kg, id_sprzetu=id_sprzetu,
-                    zrodlo_pochodzenia='apollo', status_partii='Surowy w reaktorze', typ_transformacji='NOWA'
+                    zrodlo_pochodzenia='apollo', status_partii='Wytapiany', typ_transformacji='NOWA'
                 )
                 db.session.add(partia_awaryjna)
             db.session.commit()
@@ -213,10 +213,10 @@ class ApolloService:
             #    To jest założenie, które musimy poprawić w przyszłości.
             #    Lepszym rozwiązaniem byłoby dodanie `id_sesji` do tabeli `partie_surowca`.
             partia = db.session.execute(
-                db.select(PartieSurowca).filter(
-                    PartieSurowca.id_sprzetu == id_sprzetu,
-                    PartieSurowca.status_partii == 'Surowy w reaktorze'
-                ).order_by(PartieSurowca.data_utworzenia.desc())
+                db.select(PartieApollo).filter(
+                    PartieApollo.id_sprzetu == id_sprzetu,
+                    PartieApollo.status_partii == 'Wytapiany'
+                ).order_by(PartieApollo.data_utworzenia.desc())
             ).scalars().first()
             
             if partia:

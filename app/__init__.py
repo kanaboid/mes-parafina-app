@@ -10,8 +10,8 @@ import os
 from datetime import datetime, timezone
 from flask_sqlalchemy import SQLAlchemy
 from .extensions import db, socketio
-from flask_admin import Admin
-from flask_admin.contrib.sqla import ModelView
+# from flask_admin import Admin
+# from flask_admin.contrib.sqla import ModelView
 from logging.handlers import RotatingFileHandler
 from flask_cors import CORS
 
@@ -113,21 +113,21 @@ def create_app(config_class=None):
 
     # Rejestrujemy blueprinty
     from . import routes
-    from .cykle_api import cykle_bp
     from .topology_routes import topology_bp
     from .operations_routes import bp as operations_bp
     from .batch_routes import batch_bp
     from .sprzet_routes import sprzet_bp
     from .scheduler_routes import scheduler_bp
     from .earth_pallets_routes import bp as earth_pallets_bp
+    from .workflow_routes import workflow_bp
     app.register_blueprint(routes.bp)
-    app.register_blueprint(cykle_bp)
     app.register_blueprint(topology_bp)
     app.register_blueprint(operations_bp)
     app.register_blueprint(batch_bp)
     app.register_blueprint(sprzet_bp)
     app.register_blueprint(scheduler_bp)
     app.register_blueprint(earth_pallets_bp)
+    app.register_blueprint(workflow_bp)
     @app.route('/hello')
     def hello():
         return "Witaj w aplikacji MES!"
@@ -137,20 +137,20 @@ def create_app(config_class=None):
     # Konfiguracja Flask-Admin
     
     
-    admin = Admin(app, name='MES', template_mode='bootstrap4')
-    from . import models
-    admin.add_view(ModelView(models.Sprzet, db.session, name="Sprzęt", endpoint="sprzet_admin"))
-    admin.add_view(ModelView(models.PartieSurowca, db.session, name="Partie (stare)"))
-    admin.add_view(ModelView(models.Zawory, db.session))
-    admin.add_view(ModelView(models.Segmenty, db.session))
-    admin.add_view(ModelView(models.PortySprzetu, db.session, name="Porty Sprzętu"))
+    # admin = Admin(app, name='MES', template_mode='bootstrap4')
+    # from . import models
+    # admin.add_view(ModelView(models.Sprzet, db.session, name="Sprzęt", endpoint="sprzet_admin"))
+    # admin.add_view(ModelView(models.PartieSurowca, db.session, name="Partie (stare)"))
+    # admin.add_view(ModelView(models.Zawory, db.session))
+    # admin.add_view(ModelView(models.Segmenty, db.session))
+    # admin.add_view(ModelView(models.PortySprzetu, db.session, name="Porty Sprzętu"))
     
-    # Dodajmy też widoki dla nowego systemu partii
-    admin.add_view(ModelView(models.Batches, db.session, name="Partie Pierwotne (nowe)", endpoint="batches_admin"))
-    admin.add_view(ModelView(models.TankMixes, db.session, name="Mieszaniny w Zbiornikach"))
-    admin.add_view(ModelView(models.MixComponents, db.session, name="Składniki Mieszanin"))
-    admin.add_view(ModelView(models.AuditTrail, db.session, name="Ślad Audytowy"))
-    admin.add_view(ModelView(models.EarthPallets, db.session, name="Palety Ziemi"))
+    # # Dodajmy też widoki dla nowego systemu partii
+    # admin.add_view(ModelView(models.Batches, db.session, name="Partie Pierwotne (nowe)", endpoint="batches_admin"))
+    # admin.add_view(ModelView(models.TankMixes, db.session, name="Mieszaniny w Zbiornikach"))
+    # admin.add_view(ModelView(models.MixComponents, db.session, name="Składniki Mieszanin"))
+    # admin.add_view(ModelView(models.AuditTrail, db.session, name="Ślad Audytowy"))
+    # admin.add_view(ModelView(models.EarthPallets, db.session, name="Palety Ziemi"))
 
     
 

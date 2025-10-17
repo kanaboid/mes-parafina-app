@@ -6,7 +6,7 @@ from datetime import timezone
 from app import create_app, db
 from app.config import TestConfig
 from app.apollo_service import ApolloService
-from app.models import Sprzet, PartieSurowca, ApolloSesje, ApolloTracking, OperacjeLog
+from app.models import Sprzet, PartieApollo, ApolloSesje, ApolloTracking, OperacjeLog
 from sqlalchemy import text, select
 
 TEST_APOLLO_ID = 999
@@ -50,7 +50,7 @@ class TestApolloService(unittest.TestCase):
     def test_03_dodaj_surowiec_do_aktywnej_sesji(self):
         ApolloService.rozpocznij_sesje_apollo(TEST_APOLLO_ID, 'TEST-SUROWIEC', 500.0)
         ApolloService.dodaj_surowiec_do_apollo(TEST_APOLLO_ID, 250.0)
-        partia_db = db.session.execute(select(PartieSurowca).where(PartieSurowca.id_sprzetu == TEST_APOLLO_ID)).scalar_one()
+        partia_db = db.session.execute(select(PartieApollo).where(PartieApollo.id_sprzetu == TEST_APOLLO_ID)).scalar_one()
         self.assertAlmostEqual(float(partia_db.waga_aktualna_kg), 750.0)
 
     def test_04_zakoncz_sesje(self):
@@ -87,7 +87,7 @@ class TestApolloService(unittest.TestCase):
 
     def test_08_zakoncz_sesje_sukces(self):
         id_sesji = ApolloService.rozpocznij_sesje_apollo(TEST_APOLLO_ID, 'TEST-ZAKONCZENIE', 1000)
-        partia_przed = db.session.execute(select(PartieSurowca).filter_by(id_sprzetu=TEST_APOLLO_ID)).scalar_one()
+        partia_przed = db.session.execute(select(PartieApollo).filter_by(id_sprzetu=TEST_APOLLO_ID)).scalar_one()
         ApolloService.zakoncz_sesje_apollo(TEST_APOLLO_ID)
         db.session.refresh(partia_przed)
         sesja_po = db.session.get(ApolloSesje, id_sesji)
