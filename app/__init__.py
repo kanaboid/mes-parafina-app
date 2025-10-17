@@ -113,7 +113,6 @@ def create_app(config_class=None):
 
     # Rejestrujemy blueprinty
     from . import routes
-    from .cykle_api import cykle_bp
     from .topology_routes import topology_bp
     from .operations_routes import bp as operations_bp
     from .batch_routes import batch_bp
@@ -122,7 +121,6 @@ def create_app(config_class=None):
     from .earth_pallets_routes import bp as earth_pallets_bp
     from .workflow_routes import workflow_bp
     app.register_blueprint(routes.bp)
-    app.register_blueprint(cykle_bp)
     app.register_blueprint(topology_bp)
     app.register_blueprint(operations_bp)
     app.register_blueprint(batch_bp)

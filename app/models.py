@@ -112,13 +112,16 @@ class PartieApollo(db.Model):
     zrodlo_pochodzenia: Mapped[str] = mapped_column(ENUM('apollo', 'cysterna'))
     unikalny_kod: Mapped[str] = mapped_column(VARCHAR(50), nullable=False, unique=True)
     nazwa_partii: Mapped[str] = mapped_column(VARCHAR(100), nullable=False)
-    typ_surowca: Mapped[str] = mapped_column(VARCHAR(50), nullable=False)
+    typ_surowca: Mapped[str] = mapped_column(VARCHAR(50), nullable=True)
     waga_poczatkowa_kg: Mapped[decimal.Decimal] = mapped_column(DECIMAL(10, 2), nullable=False)
     waga_aktualna_kg: Mapped[Optional[decimal.Decimal]] = mapped_column(DECIMAL(10, 2))
     data_utworzenia: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=func.now())
-    typ_transformacji: Mapped[str] = mapped_column(ENUM('NOWA', 'TRANSFER', 'KOREKTA', 'ZAKONCZENIE'))
+    typ_transformacji: Mapped[str] = mapped_column(ENUM('NOWA', 'TRANSFER', 'KOREKTA', 'ZAKONCZENIE'), nullable=True)
     sprzet: Mapped['Sprzet'] = relationship('Sprzet', back_populates='partie_apollo')
     status_partii: Mapped[str] = mapped_column(ENUM('Wytapiany','Archiwalna'))
+
+    operacje_log: Mapped[List['OperacjeLog']] = relationship('OperacjeLog', back_populates='partie_apollo')
+
 
 
 
@@ -248,6 +251,7 @@ class OperacjeLog(db.Model):
         ForeignKeyConstraint(['id_apollo_sesji'], ['apollo_sesje.id'], name='fk_operacje_log_apollo_sesje'),
         ForeignKeyConstraint(['id_sprzetu_docelowego'], ['sprzet.id'], ondelete='SET NULL', name='operacje_log_ibfk_3'),
         ForeignKeyConstraint(['id_sprzetu_zrodlowego'], ['sprzet.id'], ondelete='SET NULL', name='operacje_log_ibfk_2'),
+        ForeignKeyConstraint(['id_partii_surowca'], ['partie_apollo.id'], ondelete='SET NULL', name='operacje_log_ibfk_1'),
         Index('fk_operacje_log_apollo_sesje', 'id_apollo_sesji'),
         Index('id_sprzetu_docelowego', 'id_sprzetu_docelowego'),
         Index('id_sprzetu_zrodlowego', 'id_sprzetu_zrodlowego'),
@@ -282,6 +286,7 @@ class OperacjeLog(db.Model):
     apollo_tracking: Mapped[List['ApolloTracking']] = relationship('ApolloTracking', back_populates='operacje_log')
     
     mix: Mapped[Optional['TankMixes']] = relationship(back_populates='operacje_log')
+    partie_apollo: Mapped[Optional['PartieApollo']] = relationship(back_populates='operacje_log')
 
 
 

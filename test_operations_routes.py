@@ -7,7 +7,7 @@ from unittest.mock import patch, MagicMock
 # Importy z aplikacji
 from app import create_app, db
 from app.config import TestConfig
-from app.models import Sprzet, PartieSurowca, PortySprzetu, Segmenty, Zawory, OperacjeLog
+from app.models import Sprzet, PartieApollo, PortySprzetu, Segmenty, Zawory, OperacjeLog
 from sqlalchemy import text, select
 
 class TestOperationsRoutes(unittest.TestCase):
@@ -78,7 +78,7 @@ class TestOperationsRoutes(unittest.TestCase):
         port_start = PortySprzetu(id=10, id_sprzetu=1, nazwa_portu='R01_OUT', typ_portu='OUT')
         
         # POPRAWKA: Uzupełniamy obiekt PartiaSurowca o wszystkie wymagane pola
-        partia = PartieSurowca(
+        partia = PartieApollo(
             id=50, 
             id_sprzetu=1, 
             unikalny_kod='PARTIA-TEST-1', 
@@ -86,7 +86,7 @@ class TestOperationsRoutes(unittest.TestCase):
             zrodlo_pochodzenia='cysterna', # Wymagane
             waga_poczatkowa_kg=5000,      # Wymagane
             waga_aktualna_kg=5000,
-            status_partii='Surowy w reaktorze'   # Wymagane
+            status_partii='Wytapiany'   # Wymagane
         )
 
         zawor1 = Zawory(id=100, nazwa_zaworu='V1', stan='ZAMKNIETY')
@@ -140,10 +140,10 @@ class TestOperationsRoutes(unittest.TestCase):
         cel = Sprzet(id=2, nazwa_unikalna='R02', stan_sprzetu='W transferze')
         port_zrodlowy = PortySprzetu(id_sprzetu=1, nazwa_portu='R01_OUT', typ_portu='OUT')
         port_docelowy = PortySprzetu(id_sprzetu=2, nazwa_portu='R02_IN', typ_portu='IN')
-        partia = PartieSurowca(
+        partia = PartieApollo(
             id=50, id_sprzetu=1, unikalny_kod='PARTIA-DO-ZAKONCZENIA', nazwa_partii='P-TEST',
             zrodlo_pochodzenia='cysterna', waga_poczatkowa_kg=1000, waga_aktualna_kg=1000,
-            status_partii='Surowy w reaktorze'
+            status_partii='Wytapiany'
         )
         operacja = OperacjeLog(
             id=123, typ_operacji='TRANSFER', status_operacji='aktywna',
@@ -186,7 +186,7 @@ class TestOperationsRoutes(unittest.TestCase):
         zawor_po = db.session.get(Zawory, 100)
         self.assertEqual(zawor_po.stan, 'ZAMKNIETY')
 
-        partia_po = db.session.get(PartieSurowca, 50)
+        partia_po = db.session.get(PartieApollo, 50)
         self.assertEqual(partia_po.id_sprzetu, 2) # Sprawdź, czy partia została przeniesiona do celu
 
         zrodlo_po = db.session.get(Sprzet, 1)
