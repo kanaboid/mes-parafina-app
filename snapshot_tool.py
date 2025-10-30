@@ -22,7 +22,8 @@ ALWAYS_INCLUDE = [
     'manage.py',
     'requirements.txt',
     'celery_app.py',
-    'migrate.ps1'
+    'migrate.ps1',
+    'test_batch_management.py'
 ]
 
 # 3. Wzorce plików lub folderów do WYKLUCZENIA podczas automatycznego skanowania.
