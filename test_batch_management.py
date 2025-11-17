@@ -533,3 +533,55 @@ class TestBatchManagementService(unittest.TestCase):
         self.assertAlmostEqual(composition['total_weight'], corrected_quantity)
         self.assertEqual(len(composition['components']), 1)
         self.assertAlmostEqual(composition['components'][0]['quantity_in_mix'], corrected_quantity)
+
+    
+    
+    def test_14_tank_into_reactor_via_dirty_tank_method_uses_p_prefix(self):
+        """
+        Sprawdza, czy ogólna metoda `tank_into_dirty_tank` poprawnie identyfikuje
+        reaktor i nadaje mieszaninie prefiks 'P-'.
+        """
+        # --- Przygotowanie (Arrange) ---
+        batch = Batches(unique_code='S-TEST-P', material_type='T10', source_type='CYS', source_name='C1', initial_quantity=100, current_quantity=100)
+        # Kluczowe: `typ_sprzetu` jest ustawiony na 'reaktor'
+        reactor = Sprzet(id=201, nazwa_unikalna='R1', typ_sprzetu='reaktor')
+        db.session.add_all([batch, reactor])
+        db.session.commit()
+
+        # --- Działanie (Act) ---
+        # Używamy starszej, bardziej ogólnej metody serwisowej
+        result = BatchManagementService.tank_into_dirty_tank(
+            batch_id=batch.id,
+            tank_id=reactor.id,
+            operator='USER_TEST'
+        )
+
+        # --- Asercje (Assert) ---
+        new_mix = db.session.get(TankMixes, result['mix_id'])
+        self.assertIsNotNone(new_mix)
+        # Sprawdzamy, czy kod zaczyna się od 'P-' dla reaktora
+        self.assertTrue(new_mix.unique_code.startswith('P-R1-'))
+
+    def test_15_tank_into_clean_tank_uses_c_prefix(self):
+        """
+        Sprawdza, czy tankowanie do 'beczki_czystej' nadaje mieszaninie prefiks 'C-'.
+        """
+        # --- Przygotowanie (Arrange) ---
+        batch = Batches(unique_code='S-TEST-C', material_type='T10', source_type='CYS', source_name='C1', initial_quantity=100, current_quantity=100)
+        # Kluczowe: `typ_sprzetu` jest ustawiony na 'beczka_czysta'
+        clean_tank = Sprzet(id=203, nazwa_unikalna='C01', typ_sprzetu='beczka_czysta')
+        db.session.add_all([batch, clean_tank])
+        db.session.commit()
+
+        # --- Działanie (Act) ---
+        result = BatchManagementService.tank_into_dirty_tank(
+            batch_id=batch.id,
+            tank_id=clean_tank.id,
+            operator='USER_TEST'
+        )
+
+        # --- Asercje (Assert) ---
+        new_mix = db.session.get(TankMixes, result['mix_id'])
+        self.assertIsNotNone(new_mix)
+        # Sprawdzamy, czy kod zaczyna się od 'C-' dla beczki czystej
+        self.assertTrue(new_mix.unique_code.startswith('C-C01-'))
