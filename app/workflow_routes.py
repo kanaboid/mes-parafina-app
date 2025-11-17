@@ -92,3 +92,49 @@ def add_bleaching_earth_endpoint(mix_id: int):
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': f'Wystąpił nieoczekiwany błąd serwera: {str(e)}'}), 500
+
+@workflow_bp.route('/reactors/load-batches', methods=['POST'])
+def load_batches_to_reactor_endpoint():
+    """
+    Endpoint API do tworzenia nowej mieszaniny w reaktorze lub dodawania do istniejącej.
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Brak danych w formacie JSON.'}), 400
+
+    try:
+        reactor_id = data['reactor_id']
+        batches_to_load = data['batches']
+        operator = data.get('operator', 'API_USER')
+
+        # Wywołanie logiki serwisowej
+        updated_mix, was_created = WorkflowService.load_batches_to_reactor(
+            reactor_id=reactor_id,
+            batches_to_load=batches_to_load,
+            operator=operator
+        )
+        
+        if was_created:
+            message = f"Pomyślnie utworzono nową mieszaninę '{updated_mix.unique_code}' w reaktorze."
+            status_code = 201 # Created
+        else:
+            message = f"Pomyślnie dodano partie do istniejącej mieszaniny '{updated_mix.unique_code}'."
+            status_code = 200 # OK
+        
+        return jsonify({
+            'success': True,
+            'message': message,
+            'was_created': was_created,
+            'mix_id': updated_mix.id,
+            'unique_code': updated_mix.unique_code
+        }), status_code
+
+    except (KeyError, TypeError):
+        return jsonify({'error': 'Nieprawidłowy format danych. Wymagane pola: "reactor_id", "batches". Pole "operator" jest opcjonalne.'}), 400
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 422
+    except Exception as e:
+        db.session.rollback()
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Wystąpił nieoczekiwany błąd serwera: {str(e)}'}), 500 

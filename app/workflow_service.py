@@ -1,14 +1,13 @@
 # app/workflow_service.py
-from datetime import timezone
-from datetime import datetime
-from .extensions import db
-from .models import TankMixes, OperacjeLog, Sprzet
+from datetime import datetime, timezone
 from decimal import Decimal
+from app.extensions import db
+from app.models import TankMixes, OperacjeLog, Sprzet, MixComponents, Batches
+from app.batch_management_service import BatchManagementService
 from sqlalchemy import select
-
 class WorkflowService:
     """
-    Serwis odpowiedzialny za zarządzanie logiką przepływów pracy i zmianą stanów.
+    Serwis odpowiedzialny za zarządzanie logiką przepływów pracy i zmianą statusów.
     """
     @classmethod
     def assess_mix_quality(cls, mix_id: int, decision: str, operator: str, reason: str = None) -> TankMixes:
@@ -30,9 +29,9 @@ class WorkflowService:
             raise ValueError(f"Nie można ocenić mieszaniny. Obecny status: '{mix.process_status}'. Wymagany: 'OCZEKUJE_NA_OCENE'.")
 
         log_entry = OperacjeLog(
-            typ_operacji='OCENA_JAKOSCI',  # pyright: ignore[reportCallIssue]
-            id_tank_mix=mix.id, # Powiązanie z mieszaniną jako "partią"  # pyright: ignore[reportCallIssue]
-            status_operacji='zakonczona',  # pyright: ignore[reportCallIssue]
+            typ_operacji='OCENA_JAKOSCI',
+            id_tank_mix=mix.id,
+            status_operacji='zakonczona',
             czas_rozpoczecia=datetime.now(timezone.utc),
             czas_zakonczenia=datetime.now(timezone.utc),
             zmodyfikowane_przez=operator
@@ -52,11 +51,11 @@ class WorkflowService:
         db.session.add(log_entry)
         db.session.commit()
         return mix
-
+    
     @classmethod
     def add_bleaching_earth(cls, mix_id: int, bags_count: int, bag_weight: Decimal, operator: str) -> dict:
         """
-        Rejestruje dodanie ziemi bielącej. Jeśli mieszanina jest już w stanie 'DOBIELONY_OCZEKUJE',
+        Rejestruje dodanie ziemi bielącej. Jeśli mieszanina jest w stanie 'DOBIELONY_OCZEKUJE',
         aktualizuje ostatni log dobielania, zamiast tworzyć nowy, z walidacją do 160kg.
         """
         mix = db.session.get(TankMixes, mix_id)
@@ -78,7 +77,7 @@ class WorkflowService:
             ).scalars().first()
 
             if not log_entry_to_update:
-                # Sytuacja awaryjna: stan to DOBIELONY, ale nie ma logu. Traktuj jak nowe dobielanie.
+                # Sytuacja awaryjna: status to DOBRANY, ale nie ma logu. Traktuj jak nowe.
                 return cls._create_new_bleaching_log(mix, bags_count, bag_weight, operator, total_added_weight, MAX_BLEACH_WEIGHT)
 
             new_total_weight = (log_entry_to_update.ilosc_kg or 0) + total_added_weight
@@ -91,13 +90,13 @@ class WorkflowService:
             log_entry_to_update.zmodyfikowane_przez = operator
             log_entry_to_update.ostatnia_modyfikacja = datetime.now(timezone.utc)
             
-            mix.bleaching_earth_bags_total = (mix.bleaching_earth_bags_total or 0) + bags_count # Globalny licznik nadal rośnie
+            mix.bleaching_earth_bags_total = (mix.bleaching_earth_bags_total or 0) + bags_count
             message = f"Dodano kolejne {bags_count} worków. Łączna waga w tej operacji: {new_total_weight} kg."
         else:
             # Scenariusz: Nowe dobielanie
             result = cls._create_new_bleaching_log(mix, bags_count, bag_weight, operator, total_added_weight, MAX_BLEACH_WEIGHT)
             message = result['message']
-        
+
         db.session.commit()
         return {"mix": mix, "message": message}
 
@@ -106,7 +105,7 @@ class WorkflowService:
         """Metoda pomocnicza do tworzenia nowego logu dobielania."""
         if total_added_weight > max_weight:
             raise ValueError(f"Ilość ziemi ({total_added_weight} kg) przekracza maksymalny limit {max_weight} kg dla pojedynczej operacji.")
-            
+        
         mix.process_status = 'DOBIELONY_OCZEKUJE'
         mix.bleaching_earth_bags_total = (mix.bleaching_earth_bags_total or 0) + bags_count
         
@@ -122,5 +121,80 @@ class WorkflowService:
             opis=f"Dodano {bags_count} worków ziemi o łącznej wadze {total_added_weight} kg."
         )
         db.session.add(log_entry)
-        
-        return {"mix": mix, "message": f"Zarejestrowano dodanie {bags_count} worków. Status: DOBIELONY_OCZEKUJE."}  
+        return {"mix": mix, "message": f"Zarejestrowano dodanie {bags_count} worków. Status: DOBIELONY_OCZEKUJE."}
+
+    @staticmethod
+    def load_batches_to_reactor(reactor_id: int, batches_to_load: list, operator: str) -> tuple[TankMixes, bool]:
+        """
+        Tworzy nową mieszaninę w reaktorze lub dodaje do istniejącej.
+        Zwraca krotkę: (obiekt TankMix, flaga bool informująca, czy mieszanina została nowo utworzona).
+        """
+        was_created = False
+        try:
+            reactor = db.session.get(Sprzet, reactor_id)
+            if not reactor or reactor.typ_sprzetu != 'reaktor':
+                raise ValueError(f"Sprzęt o ID {reactor_id} nie jest reaktorem.")
+
+            if not batches_to_load:
+                raise ValueError("Lista partii do załadowania nie może być pusta.")
+
+            # --- Rozpoczęcie transakcji ---
+            
+            if reactor.active_mix_id:
+                # SCENARIUSZ: Dodawanie do istniejącej mieszaniny
+                mix_to_update = db.session.get(TankMixes, reactor.active_mix_id)
+                if not mix_to_update:
+                    reactor.active_mix_id = None
+                    db.session.commit()
+                    return WorkflowService.load_batches_to_reactor(reactor_id, batches_to_load, operator)
+
+                if mix_to_update.process_status != 'SUROWY':
+                    raise ValueError(f"Nie można dodać surowca. Mieszanina nie jest w stanie 'SUROWY' (aktualny stan: '{mix_to_update.process_status}').")
+                
+                was_created = False
+                
+            else:
+                # SCENARIUSZ: Tworzenie nowej mieszaniny
+                mix_code = BatchManagementService.generate_reactor_mix_code(reactor.nazwa_unikalna)
+                mix_to_update = TankMixes(
+                    unique_code=mix_code,
+                    tank_id=reactor.id,
+                    process_status='SUROWY'
+                )
+                db.session.add(mix_to_update)
+                db.session.flush() 
+                reactor.active_mix_id = mix_to_update.id
+                was_created = True
+
+            # Wspólna logika dla obu scenariuszy: przetwarzanie partii
+            for batch_info in batches_to_load:
+                batch_id = batch_info['batch_id']
+                quantity_to_use = Decimal(batch_info['quantity_to_use'])
+
+                batch = db.session.get(Batches, batch_id)
+                if not batch:
+                    raise ValueError(f"Partia o ID {batch_id} nie została znaleziona.")
+                if batch.current_quantity < quantity_to_use:
+                    raise ValueError(f"Niewystarczająca ilość w partii {batch.unique_code}. Dostępne: {batch.current_quantity}, Potrzebne: {quantity_to_use}.")
+
+                batch.current_quantity -= quantity_to_use
+                
+                existing_component = db.session.query(MixComponents).filter_by(mix_id=mix_to_update.id, batch_id=batch.id).first()
+                if existing_component:
+                    existing_component.quantity_in_mix += quantity_to_use
+                else:
+                    component = MixComponents(
+                        mix_id=mix_to_update.id,
+                        batch_id=batch.id,
+                        quantity_in_mix=quantity_to_use
+                    )
+                    db.session.add(component)
+
+            db.session.commit()
+            # --- Koniec transakcji ---
+            
+            return mix_to_update, was_created
+
+        except Exception as e:
+            db.session.rollback()
+            raise e
