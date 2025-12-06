@@ -1,9 +1,9 @@
 # app/dashboard_service.py
 
 from .extensions import db
-from .models import Sprzet, Alarmy, TankMixes, OperacjeLog
+from .models import Sprzet, Alarmy, TankMixes, OperacjeLog, HistoriaPomiarow
 from .batch_management_service import BatchManagementService
-from sqlalchemy import func
+from sqlalchemy import func, select
 from sqlalchemy.orm import joinedload
 from decimal import Decimal
 from collections import defaultdict
@@ -29,11 +29,23 @@ class DashboardService:
         beczki_czyste_data = []
 
         for sprzet in wszystkie_urzadzenia:
+
+
+            latest_level_mm = None
+            if sprzet.ipomiar_device_id:
+                latest_level_mm = db.session.execute(
+                    select(HistoriaPomiarow.poziom_mm)
+                    .where(HistoriaPomiarow.id_sprzetu == sprzet.id, HistoriaPomiarow.poziom_mm.isnot(None))
+                    .order_by(HistoriaPomiarow.czas_pomiaru.desc())
+                    .limit(1)
+                ).scalar_one_or_none()
+
             sprzet_data = {
                 "id": sprzet.id,
                 "nazwa": sprzet.nazwa_unikalna,
                 "stan_sprzetu": sprzet.stan_sprzetu,
                 "pojemnosc_kg": float(sprzet.pojemnosc_kg) if sprzet.pojemnosc_kg else None,
+                "odczyt_mm": float(latest_level_mm) if latest_level_mm is not None else None,
                 "partia": None
             }
             if sprzet.typ_sprzetu == 'reaktor':

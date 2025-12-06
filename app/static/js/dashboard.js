@@ -24,6 +24,16 @@ document.addEventListener('DOMContentLoaded', () => {
         simulationSettings: document.getElementById('simulation-settings-form'),
         transferTankToTank: document.getElementById('transfer-tank-to-tank-form') // NOWY FORMULARZ
     };
+
+    const formatValue = (value, unit = '', decimalPlaces = 1) => {
+        if (value === null || typeof value === 'undefined') {
+            return 'B/D';
+        }
+        if (typeof value === 'number') {
+            return `${value.toFixed(decimalPlaces)}${unit}`;
+        }
+        return `${value}${unit}`;
+    };
     
     // --- SOCKET.IO ---
     const socket = io();
@@ -225,6 +235,26 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
             `;
             
+
+            let levelProgressBar = '';
+            if (r.odczyt_mm != null) {
+                const levelPercent = r.poziom_procent;
+                let levelColorClass = 'bg-info';
+                if (levelPercent > 95) levelColorClass = 'bg-danger';
+                else if (levelPercent > 80) levelColorClass = 'bg-warning';
+
+                levelProgressBar = `
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <small class="text-muted"><i class="fas fa-ruler-vertical me-1"></i>Poziom (czujnik)</small>
+                            <small class="fw-semibold"><span class="text-muted fw-normal">(${formatValue((r.odczyt_mm / 10), ' cm', 0)})</span></small>
+                        </div>
+                        
+                    </div>
+                `;
+            }
+
+
             // --- PALNIK Z IKONĄ ---
             const isBurnerOn = r.stan_palnika === 'WLACZONY';
             const burnerSwitchHTML = `
@@ -254,6 +284,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         ${partiaHTML}
                         ${tempProgressBar}
                         ${pressureProgressBar}
+                        ${levelProgressBar}
                         ${burnerSwitchHTML}
                     </div>
                     <div class="card-footer p-2">
@@ -331,6 +362,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
+            let levelProgressBar = '';
+            if (b.odczyt_mm != null) {
+                const levelPercent = b.poziom_procent;
+                let levelColorClass = isBrudna ? 'bg-danger' : 'bg-success';
+                if (levelPercent > 95) levelColorClass = 'bg-warning';
+
+                levelProgressBar = `
+                    <div class="mb-2">
+                        <div class="d-flex justify-content-between mb-1">
+                            <small class="text-muted"><i class="fas fa-ruler-vertical me-1"></i>Poziom (czujnik)</small>
+                            <small class="fw-semibold"><span class="text-muted fw-normal">(${formatValue((b.odczyt_mm /10), ' cm', 0)})</span></small>
+                        </div>
+                       
+                    </div>
+                `;
+            }
+
+
             // Kod partii
             const partiaHTML = b.partia && b.partia.kod ? `
                 <div class="d-flex justify-content-between align-items-center mb-2">
@@ -356,9 +405,10 @@ document.addEventListener('DOMContentLoaded', () => {
                             ${partiaHTML}
                             ${wagaHTML}
                             ${progressBarHTML}
+                            ${levelProgressBar}
                         </div>
                         <div class="card-footer p-2">
-                            <button class="btn btn-info w-100 action-btn" 
+                            <button class="btn btn-info w-100 action-btn"
                                      data-action="open-transfer-modal"
                                      data-sprzet-id="${b.id}"
                                      data-sprzet-nazwa="${b.nazwa}"

@@ -108,94 +108,73 @@ class SensorService:
         return new_temperature
 
     def read_sensors(self):
-        """Odczytuje i aktualizuje dane z czujników (wersja ORM z odświeżaniem)."""
+        """
+        Odczytuje i aktualizuje dane z czujników.
+        - Odczytuje rzeczywisty poziom cieczy z API iPomiar.pl.
+        - Symuluje zmiany temperatury dla reaktorów.
+        - Zapisuje wszystkie pomiary do tabeli historia_pomiarow.
+        """
         current_time = datetime.now(timezone.utc)
         print(f"\n--- SCHEDULER: Uruchamiam read_sensors o {current_time} ---")
 
         try:
-
-            self._update_levels_from_ipomiar()  
-            # iPomiar.pl
-            aktywny_sprzet_q = db.select(Sprzet).where(Sprzet.stan_sprzetu != 'Wyłączony')
+            aktywny_sprzet_q = select(Sprzet).where(Sprzet.stan_sprzetu != 'Wyłączony')
             equipment_list = db.session.execute(aktywny_sprzet_q).scalars().all()
-            print(f"Znaleziono {len(equipment_list)} aktywnych urządzeń.")
-            print(equipment_list)
-            pomiary_do_dodania = []
             
-            # KROK 1: Oblicz wszystkie nowe wartości w pętli
+            pomiarowe_do_dodania = []
+            
             for item in equipment_list:
+                # Zmienne na nowe wartości z tego cyklu
                 nowa_temperatura = item.temperatura_aktualna
+                nowy_poziom_mm = None
+
+                # 1. Odczytaj poziom z iPomiar, jeśli sprzęt jest skonfigurowany
+                if item.ipomiar_device_id and item.poziom_pusty_mm is not None and item.poziom_pelny_mm is not None:
+                    latest_distance = IPomiarService.get_latest_distance(item.ipomiar_device_id)
+                    if latest_distance is not None:
+                        nowy_poziom_mm = latest_distance # Zapisujemy surową wartość w mm
+                        
+                        zakres_pomiaru = item.poziom_pusty_mm - item.poziom_pelny_mm
+                        if zakres_pomiaru > 0:
+                            poziom_cieczy_mm = item.poziom_pusty_mm - latest_distance
+                            poziom_procent = (poziom_cieczy_mm / zakres_pomiaru) * 100
+                            item.poziom_aktualny_procent = round(max(Decimal('0.0'), min(Decimal('100.0'), poziom_procent)), 2)
+                        else:
+                             current_app.logger.warning(f"Nieprawidłowa konfiguracja czujnika dla {item.nazwa_unikalna}")
+
+                # 2. Symuluj temperaturę dla reaktorów
                 if item.typ_sprzetu == 'reaktor':
-                    # Obliczenia bazują na stanie obiektu z poprzedniej iteracji w pamięci
                     nowa_temperatura = self._calculate_new_temperature(item)
                 
                 nowe_cisnienie = self._simulate_pressure(item.typ_sprzetu)
 
-                # Zaktualizuj stan obiektu w pamięci sesji
+                # 3. Zaktualizuj stan obiektu `Sprzet` w pamięci sesji
                 item.temperatura_aktualna = nowa_temperatura
                 item.cisnienie_aktualne = nowe_cisnienie
                 item.ostatnia_aktualizacja = current_time
                 
-                pomiary_do_dodania.append(
-                    HistoriaPomiarow(id_sprzetu=item.id, temperatura=nowa_temperatura, cisnienie=nowe_cisnienie, czas_pomiaru=current_time)
+                # 4. Przygotuj wpis do `HistoriaPomiarow` ze wszystkimi danymi
+                pomiar = HistoriaPomiarow(
+                    id_sprzetu=item.id,
+                    czas_pomiaru=current_time,
+                    temperatura=nowa_temperatura,
+                    cisnienie=nowe_cisnienie,
+                    poziom_mm=nowy_poziom_mm  # Zapisujemy odczyt z iPomiar
                 )
+                pomiarowe_do_dodania.append(pomiar)
 
-            # KROK 2: Zapisz wszystkie zmiany do bazy w jednej transakcji
-            if pomiary_do_dodania:
-                db.session.add_all(pomiary_do_dodania)
+            if pomiarowe_do_dodania:
+                db.session.add_all(pomiarowe_do_dodania)
 
             db.session.commit()
-            print(f"\n[{current_time}] Pomiary zapisane do bazy.")
+            print(f"[{current_time}] Pomiary (w tym poziomy) zapisane do bazy.")
             
         except Exception as e:
             db.session.rollback()
-            print(f"BŁĄD podczas odczytu czujników: {e}")
+            print(f"Wystąpił błąd podczas odczytu czujników: {e}")
             import traceback
             traceback.print_exc()
             raise
-
-    def _update_levels_from_ipomiar(self):
-        """
-        Pobiera listę sprzętu skonfigurowanego do pracy z iPomiar,
-        odpytuje API i aktualizuje procentowy poziom zapełnienia.
-        """
-        sprzety_z_ipomiar_q = select(Sprzet).where(
-            Sprzet.ipomiar_device_id.isnot(None),
-            Sprzet.poziom_pusty_mm.isnot(None),
-            Sprzet.poziom_pelny_mm.isnot(None)
-        )
-        sprzety_do_odczytu = db.session.execute(sprzety_z_ipomiar_q).scalars().all()
-
-        if not sprzety_do_odczytu:
-            print("Nie znaleziono sprzętu skonfigurowanego do odczytu poziomu z iPomiar.")
-            return
-
-        print(f"Znaleziono {len(sprzety_do_odczytu)} sprzęt(ów) do odczytu poziomu z iPomiar.")
-        for sprzet in sprzety_do_odczytu:
-            latest_distance = IPomiarService.get_latest_distance(sprzet.ipomiar_device_id)
-
-            if latest_distance is not None:
-                poziom_pusty = sprzet.poziom_pusty_mm
-                poziom_pelny = sprzet.poziom_pelny_mm
-
-                zakres_pomiaru = poziom_pusty - poziom_pelny
-                if zakres_pomiaru <= 0:
-                    current_app.logger.warning(f"Nieprawidłowa konfiguracja czujnika dla {sprzet.nazwa_unikalna}: poziom_pusty_mm musi być większy niż poziom_pelny_mm.")
-                    continue
-
-                # Oblicz, jak "pełny" jest zbiornik (odwrócona logika)
-                poziom_cieczy_mm = poziom_pusty - latest_distance
-                
-                # Przelicz na procenty
-                poziom_procent = (poziom_cieczy_mm / zakres_pomiaru) * 100
-
-                # Ogranicz wynik do zakresu 0-100%
-                poziom_procent_clamped = max(Decimal('0.0'), min(Decimal('100.0'), poziom_procent))
-                
-                sprzet.poziom_aktualny_procent = round(poziom_procent_clamped, 2)
-                print(f"  - Zaktualizowano {sprzet.nazwa_unikalna}: Odczyt={latest_distance}mm -> Poziom={sprzet.poziom_aktualny_procent}%")
-            else:
-                print(f"  - Brak danych z iPomiar dla {sprzet.nazwa_unikalna} (ID: {sprzet.ipomiar_device_id}).")
 
     def _simulate_pressure(self, typ_sprzetu):
         if typ_sprzetu == 'filtr': return Decimal(str(round(random.uniform(4.0, 5.0), 2)))

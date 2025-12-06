@@ -206,6 +206,7 @@ class HistoriaPomiarow(db.Model):
     czas_pomiaru: Mapped[datetime.datetime] = mapped_column(DateTime)
     temperatura: Mapped[Optional[decimal.Decimal]] = mapped_column(DECIMAL(10, 6))
     cisnienie: Mapped[Optional[decimal.Decimal]] = mapped_column(DECIMAL(5, 2))
+    poziom_mm: Mapped[Optional[decimal.Decimal]] = mapped_column(DECIMAL(10, 2), nullable=True, comment='Odczyt z czujnika ultradźwiękowego w mm')
 
     sprzet: Mapped['Sprzet'] = relationship('Sprzet', back_populates='historia_pomiarow')
 
