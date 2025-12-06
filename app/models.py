@@ -71,7 +71,12 @@ class Sprzet(db.Model):
     szybkosc_grzania_c_na_minute: Mapped[Optional[decimal.Decimal]] = mapped_column(DECIMAL(10, 6), comment="Szacowana szybkość grzania w °C/min")
     szybkosc_chlodzenia_c_na_minute: Mapped[Optional[decimal.Decimal]] = mapped_column(DECIMAL(10, 6), comment="Szacowana szybkość chłodzenia w °C/min")
     stan_palnika: Mapped[Optional[str]] = mapped_column(ENUM('WLACZONY', 'WYLACZONY'), default='WYLACZONY', comment="Aktualny stan palnika reaktora")
-    
+    # iPomiar.pl
+    ipomiar_device_id: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, comment='ID urządzenia w systemie iPomiar.pl do odczytu poziomu')
+    poziom_pusty_mm: Mapped[Optional[decimal.Decimal]] = mapped_column(DECIMAL(10, 2), nullable=True, comment='Odczyt czujnika w mm, gdy zbiornik jest pusty')
+    poziom_pelny_mm: Mapped[Optional[decimal.Decimal]] = mapped_column(DECIMAL(10, 2), nullable=True, comment='Odczyt czujnika w mm, gdy zbiornik jest pełny')
+
+
     filter_cake_status: Mapped[Optional[str]] = mapped_column(String(50), comment='Status placka na filtrze (np. CZYSTY, T10_GOTOWY)')
     filter_cake_origin_mix_id: Mapped[Optional[int]] = mapped_column(Integer, comment='ID mieszaniny (TankMix), z której pochodzi obecny placek')
     # Relacje
