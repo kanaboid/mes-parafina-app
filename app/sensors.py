@@ -7,6 +7,8 @@ from .db import get_db_connection
 from .extensions import db
 from .models import Sprzet, OperatorTemperatures, HistoriaPomiarow
 from decimal import Decimal
+from .ipomiar_service import IPomiarService
+from sqlalchemy import select
 
 class SensorService:
     def __init__(self, app=None):
@@ -111,6 +113,9 @@ class SensorService:
         print(f"\n--- SCHEDULER: Uruchamiam read_sensors o {current_time} ---")
 
         try:
+
+            self._update_levels_from_ipomiar()  
+            # iPomiar.pl
             aktywny_sprzet_q = db.select(Sprzet).where(Sprzet.stan_sprzetu != 'Wyłączony')
             equipment_list = db.session.execute(aktywny_sprzet_q).scalars().all()
             print(f"Znaleziono {len(equipment_list)} aktywnych urządzeń.")
@@ -148,6 +153,49 @@ class SensorService:
             import traceback
             traceback.print_exc()
             raise
+
+    def _update_levels_from_ipomiar(self):
+        """
+        Pobiera listę sprzętu skonfigurowanego do pracy z iPomiar,
+        odpytuje API i aktualizuje procentowy poziom zapełnienia.
+        """
+        sprzety_z_ipomiar_q = select(Sprzet).where(
+            Sprzet.ipomiar_device_id.isnot(None),
+            Sprzet.poziom_pusty_mm.isnot(None),
+            Sprzet.poziom_pelny_mm.isnot(None)
+        )
+        sprzety_do_odczytu = db.session.execute(sprzety_z_ipomiar_q).scalars().all()
+
+        if not sprzety_do_odczytu:
+            print("Nie znaleziono sprzętu skonfigurowanego do odczytu poziomu z iPomiar.")
+            return
+
+        print(f"Znaleziono {len(sprzety_do_odczytu)} sprzęt(ów) do odczytu poziomu z iPomiar.")
+        for sprzet in sprzety_do_odczytu:
+            latest_distance = IPomiarService.get_latest_distance(sprzet.ipomiar_device_id)
+
+            if latest_distance is not None:
+                poziom_pusty = sprzet.poziom_pusty_mm
+                poziom_pelny = sprzet.poziom_pelny_mm
+
+                zakres_pomiaru = poziom_pusty - poziom_pelny
+                if zakres_pomiaru <= 0:
+                    current_app.logger.warning(f"Nieprawidłowa konfiguracja czujnika dla {sprzet.nazwa_unikalna}: poziom_pusty_mm musi być większy niż poziom_pelny_mm.")
+                    continue
+
+                # Oblicz, jak "pełny" jest zbiornik (odwrócona logika)
+                poziom_cieczy_mm = poziom_pusty - latest_distance
+                
+                # Przelicz na procenty
+                poziom_procent = (poziom_cieczy_mm / zakres_pomiaru) * 100
+
+                # Ogranicz wynik do zakresu 0-100%
+                poziom_procent_clamped = max(Decimal('0.0'), min(Decimal('100.0'), poziom_procent))
+                
+                sprzet.poziom_aktualny_procent = round(poziom_procent_clamped, 2)
+                print(f"  - Zaktualizowano {sprzet.nazwa_unikalna}: Odczyt={latest_distance}mm -> Poziom={sprzet.poziom_aktualny_procent}%")
+            else:
+                print(f"  - Brak danych z iPomiar dla {sprzet.nazwa_unikalna} (ID: {sprzet.ipomiar_device_id}).")
 
     def _simulate_pressure(self, typ_sprzetu):
         if typ_sprzetu == 'filtr': return Decimal(str(round(random.uniform(4.0, 5.0), 2)))

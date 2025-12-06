@@ -30,6 +30,7 @@ class Config:
     TESTING = False
     CELERY_BEAT_DBURI = SQLALCHEMY_DATABASE_URI
     print(f"--- [CONFIG DEBUG] Ustawiono CELERY_BEAT_DBURI na: {CELERY_BEAT_DBURI}")
+    IPOMIAR_API_BASE_URL = 'https://ipomiar.pl/public-api/v1.0'
 
 
 class ProdConfig(Config):
