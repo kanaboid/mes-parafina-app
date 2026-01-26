@@ -91,8 +91,11 @@ Dostępne komendy:
       --reaktory    : Zastosuj do wszystkich reaktorów.
       --all         : Zastosuj do wszystkich reaktorów, apollo i beczek.
 
-  clear-measurements --confirm
-    Opis: Czyści całą historię pomiarów. Wymaga potwierdzenia flagą.
+  clear-measurements --confirm [--recreate]
+    Opis: Czyści całą historię pomiarów. Wymaga potwierdzenia flagą --confirm.
+    Flagi:
+      --confirm   : Wymagane potwierdzenie operacji.
+      --recreate  : Usuwa i odtwarza tabelę (najszybsze rozwiązanie).
 """
     emit('response', {'data': help_text})
 
@@ -175,10 +178,29 @@ def handle_clear_measurements(args):
         if not args or args[0] != '--confirm':
             return emit('response', {'data': 'BŁĄD: Wymagane potwierdzenie flagą --confirm', 'is_error': True})
         
-        emit('response', {'data': 'Rozpoczynam czyszczenie `historia_pomiarow`...'})
-        db.session.query(HistoriaPomiarow).delete()
-        db.session.commit()
-        emit('response', {'data': 'Sukces! Tabela `historia_pomiarow` została wyczyszczona.'})
+        # Sprawdź czy użytkownik chce użyć opcji --recreate
+        recreate = '--recreate' in args
+        
+        if recreate:
+            # Najszybsze rozwiązanie: usuń i utwórz tabelę na nowo
+            emit('response', {'data': 'Usuwanie tabeli historia_pomiarow...'})
+            
+            # Użyj SQLAlchemy do usunięcia konkretnej tabeli
+            HistoriaPomiarow.__table__.drop(db.engine, checkfirst=True)
+            
+            emit('response', {'data': 'Tworzenie nowej tabeli historia_pomiarow...'})
+            HistoriaPomiarow.__table__.create(db.engine)
+            
+            db.session.commit()
+            emit('response', {'data': 'Tabela została usunięta i utworzona na nowo!'})
+        else:
+            # Standardowe usuwanie wszystkich danych
+            emit('response', {'data': 'Rozpoczynam czyszczenie `historia_pomiarow`...'})
+            db.session.query(HistoriaPomiarow).delete()
+            db.session.commit()
+            emit('response', {'data': 'Sukces! Tabela `historia_pomiarow` została wyczyszczona.'})
+        
+        emit('response', {'data': 'Sukces! Tabela została całkowicie wyczyszczona.'})
         broadcast_dashboard_update()
     except Exception as e:
         db.session.rollback()
