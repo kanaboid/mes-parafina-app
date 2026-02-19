@@ -11,7 +11,7 @@ from decimal import Decimal
 from .batch_management_service import BatchManagementService
 
 from .extensions import db
-from .models import Sprzet, PortySprzetu, Segmenty, Zawory, OperacjeLog, t_log_uzyte_segmenty, ApolloSesje, ApolloTracking, PartieApollo
+from .models import Sprzet, PortySprzetu, Segmenty, Zawory, OperacjeLog, t_log_uzyte_segmenty, ApolloSesje, ApolloTracking, PartieApollo, TankMixes
 from app.sockets import broadcast_apollo_update, broadcast_dashboard_update
 
 # Utworzenie nowego Blueprintu dla operacji
@@ -764,6 +764,29 @@ def zakoncz_operacje():
                 operacja.partie_apollo.id_sprzetu = sprzet_docelowy.id
                 sprzet_docelowy.stan_sprzetu = 'Zatankowany'
                 sprzet_zrodlowy.stan_sprzetu = 'Pusty'
+
+        # Krok 4b: Aktualizacja TankMixes przy zakończeniu filtracji (flow reaktorowy)
+        FILTRACJA_TYPY = ('FILTRACJA_PLACEK_KOLO', 'FILTRACJA_PRZELEW', 'FILTRACJA_KOLO', 'FILTRACJA_WYDMUCH')
+        if operacja.typ_operacji in FILTRACJA_TYPY:
+            mix = None
+            if operacja.id_tank_mix:
+                mix = db.session.get(TankMixes, operacja.id_tank_mix)
+            if not mix and operacja.id_sprzetu_zrodlowego:
+                reaktor = db.session.get(Sprzet, operacja.id_sprzetu_zrodlowego)
+                if reaktor and reaktor.active_mix_id:
+                    mix = db.session.get(TankMixes, reaktor.active_mix_id)
+            if mix:
+                next_status = {
+                    'FILTRACJA_PLACEK_KOLO': 'FILTRACJA_PRZELEW',
+                    'FILTRACJA_PRZELEW': 'FILTRACJA_KOLO',
+                    'FILTRACJA_KOLO': 'OCZEKUJE_NA_OCENE',
+                    'FILTRACJA_WYDMUCH': 'FILTRACJA_KOLO',
+                }.get(mix.process_status)
+                if next_status:
+                    mix.process_status = next_status
+                    if operacja.typ_operacji == 'FILTRACJA_WYDMUCH':
+                        mix.is_wydmuch_mix = False
+                        mix.filtration_cycles_count = (mix.filtration_cycles_count or 0) + 1
 
         # Krok 5: Zatwierdź transakcję
         db.session.commit()

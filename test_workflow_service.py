@@ -228,8 +228,10 @@ class TestWorkflowService(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Zbyt niska temperatura reaktora"):
             WorkflowService.add_bleaching_earth(mix.id, 5, Decimal('25.0'), 'TEST_USER')
 
-    def test_add_bleaching_earth_to_wydmuch_mix_fails(self):
-        """Testuje blokadę dobielania dla mieszaniny typu 'wydmuch'."""
+    def test_add_bleaching_earth_to_wydmuch_mix_succeeds(self):
+        """Mieszaniny wydmuchowe mogą być dobielane (zmiana polityki)."""
         mix = self._prepare_mix_for_bleaching(is_wydmuch=True)
-        with self.assertRaisesRegex(ValueError, "Nie można dodawać ziemi bielącej"):
-            WorkflowService.add_bleaching_earth(mix.id, 5, Decimal('25.0'), 'TEST_USER')
+        WorkflowService.add_bleaching_earth(mix.id, 5, Decimal('25.0'), 'TEST_USER')
+        db.session.refresh(mix)
+        self.assertEqual(mix.process_status, 'DOBIELONY_OCZEKUJE')
+        self.assertEqual(mix.bleaching_earth_bags_total, 5)

@@ -1,8 +1,9 @@
 # app/workflow_routes.py
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, current_app
 from decimal import Decimal, InvalidOperation
 from .workflow_service import WorkflowService
 from .extensions import db
+from .models import OperacjeLog, Segmenty, Zawory
 
 # Stworzenie Blueprintu dla przepływów pracy
 workflow_bp = Blueprint('workflow', __name__, url_prefix='/api/workflow')
@@ -92,6 +93,100 @@ def add_bleaching_earth_endpoint(mix_id: int):
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': f'Wystąpił nieoczekiwany błąd serwera: {str(e)}'}), 500
+
+@workflow_bp.route('/mix/<int:mix_id>/start-filtration', methods=['POST'])
+def start_filtration_endpoint(mix_id: int):
+    """
+    Rozpoczyna cykl filtracji dla mieszaniny. Pathfinder jest wywoływany na początku.
+    Oczekuje JSON: {"start": "R1_OUT", "cel": "R5_IN", "otwarte_zawory": [...], "operator": "...", "sprzet_posredni": "FZ" (opcjonalnie)}
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Brak danych w formacie JSON.'}), 400
+
+    start_point = data.get('start')
+    end_point = data.get('cel')
+    open_valves_list = data.get('otwarte_zawory')
+    operator = data.get('operator')
+    sprzet_posredni = data.get('sprzet_posredni')
+
+    if not all([start_point, end_point, open_valves_list, operator]):
+        return jsonify({
+            'error': 'Wymagane pola: start, cel, otwarte_zawory, operator.'
+        }), 400
+
+    try:
+        pathfinder = current_app.extensions['pathfinder']
+    except KeyError:
+        return jsonify({'error': 'Pathfinder nie jest dostępny.'}), 500
+
+    # Pathfinder na początku - znajdź trasę
+    if sprzet_posredni:
+        posredni_in = f"{sprzet_posredni}_IN"
+        posredni_out = f"{sprzet_posredni}_OUT"
+        sciezka_1 = pathfinder.find_path(start_point, posredni_in, open_valves_list)
+        if not sciezka_1:
+            return jsonify({"error": f"Nie znaleziono ścieżki z {start_point} do {posredni_in}."}), 404
+        sciezka_wewnetrzna = pathfinder.find_path(posredni_in, posredni_out, open_valves_list)
+        if not sciezka_wewnetrzna:
+            return jsonify({"error": f"Nie znaleziono ścieżki wewnętrznej w {sprzet_posredni}."}), 404
+        sciezka_2 = pathfinder.find_path(posredni_out, end_point, open_valves_list)
+        if not sciezka_2:
+            return jsonify({"error": f"Nie znaleziono ścieżki z {posredni_out} do {end_point}."}), 404
+        znaleziona_sciezka_nazwy = sciezka_1 + sciezka_wewnetrzna + sciezka_2
+    else:
+        znaleziona_sciezka_nazwy = pathfinder.find_path(start_point, end_point, open_valves_list)
+
+    if not znaleziona_sciezka_nazwy:
+        return jsonify({
+            "error": f"Nie znaleziono ścieżki z {start_point} do {end_point}."
+        }), 404
+
+    # Sprawdź konflikty tras
+    from sqlalchemy import select
+    konflikt_query = db.select(Segmenty.nazwa_segmentu).join(Segmenty.operacje_log).where(
+        OperacjeLog.status_operacji == 'aktywna',
+        Segmenty.nazwa_segmentu.in_(znaleziona_sciezka_nazwy)
+    )
+    konflikty = db.session.execute(konflikt_query).scalars().all()
+    if konflikty:
+        return jsonify({
+            "error": "Konflikt zasobów - trasa jest zajęta przez inną operację.",
+            "zajete_segmenty": [k for k in konflikty]
+        }), 409
+
+    try:
+        # Otwórz zawory
+        db.session.execute(
+            db.update(Zawory)
+            .where(Zawory.nazwa_zaworu.in_(open_valves_list))
+            .values(stan='OTWARTY')
+        )
+
+        result = WorkflowService.start_filtration_cycle(
+            mix_id=mix_id,
+            operator=operator,
+            segment_names=znaleziona_sciezka_nazwy,
+            start_point=start_point,
+            end_point=end_point,
+        )
+        return jsonify({
+            'success': True,
+            'message': f"Cykl filtracji ({result['typ_operacji']}) został rozpoczęty.",
+            'mix_id': result['mix'].id,
+            'new_status': result['mix'].process_status,
+            'id_operacji': result['id_operacji'],
+            'trasa': result['trasa'],
+        }), 201
+    except ValueError as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 422
+    except Exception as e:
+        db.session.rollback()
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Wystąpił nieoczekiwany błąd serwera: {str(e)}'}), 500
+
 
 @workflow_bp.route('/reactors/load-batches', methods=['POST'])
 def load_batches_to_reactor_endpoint():

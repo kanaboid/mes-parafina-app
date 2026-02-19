@@ -1,6 +1,6 @@
 # app/batch_management_service.py
 from .extensions import db
-from .models import Batches, Sprzet, TankMixes, MixComponents, AuditTrail, ApolloSesje, ApolloTracking
+from .models import Batches, Sprzet, TankMixes, MixComponents, MixSourceMixes, AuditTrail, ApolloSesje, ApolloTracking
 from datetime import datetime, timezone
 from sqlalchemy import func, select
 from sqlalchemy.orm import joinedload
@@ -96,7 +96,7 @@ class BatchManagementService:
                     mix_code = BatchManagementService._generate_dirty_tank_mix_code(tank.nazwa_unikalna)
                 # --- KONIEC ZMIANY ---
 
-                active_mix = TankMixes(unique_code=mix_code, tank_id=tank.id)
+                active_mix = TankMixes(unique_code=mix_code, tank_id=tank.id, process_status='SUROWY')
                 db.session.add(active_mix)
                 db.session.flush()
                 tank.active_mix_id = active_mix.id
@@ -188,6 +188,11 @@ class BatchManagementService:
             source_mix = db.session.get(TankMixes, source_tank.active_mix_id) if source_tank.active_mix_id else None
             if not source_mix or source_mix.status == 'ARCHIVED':
                 raise ValueError("Zbiornik źródłowy jest pusty.")
+            if dest_tank.typ_sprzetu == 'beczka_czysta' and source_mix.process_status != 'ZATWIERDZONA':
+                raise ValueError(
+                    f"Transfer do magazynu czystego dozwolony tylko dla mieszaniny ZATWIERDZONA. "
+                    f"Obecny status: '{source_mix.process_status}'."
+                )
 
             composition = BatchManagementService.get_mix_composition(source_mix.id)
             total_weight_in_system = composition['total_weight']
@@ -224,9 +229,17 @@ class BatchManagementService:
             
             dest_mix = db.session.get(TankMixes, dest_tank.active_mix_id) if dest_tank.active_mix_id else None
             if not dest_mix or dest_mix.status == 'ARCHIVED':
-                mix_code = BatchManagementService._generate_dirty_tank_mix_code(dest_tank.nazwa_unikalna)
-                dest_mix = TankMixes(unique_code=mix_code, tank_id=dest_tank.id)
-                db.session.add(dest_mix); db.session.flush()
+                if dest_tank.typ_sprzetu == 'beczka_czysta':
+                    mix_code = BatchManagementService._generate_clean_tank_mix_code(dest_tank.nazwa_unikalna)
+                    process_status_dest = 'W_MAGAZYNIE_CZYSTYM'
+                else:
+                    mix_code = BatchManagementService._generate_dirty_tank_mix_code(dest_tank.nazwa_unikalna)
+                    process_status_dest = 'SUROWY'
+                dest_mix = TankMixes(
+                    unique_code=mix_code, tank_id=dest_tank.id, process_status=process_status_dest
+                )
+                db.session.add(dest_mix)
+                db.session.flush()
                 dest_tank.active_mix_id = dest_mix.id
             
             components_in_dest = {c.batch_id: c for c in dest_mix.components}
@@ -237,6 +250,15 @@ class BatchManagementService:
                     else:
                         new_component = MixComponents(mix_id=dest_mix.id, batch_id=detail['batch_id'], quantity_in_mix=detail['quantity'])
                         db.session.add(new_component)
+
+            if dest_tank.typ_sprzetu == 'beczka_czysta':
+                source_entry = MixSourceMixes(
+                    mix_id=dest_mix.id,
+                    source_mix_id=source_mix.id,
+                    quantity_from_source=quantity_to_transfer,
+                )
+                db.session.add(source_entry)
+                dest_mix.process_status = 'W_MAGAZYNIE_CZYSTYM'
             
             db.session.commit()
             return {'was_adjusted': was_adjusted, 'discrepancy': discrepancy, 'transferred_quantity': quantity_to_transfer}

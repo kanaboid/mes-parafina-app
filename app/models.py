@@ -445,6 +445,18 @@ class MixComponents(db.Model):
     mix: Mapped['TankMixes'] = relationship(back_populates='components')
     batch: Mapped['Batches'] = relationship() # Prosta relacja jednokierunkowa
 
+
+class MixSourceMixes(db.Model):
+    """Łączy mieszaninę docelową (np. w beczka_czysta) z mieszaninami źródłowymi (produkcyjnymi z reaktorów)."""
+    __tablename__ = 'mix_source_mixes'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    mix_id: Mapped[int] = mapped_column(ForeignKey('tank_mixes.id'), nullable=False)
+    source_mix_id: Mapped[int] = mapped_column(ForeignKey('tank_mixes.id'), nullable=False)
+    quantity_from_source: Mapped[decimal.Decimal] = mapped_column(DECIMAL(10, 2), nullable=False)
+
+    mix: Mapped['TankMixes'] = relationship('TankMixes', foreign_keys=[mix_id])
+    source_mix: Mapped['TankMixes'] = relationship('TankMixes', foreign_keys=[source_mix_id])
+
 class AuditTrail(db.Model):
     __tablename__ = 'audit_trail'
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
