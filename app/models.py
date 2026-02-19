@@ -7,7 +7,7 @@ from typing import Optional, List
 
 from sqlalchemy import (
     DECIMAL, DateTime, ForeignKeyConstraint, Index, Integer, JSON, String,
-    Table, Text, TIMESTAMP, text, VARCHAR, ForeignKey, func, Boolean
+    Table, Text, TIMESTAMP, text, VARCHAR, ForeignKey, func, Boolean, UniqueConstraint
 )
 from sqlalchemy.dialects.mysql import ENUM, TINYINT
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -75,7 +75,8 @@ class Sprzet(db.Model):
     ipomiar_device_id: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, comment='ID urządzenia w systemie iPomiar.pl do odczytu poziomu')
     poziom_pusty_mm: Mapped[Optional[decimal.Decimal]] = mapped_column(DECIMAL(10, 2), nullable=True, comment='Odczyt czujnika w mm, gdy zbiornik jest pusty')
     poziom_pelny_mm: Mapped[Optional[decimal.Decimal]] = mapped_column(DECIMAL(10, 2), nullable=True, comment='Odczyt czujnika w mm, gdy zbiornik jest pełny')
-
+    poziom_aktualny_tony: Mapped[Optional[decimal.Decimal]] = mapped_column(DECIMAL(10, 3), nullable=True, comment='Aktualna waga w tonach obliczona z kalibracji')
+    pojemnosc_tony: Mapped[Optional[decimal.Decimal]] = mapped_column(DECIMAL(5, 1), nullable=True, comment='Maksymalna pojemność zbiornika w tonach (max 90T) dla ograniczenia zakresu kalibracji')
 
     filter_cake_status: Mapped[Optional[str]] = mapped_column(String(50), comment='Status placka na filtrze (np. CZYSTY, T10_GOTOWY)')
     filter_cake_origin_mix_id: Mapped[Optional[int]] = mapped_column(Integer, comment='ID mieszaniny (TankMix), z której pochodzi obecny placek')
@@ -100,6 +101,7 @@ class Sprzet(db.Model):
         post_update=True # Ważne dla cyklicznych zależności
     )
     historia_podgrzewania: Mapped[List['HistoriaPodgrzewania']] = relationship(back_populates='sprzet')
+    calibration_points: Mapped[List['TankCalibrationPoint']] = relationship('TankCalibrationPoint', back_populates='sprzet', cascade='all, delete-orphan')
 
 
     def __repr__(self):
@@ -209,6 +211,30 @@ class HistoriaPomiarow(db.Model):
     poziom_mm: Mapped[Optional[decimal.Decimal]] = mapped_column(DECIMAL(10, 2), nullable=True, comment='Odczyt z czujnika ultradźwiękowego w mm')
 
     sprzet: Mapped['Sprzet'] = relationship('Sprzet', back_populates='historia_pomiarow')
+
+
+class TankCalibrationPoint(db.Model):
+    __tablename__ = 'tank_calibration_points'
+    __table_args__ = (
+        ForeignKeyConstraint(['id_sprzetu'], ['sprzet.id'], ondelete='CASCADE', name='tank_calibration_points_ibfk_1'),
+        UniqueConstraint('id_sprzetu', 'odczyt_mm', name='uq_tank_calibration_sprzet_mm'),
+        Index('idx_tank_calibration_sprzet', 'id_sprzetu'),
+        Index('idx_tank_calibration_sprzet_mm', 'id_sprzetu', 'odczyt_mm'),
+        {'comment': 'Punkty kalibracyjne dla zbiorników - konwersja mm -> tony'}
+    )
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    id_sprzetu: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    odczyt_mm: Mapped[decimal.Decimal] = mapped_column(DECIMAL(10, 2), nullable=False)
+    waga_tony: Mapped[decimal.Decimal] = mapped_column(DECIMAL(10, 3), nullable=False)
+    data_kalibracji: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime)
+    uwagi: Mapped[Optional[str]] = mapped_column(Text)
+    
+    # Relacja zwrotna
+    sprzet: Mapped['Sprzet'] = relationship('Sprzet', back_populates='calibration_points')
+    
+    def __repr__(self):
+        return f"<TankCalibrationPoint id={self.id} zbiornik_id={self.id_sprzetu} odczyt_mm={self.odczyt_mm} waga_tony={self.waga_tony}>"
 
 
 class OperatorTemperatures(db.Model):
