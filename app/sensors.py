@@ -90,12 +90,13 @@ class SensorService:
                 
                 # Emituj jednorazowe zdarzenie Socket.IO o zakończeniu grzania
                 from .sockets import socketio
-                socketio.emit('heating_completed', {
-                    'sprzet_id': reaktor.id, 
-                    'nazwa': reaktor.nazwa_unikalna,
-                    'message': f"Reaktor {reaktor.nazwa_unikalna} osiągnął temperaturę docelową {target_temp}°C."
-                })
-                print(f"INFO: Osiągnięto temperaturę docelową dla {reaktor.nazwa_unikalna}. Wysłano powiadomienie.")
+                if socketio:
+                    socketio.emit('heating_completed', {
+                        'sprzet_id': reaktor.id, 
+                        'nazwa': reaktor.nazwa_unikalna,
+                        'message': f"Reaktor {reaktor.nazwa_unikalna} osiągnął temperaturę docelową {target_temp}°C."
+                    })
+                    print(f"INFO: Osiągnięto temperaturę docelową dla {reaktor.nazwa_unikalna}. Wysłano powiadomienie.")
             
             # Jeśli temperatura już jest powyżej celu, nie pozwól jej rosnąć dalej
             elif base_temperature >= target_temp:

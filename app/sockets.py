@@ -14,60 +14,64 @@ from .dashboard_service import DashboardService
 
 # CAŁA FUNKCJA redis_listener JEST USUWANA
 
-@socketio.on('connect')
-def handle_connect():
-    """Wykonywane, gdy klient (przeglądarka) nawiązuje połączenie."""
-    print('Klient połączony!')
-    emit('response', {'data': 'Połączono z serwerem. Witaj w konsoli administracyjnej!'})
-    emit('response', {'data': 'Wpisz "help", aby zobaczyć dostępne komendy.'})
+# Zabezpieczenie: rejestrujemy handlery SocketIO tylko jeśli socketio jest dostępny
+# (nie w trybie migracji/testowym gdzie socketio może być None)
+if socketio:
+    @socketio.on('connect')
+    def handle_connect():
+        """Wykonywane, gdy klient (przeglądarka) nawiązuje połączenie."""
+        print('Klient połączony!')
+        emit('response', {'data': 'Połączono z serwerem. Witaj w konsoli administracyjnej!'})
+        emit('response', {'data': 'Wpisz "help", aby zobaczyć dostępne komendy.'})
 
-@socketio.on('disconnect')
-def handle_disconnect():
-    """Graceful handling dla rozłączeń klienta."""
-    print('Klient rozłączony - zamykanie połączenia...')
+    @socketio.on('disconnect')
+    def handle_disconnect():
+        """Graceful handling dla rozłączeń klienta."""
+        print('Klient rozłączony - zamykanie połączenia...')
 
-@socketio.on_error_default
-def default_error_handler(e):
-    """Obsługa błędów WebSocket - logowanie bez pełnego stacktrace."""
-    print(f'WebSocket error: {type(e).__name__}: {str(e)}')
-    # Nie rzucamy wyjątku dalej - graceful degradation
+    @socketio.on_error_default
+    def default_error_handler(e):
+        """Obsługa błędów WebSocket - logowanie bez pełnego stacktrace."""
+        print(f'WebSocket error: {type(e).__name__}: {str(e)}')
+        # Nie rzucamy wyjątku dalej - graceful degradation
 
-@socketio.on('request_dashboard_update')
-def handle_request_dashboard_update():
-    """
-    To zdarzenie jest wywoływane przez nasz wewnętrzny redis_listener.
-    Dzięki temu `broadcast_dashboard_update` jest wykonywane w głównym
-    wątku serwera, z poprawnym kontekstem.
-    """
-    print("--- SocketIO Server: Otrzymano żądanie odświeżenia od Redis Listener. Wywołuję broadcast. ---")
-    broadcast_dashboard_update()
+    @socketio.on('request_dashboard_update')
+    def handle_request_dashboard_update():
+        """
+        To zdarzenie jest wywoływane przez nasz wewnętrzny redis_listener.
+        Dzięki temu `broadcast_dashboard_update` jest wykonywane w głównym
+        wątku serwera, z poprawnym kontekstem.
+        """
+        print("--- SocketIO Server: Otrzymano żądanie odświeżenia od Redis Listener. Wywołuję broadcast. ---")
+        broadcast_dashboard_update()
 
-@socketio.on('command_from_client')
-def handle_command(json_data):
-    """Odbiera i przetwarza komendy od klienta."""
-    command_string = json_data.get('data', '').strip()
-    if not command_string:
-        return
+    @socketio.on('command_from_client')
+    def handle_command(json_data):
+        """Odbiera i przetwarza komendy od klienta."""
+        command_string = json_data.get('data', '').strip()
+        if not command_string:
+            return
 
-    parts = command_string.split()
-    command = parts[0].lower()
-    args = parts[1:]
+        parts = command_string.split()
+        command = parts[0].lower()
+        args = parts[1:]
 
-    print(f"Otrzymano komendę: '{command}' z argumentami: {args}")
+        print(f"Otrzymano komendę: '{command}' z argumentami: {args}")
 
-    if command == 'show-temp':
-        handle_show_temp(args)
-    elif command == 'set-temp':
-        handle_set_temp(args)
-    elif command == 'set-current-temp':
-        handle_set_current_temp(args)
-    elif command == 'clear-measurements':
-        handle_clear_measurements(args)
-    elif command == 'help':
-        handle_help()
-    else:
-        emit('response', {'data': f"Błąd: Nieznana komenda '{command}'.", 'is_error': True})
+        if command == 'show-temp':
+            handle_show_temp(args)
+        elif command == 'set-temp':
+            handle_set_temp(args)
+        elif command == 'set-current-temp':
+            handle_set_current_temp(args)
+        elif command == 'clear-measurements':
+            handle_clear_measurements(args)
+        elif command == 'help':
+            handle_help()
+        else:
+            emit('response', {'data': f"Błąd: Nieznana komenda '{command}'.", 'is_error': True})
 
+# Funkcje pomocnicze są dostępne zawsze (nie zależą od socketio)
 def handle_help():
     """Wysyła do klienta listę dostępnych komend."""
     help_text = """
@@ -210,6 +214,8 @@ def handle_clear_measurements(args):
 
 def broadcast_dashboard_update():
     """Pobiera najnowszy stan dashboardu i rozgłasza go do wszystkich podłączonych klientów."""
+    if not socketio:
+        return  # SocketIO nie jest dostępny (tryb testowy/migracyjny)
     print("Broadcasting dashboard update to all clients...")
     try:
         dashboard_data = DashboardService.get_main_dashboard_data()
@@ -246,9 +252,10 @@ def broadcast_apollo_update():
             'czas_rozpoczecia': op.czas_rozpoczecia.strftime('%Y-%m-%d %H:%M:%S') if op.czas_rozpoczecia else None
         } for op in active_transfers]
 
-        socketio.emit('apollo_update', {
-            'apollo_list': updated_apollo_list,
-            'active_transfers': updated_transfers_list
-        })
+        if socketio:
+            socketio.emit('apollo_update', {
+                'apollo_list': updated_apollo_list,
+                'active_transfers': updated_transfers_list
+            })
     except Exception as e:
         print(f"Błąd podczas broadcastu aktualizacji Apollo: {e}")
