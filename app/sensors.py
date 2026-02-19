@@ -8,6 +8,7 @@ from .extensions import db
 from .models import Sprzet, OperatorTemperatures, HistoriaPomiarow
 from decimal import Decimal
 from .ipomiar_service import IPomiarService
+from .calibration_service import CalibrationService
 from sqlalchemy import select
 
 class SensorService:
@@ -129,18 +130,34 @@ class SensorService:
                 nowy_poziom_mm = None
 
                 # 1. Odczytaj poziom z iPomiar, jeśli sprzęt jest skonfigurowany
-                if item.ipomiar_device_id and item.poziom_pusty_mm is not None and item.poziom_pelny_mm is not None:
+                if item.ipomiar_device_id:
                     latest_distance = IPomiarService.get_latest_distance(item.ipomiar_device_id)
                     if latest_distance is not None:
                         nowy_poziom_mm = latest_distance # Zapisujemy surową wartość w mm
                         
-                        zakres_pomiaru = item.poziom_pusty_mm - item.poziom_pelny_mm
-                        if zakres_pomiaru > 0:
-                            poziom_cieczy_mm = item.poziom_pusty_mm - latest_distance
-                            poziom_procent = (poziom_cieczy_mm / zakres_pomiaru) * 100
-                            item.poziom_aktualny_procent = round(max(Decimal('0.0'), min(Decimal('100.0'), poziom_procent)), 2)
+                        # NOWA LOGIKA: Konwersja mm -> tony dla TEGO KONKRETNEGO zbiornika
+                        poziom_tony = CalibrationService.convert_mm_to_tonnes(item.id, latest_distance)
+                        
+                        if poziom_tony is not None:
+                            item.poziom_aktualny_tony = poziom_tony
+                            # Zachowaj stary poziom_procent jako fallback (opcjonalnie można usunąć)
+                            # Oblicz procent dla kompatybilności wstecznej
+                            if item.poziom_pusty_mm is not None and item.poziom_pelny_mm is not None:
+                                zakres_pomiaru = item.poziom_pusty_mm - item.poziom_pelny_mm
+                                if zakres_pomiaru > 0:
+                                    poziom_cieczy_mm = item.poziom_pusty_mm - latest_distance
+                                    poziom_procent = (poziom_cieczy_mm / zakres_pomiaru) * 100
+                                    item.poziom_aktualny_procent = round(max(Decimal('0.0'), min(Decimal('100.0'), poziom_procent)), 2)
                         else:
-                             current_app.logger.warning(f"Nieprawidłowa konfiguracja czujnika dla {item.nazwa_unikalna}")
+                            # Fallback: użyj starej metody procentowej jeśli dostępna
+                            if item.poziom_pusty_mm is not None and item.poziom_pelny_mm is not None:
+                                zakres_pomiaru = item.poziom_pusty_mm - item.poziom_pelny_mm
+                                if zakres_pomiaru > 0:
+                                    poziom_cieczy_mm = item.poziom_pusty_mm - latest_distance
+                                    poziom_procent = (poziom_cieczy_mm / zakres_pomiaru) * 100
+                                    item.poziom_aktualny_procent = round(max(Decimal('0.0'), min(Decimal('100.0'), poziom_procent)), 2)
+                            else:
+                                current_app.logger.warning(f"Brak kalibracji dla zbiornika {item.nazwa_unikalna} (ID: {item.id})")
 
                 # 2. Symuluj temperaturę dla reaktorów
                 if item.typ_sprzetu == 'reaktor':

@@ -3,6 +3,7 @@
 from .extensions import db
 from .models import Sprzet, Alarmy, TankMixes, OperacjeLog, HistoriaPomiarow
 from .batch_management_service import BatchManagementService
+from .calibration_service import CalibrationService
 from sqlalchemy import func, select
 from sqlalchemy.orm import joinedload
 from decimal import Decimal
@@ -46,6 +47,8 @@ class DashboardService:
                 "stan_sprzetu": sprzet.stan_sprzetu,
                 "pojemnosc_kg": float(sprzet.pojemnosc_kg) if sprzet.pojemnosc_kg else None,
                 "odczyt_mm": float(latest_level_mm) if latest_level_mm is not None else None,
+                "poziom_tony": float(sprzet.poziom_aktualny_tony) if sprzet.poziom_aktualny_tony else None,
+                "ma_kalibracje": CalibrationService.has_calibration(sprzet.id),
                 "partia": None
             }
             if sprzet.typ_sprzetu == 'reaktor':

@@ -37,6 +37,11 @@ def index():
     """Serwuje główną stronę aplikacji (frontend)."""
     return render_template('dashboard.html')
 
+@bp.route('/calibration')
+def calibration_page():
+    """Serwuje stronę zarządzania kalibracją zbiorników."""
+    return render_template('calibration.html')
+
 @bp.route('/sprzet/<int:sprzet_id>/details')
 def sprzet_details_view(sprzet_id):
     sprzet = db.session.get(Sprzet, sprzet_id)

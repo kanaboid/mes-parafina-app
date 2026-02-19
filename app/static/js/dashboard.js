@@ -238,20 +238,36 @@ document.addEventListener('DOMContentLoaded', () => {
 
             let levelProgressBar = '';
             if (r.odczyt_mm != null) {
-                const levelPercent = r.poziom_procent;
-                let levelColorClass = 'bg-info';
-                if (levelPercent > 95) levelColorClass = 'bg-danger';
-                else if (levelPercent > 80) levelColorClass = 'bg-warning';
-
-                levelProgressBar = `
-                    <div class="mb-3">
-                        <div class="d-flex justify-content-between align-items-center mb-1">
-                            <small class="text-muted"><i class="fas fa-ruler-vertical me-1"></i>Poziom (czujnik)</small>
-                            <small class="fw-semibold"><span class="text-muted fw-normal">(${formatValue((r.odczyt_mm / 10), ' cm', 0)})</span></small>
+                if (r.poziom_tony != null) {
+                    // Wyświetl wagę w tonach z kalibracji
+                    levelProgressBar = `
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <small class="text-muted"><i class="fas fa-weight me-1"></i>Poziom (czujnik)</small>
+                                <small class="fw-semibold">${formatValue(r.poziom_tony, ' t', 2)}</small>
+                            </div>
+                            <small class="text-muted">Odczyt: ${formatValue((r.odczyt_mm / 10), ' cm', 0)}</small>
                         </div>
-                        
-                    </div>
-                `;
+                    `;
+                } else if (r.ma_kalibracje === false) {
+                    // Ostrzeżenie, że zbiornik nie ma kalibracji
+                    levelProgressBar = `
+                        <div class="alert alert-warning alert-sm py-1 px-2 mb-3">
+                            <small><i class="fas fa-exclamation-triangle me-1"></i>Brak kalibracji</small>
+                        </div>
+                        <small class="text-muted">Odczyt: ${formatValue((r.odczyt_mm / 10), ' cm', 0)}</small>
+                    `;
+                } else {
+                    // Fallback: pokaż odczyt bez konwersji
+                    levelProgressBar = `
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <small class="text-muted"><i class="fas fa-ruler-vertical me-1"></i>Poziom (czujnik)</small>
+                                <small class="fw-semibold"><span class="text-muted fw-normal">(${formatValue((r.odczyt_mm / 10), ' cm', 0)})</span></small>
+                            </div>
+                        </div>
+                    `;
+                }
             }
 
 
@@ -364,19 +380,36 @@ document.addEventListener('DOMContentLoaded', () => {
 
             let levelProgressBar = '';
             if (b.odczyt_mm != null) {
-                const levelPercent = b.poziom_procent;
-                let levelColorClass = isBrudna ? 'bg-danger' : 'bg-success';
-                if (levelPercent > 95) levelColorClass = 'bg-warning';
-
-                levelProgressBar = `
-                    <div class="mb-2">
-                        <div class="d-flex justify-content-between mb-1">
-                            <small class="text-muted"><i class="fas fa-ruler-vertical me-1"></i>Poziom (czujnik)</small>
-                            <small class="fw-semibold"><span class="text-muted fw-normal">(${formatValue((b.odczyt_mm /10), ' cm', 0)})</span></small>
+                if (b.poziom_tony != null) {
+                    // Wyświetl wagę w tonach z kalibracji
+                    levelProgressBar = `
+                        <div class="mb-2">
+                            <div class="d-flex justify-content-between mb-1">
+                                <small class="text-muted"><i class="fas fa-weight me-1"></i>Poziom (czujnik)</small>
+                                <small class="fw-semibold">${formatValue(b.poziom_tony, ' t', 2)}</small>
+                            </div>
+                            <small class="text-muted">Odczyt: ${formatValue((b.odczyt_mm / 10), ' cm', 0)}</small>
                         </div>
-                       
-                    </div>
-                `;
+                    `;
+                } else if (b.ma_kalibracje === false) {
+                    // Ostrzeżenie, że zbiornik nie ma kalibracji
+                    levelProgressBar = `
+                        <div class="alert alert-warning alert-sm py-1 px-2 mb-2">
+                            <small><i class="fas fa-exclamation-triangle me-1"></i>Brak kalibracji</small>
+                        </div>
+                        <small class="text-muted">Odczyt: ${formatValue((b.odczyt_mm / 10), ' cm', 0)}</small>
+                    `;
+                } else {
+                    // Fallback: pokaż odczyt bez konwersji
+                    levelProgressBar = `
+                        <div class="mb-2">
+                            <div class="d-flex justify-content-between mb-1">
+                                <small class="text-muted"><i class="fas fa-ruler-vertical me-1"></i>Poziom (czujnik)</small>
+                                <small class="fw-semibold"><span class="text-muted fw-normal">(${formatValue((b.odczyt_mm / 10), ' cm', 0)})</span></small>
+                            </div>
+                        </div>
+                    `;
+                }
             }
 
 
