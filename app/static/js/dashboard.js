@@ -16,13 +16,15 @@ document.addEventListener('DOMContentLoaded', () => {
         planTransfer: new bootstrap.Modal(document.getElementById('plan-transfer-modal')),
         startHeating: new bootstrap.Modal(document.getElementById('start-heating-modal')),
         simulationSettings: new bootstrap.Modal(document.getElementById('simulation-settings-modal')),
-        transferTankToTank: new bootstrap.Modal(document.getElementById('transfer-tank-to-tank-modal')) // NOWY MODAL
+        transferTankToTank: new bootstrap.Modal(document.getElementById('transfer-tank-to-tank-modal')),
+        startFiltration: new bootstrap.Modal(document.getElementById('start-filtration-modal'))
     };
     const forms = {
         planTransfer: document.getElementById('plan-transfer-form'),
         startHeating: document.getElementById('start-heating-form'),
         simulationSettings: document.getElementById('simulation-settings-form'),
-        transferTankToTank: document.getElementById('transfer-tank-to-tank-form') // NOWY FORMULARZ
+        transferTankToTank: document.getElementById('transfer-tank-to-tank-form'),
+        startFiltration: document.getElementById('start-filtration-form')
     };
 
     const formatValue = (value, unit = '', decimalPlaces = 1) => {
@@ -121,6 +123,17 @@ document.addEventListener('DOMContentLoaded', () => {
                             data-sprzet-id="${r.id}"
                             data-sprzet-nazwa="${r.nazwa}">
                         Wlącz palnik(INFO)
+                    </button>`;
+            }
+            // Przycisk Start filtracji – gdy mieszanina w statusie DOBIELONY_OCZEKUJE
+            if (r.partia && r.partia.process_status === 'DOBIELONY_OCZEKUJE') {
+                actionButtonsHTML += `
+                    <button class="btn btn-success action-btn" 
+                            data-action="open-start-filtration-modal" 
+                            data-sprzet-id="${r.id}"
+                            data-sprzet-nazwa="${r.nazwa}"
+                            data-mix-id="${r.partia.id}">
+                        <i class="fas fa-filter me-1"></i>Start filtracji
                     </button>`;
             }
             
@@ -673,6 +686,9 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (action === 'open-transfer-modal') { // NOWA AKCJA
             const wagaPartii = targetElement.dataset.partiaWaga;
             handleOpenTransferModal(sprzetId, sprzetNazwa, wagaPartii);
+        } else if (action === 'open-start-filtration-modal') {
+            const mixId = targetElement.dataset.mixId;
+            handleOpenStartFiltrationModal(mixId, sprzetNazwa);
         }
     });
 
@@ -820,6 +836,13 @@ document.addEventListener('DOMContentLoaded', () => {
         modals.startHeating.show();
     }
 
+    function handleOpenStartFiltrationModal(mixId, reaktorNazwa) {
+        document.getElementById('start-filtration-mix-id').value = mixId;
+        document.getElementById('start-filtration-reaktor-name').textContent = reaktorNazwa;
+        forms.startFiltration.reset();
+        document.getElementById('start-filtration-mix-id').value = mixId;
+        modals.startFiltration.show();
+    }
 
     // --- OBSŁUGA FORMULARZY ---
     forms.startHeating.addEventListener('submit', async (e) => {
@@ -925,6 +948,50 @@ document.addEventListener('DOMContentLoaded', () => {
             showToast(`Błąd transferu: ${error.message}`, 'error');
         }
     });
+
+    // Obsługa formularza Start filtracji
+    if (forms.startFiltration) {
+        forms.startFiltration.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const mixId = document.getElementById('start-filtration-mix-id').value;
+            const startPoint = document.getElementById('start-filtration-start').value.trim();
+            const endPoint = document.getElementById('start-filtration-cel').value.trim();
+            const zaworyStr = document.getElementById('start-filtration-zawory').value.trim();
+            const operator = document.getElementById('start-filtration-operator').value.trim();
+            const posredni = document.getElementById('start-filtration-posredni').value.trim() || null;
+
+            const otwarteZawory = zaworyStr ? zaworyStr.split(',').map(z => z.trim()).filter(Boolean) : [];
+            if (otwarteZawory.length === 0) {
+                showToast('Podaj co najmniej jeden otwarty zawór.', 'error');
+                return;
+            }
+
+            const payload = {
+                start: startPoint,
+                cel: endPoint,
+                otwarte_zawory: otwarteZawory,
+                operator: operator
+            };
+            if (posredni) payload.sprzet_posredni = posredni;
+
+            try {
+                const response = await fetch(`/api/workflow/mix/${mixId}/start-filtration`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error || 'Błąd serwera');
+
+                showToast('Filtracja została uruchomiona.', 'success');
+                modals.startFiltration.hide();
+                initialLoad();
+            } catch (error) {
+                console.error('Błąd startu filtracji:', error);
+                showToast(error.message, 'error');
+            }
+        });
+    }
 
     // --- INICJALIZACJA ---
     async function initialLoad() {

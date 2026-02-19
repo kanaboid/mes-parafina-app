@@ -184,6 +184,44 @@
     </div>
 </div>
 
+<!-- Modal Start filtracji -->
+<div class="modal fade" id="start-filtration-modal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-filter me-2"></i>Start filtracji – <span class="fw-bold" id="start-filtration-reaktor-name"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Zamknij"></button>
+            </div>
+            <div class="modal-body">
+                <form id="start-filtration-form">
+                    <input type="hidden" id="start-filtration-mix-id">
+                    <div class="mb-3">
+                        <label for="start-filtration-start" class="form-label">Punkt startowy (np. R1_OUT):</label>
+                        <input type="text" id="start-filtration-start" class="form-control" placeholder="np. R1_OUT" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="start-filtration-cel" class="form-label">Punkt docelowy (np. R5_IN):</label>
+                        <input type="text" id="start-filtration-cel" class="form-control" placeholder="np. R5_IN" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="start-filtration-zawory" class="form-label">Otwarte zawory (oddzielone przecinkami):</label>
+                        <input type="text" id="start-filtration-zawory" class="form-control" placeholder="np. Z1, Z2" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="start-filtration-operator" class="form-label">Operator:</label>
+                        <input type="text" id="start-filtration-operator" class="form-control" placeholder="Imię operatora" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="start-filtration-posredni" class="form-label">Sprzęt pośredni (opcjonalnie, np. FZ):</label>
+                        <input type="text" id="start-filtration-posredni" class="form-control" placeholder="np. FZ lub puste">
+                    </div>
+                    <button type="submit" class="btn btn-success"><i class="fas fa-play me-1"></i>Rozpocznij filtrację</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Modal Harmonogramu Zadań -->
 <div class="modal fade" id="scheduler-modal" tabindex="-1">
     <div class="modal-dialog modal-xl">
