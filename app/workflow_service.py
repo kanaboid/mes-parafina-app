@@ -277,8 +277,8 @@ class WorkflowService:
                 select(Sprzet.id).where(Sprzet.nazwa_unikalna == nazwa_celu)
             ).scalar_one_or_none()
 
-        # Typ operacji: dla FILTRACJA_KOLO już ustawiony; inaczej WYDMUCH / PLACEK_KOLO / PLACEK_PRZELEW
-        if typ_operacji != 'FILTRACJA_KOLO':
+        # Typ operacji: dla FILTRACJA_KOLO już ustawiony wyżej; inaczej WYDMUCH / PLACEK_KOLO / PLACEK_PRZELEW
+        if mix.process_status != 'FILTRACJA_KOLO':
             same_reactor = (
                 id_sprzetu_zrodlowego is not None
                 and id_sprzetu_docelowego is not None
