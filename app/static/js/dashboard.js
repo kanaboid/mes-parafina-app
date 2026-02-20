@@ -17,14 +17,16 @@ document.addEventListener('DOMContentLoaded', () => {
         startHeating: new bootstrap.Modal(document.getElementById('start-heating-modal')),
         simulationSettings: new bootstrap.Modal(document.getElementById('simulation-settings-modal')),
         transferTankToTank: new bootstrap.Modal(document.getElementById('transfer-tank-to-tank-modal')),
-        startFiltration: new bootstrap.Modal(document.getElementById('start-filtration-modal'))
+        startFiltration: new bootstrap.Modal(document.getElementById('start-filtration-modal')),
+        ocenaProbki: new bootstrap.Modal(document.getElementById('ocena-probki-modal'))
     };
     const forms = {
         planTransfer: document.getElementById('plan-transfer-form'),
         startHeating: document.getElementById('start-heating-form'),
         simulationSettings: document.getElementById('simulation-settings-form'),
         transferTankToTank: document.getElementById('transfer-tank-to-tank-form'),
-        startFiltration: document.getElementById('start-filtration-form')
+        startFiltration: document.getElementById('start-filtration-form'),
+        ocenaProbki: document.getElementById('ocena-probki-form')
     };
 
     const formatValue = (value, unit = '', decimalPlaces = 1) => {
@@ -135,6 +137,18 @@ document.addEventListener('DOMContentLoaded', () => {
                             data-sprzet-nazwa="${r.nazwa}"
                             data-mix-id="${r.partia.id}">
                         <i class="fas fa-filter me-1"></i>${labelFiltracji}
+                    </button>`;
+            }
+            // Przycisk Na magazyn – gdy mieszanina zatwierdzona (można przelewać do beczki czystej)
+            if (r.partia && r.partia.process_status === 'ZATWIERDZONA') {
+                actionButtonsHTML += `
+                    <button class="btn btn-warning action-btn" 
+                            data-action="open-transfer-modal" 
+                            data-sprzet-id="${r.id}"
+                            data-sprzet-nazwa="${r.nazwa}"
+                            data-partia-waga="${r.partia ? r.partia.waga_kg : '0'}"
+                            title="Przelej na magazyn (beczka czysta)">
+                        <i class="fas fa-warehouse me-1"></i>Na magazyn
                     </button>`;
             }
             
@@ -638,11 +652,22 @@ document.addEventListener('DOMContentLoaded', () => {
             const startTime = new Date(op.czas_rozpoczecia);
             const timeSince = Math.round((new Date() - startTime) / 1000 / 60); // minuty temu
             const canContinueToKolo = op.typ_operacji === 'FILTRACJA_PLACEK_KOLO' || op.typ_operacji === 'FILTRACJA_PLACEK_PRZELEW';
-            const continueBtn = canContinueToKolo
-                ? `<button type="button" class="btn btn-sm btn-outline-primary ms-2 continue-to-kolo-btn" data-op-id="${op.id}" title="Zakończ ten etap i rozpocznij FILTRACJA_KOLO">
+            const canContinueToOcena = op.typ_operacji === 'FILTRACJA_KOLO';
+            const canContinueToMagazyn = op.typ_operacji === 'FILTRACJA_KOLO_ZATWIERDZONA';
+            let continueBtn = '';
+            if (canContinueToKolo) {
+                continueBtn = `<button type="button" class="btn btn-sm btn-outline-primary continue-to-kolo-btn" data-op-id="${op.id}" title="Zakończ ten etap i rozpocznij FILTRACJA_KOLO">
                         <i class="fas fa-forward me-1"></i>Następny etap (FILTRACJA_KOLO)
-                    </button>`
-                : '';
+                    </button>`;
+            } else if (canContinueToOcena) {
+                continueBtn = `<button type="button" class="btn btn-sm btn-outline-primary continue-to-ocena-btn" data-op-id="${op.id}" title="Ocena próbki – wynik OK lub do ponownej filtracji">
+                        <i class="fas fa-vial me-1"></i>Następny etap (Ocena próbki)
+                    </button>`;
+            } else if (canContinueToMagazyn) {
+                continueBtn = `<button type="button" class="btn btn-sm btn-outline-success continue-to-magazyn-btn" data-op-id="${op.id}" title="Zakończ etap i przelej na magazyn">
+                        <i class="fas fa-warehouse me-1"></i>Następny etap (NA_MAGAZYN)
+                    </button>`;
+            }
 
             const itemHTML = `
                 <div class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -731,13 +756,52 @@ document.addEventListener('DOMContentLoaded', () => {
     // Zakończ operację – klik w przycisk w Logu Aktywnych Operacji
     activeOperationsContainer.addEventListener('click', async (e) => {
         const endBtn = e.target.closest('.end-operation-btn');
-        const continueBtn = e.target.closest('.continue-to-kolo-btn');
-        if (continueBtn) {
+        const continueKoloBtn = e.target.closest('.continue-to-kolo-btn');
+        const continueOcenaBtn = e.target.closest('.continue-to-ocena-btn');
+        const continueMagazynBtn = e.target.closest('.continue-to-magazyn-btn');
+
+        if (continueOcenaBtn) {
             e.preventDefault();
-            const opId = continueBtn.getAttribute('data-op-id');
+            const opId = continueOcenaBtn.getAttribute('data-op-id');
             if (!opId) return;
-            continueBtn.disabled = true;
-            continueBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Oczekuj...';
+            document.getElementById('ocena-probki-id-operacji').value = opId;
+            document.querySelector('#ocena-ok').checked = true;
+            document.getElementById('ocena-powod').value = '';
+            document.getElementById('ocena-powod-wrap').classList.add('d-none');
+            document.getElementById('ocena-probki-error').classList.add('d-none');
+            modals.ocenaProbki.show();
+            return;
+        }
+        if (continueMagazynBtn) {
+            e.preventDefault();
+            const opId = continueMagazynBtn.getAttribute('data-op-id');
+            if (!opId) return;
+            continueMagazynBtn.disabled = true;
+            continueMagazynBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Oczekuj...';
+            try {
+                const response = await fetch('/api/operations/continue-to-magazyn', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id_operacji: parseInt(opId, 10) })
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.message || result.error || 'Błąd serwera');
+                showToast(result.message || 'Możesz wykonać przelew na magazyn.', 'success');
+                initialLoad();
+            } catch (err) {
+                console.error('Błąd continue-to-magazyn:', err);
+                showToast(err.message, 'error');
+                continueMagazynBtn.disabled = false;
+                continueMagazynBtn.innerHTML = '<i class="fas fa-warehouse me-1"></i>Następny etap (NA_MAGAZYN)';
+            }
+            return;
+        }
+        if (continueKoloBtn) {
+            e.preventDefault();
+            const opId = continueKoloBtn.getAttribute('data-op-id');
+            if (!opId) return;
+            continueKoloBtn.disabled = true;
+            continueKoloBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Oczekuj...';
             try {
                 const response = await fetch('/api/operations/continue-to-kolo', {
                     method: 'POST',
@@ -751,8 +815,8 @@ document.addEventListener('DOMContentLoaded', () => {
             } catch (err) {
                 console.error('Błąd continue-to-kolo:', err);
                 showToast(err.message, 'error');
-                continueBtn.disabled = false;
-                continueBtn.innerHTML = '<i class="fas fa-forward me-1"></i>Następny etap (FILTRACJA_KOLO)';
+                continueKoloBtn.disabled = false;
+                continueKoloBtn.innerHTML = '<i class="fas fa-forward me-1"></i>Następny etap (FILTRACJA_KOLO)';
             }
             return;
         }
@@ -1089,6 +1153,54 @@ document.addEventListener('DOMContentLoaded', () => {
                 initialLoad();
             } catch (error) {
                 console.error('Błąd startu filtracji:', error);
+                errorDiv.textContent = error.message;
+                errorDiv.classList.remove('d-none');
+            }
+        });
+    }
+
+    // Przełączanie widoczności pola "Powód" przy ocenie próbki
+    document.querySelectorAll('input[name="ocena-wynik"]').forEach(radio => {
+        radio.addEventListener('change', () => {
+            const wrap = document.getElementById('ocena-powod-wrap');
+            if (document.getElementById('ocena-do-ponownej').checked) {
+                wrap.classList.remove('d-none');
+            } else {
+                wrap.classList.add('d-none');
+            }
+        });
+    });
+
+    // Obsługa formularza Ocena próbki (wynik OK / do ponownej filtracji)
+    if (forms.ocenaProbki) {
+        forms.ocenaProbki.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const idOperacji = document.getElementById('ocena-probki-id-operacji').value;
+            const wynikRadio = document.querySelector('input[name="ocena-wynik"]:checked');
+            const errorDiv = document.getElementById('ocena-probki-error');
+            if (!idOperacji || !wynikRadio) {
+                errorDiv.textContent = 'Wybierz wynik oceny.';
+                errorDiv.classList.remove('d-none');
+                return;
+            }
+            const wynik = wynikRadio.value;
+            const powod = document.getElementById('ocena-powod').value.trim();
+            errorDiv.classList.add('d-none');
+            try {
+                const payload = { id_operacji: parseInt(idOperacji, 10), wynik_oceny: wynik };
+                if (powod) payload.powod = powod;
+                const response = await fetch('/api/operations/continue-to-ocena', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.message || result.error || 'Błąd serwera');
+                showToast(result.message || 'Wynik oceny zapisany.', 'success');
+                modals.ocenaProbki.hide();
+                initialLoad();
+            } catch (error) {
+                console.error('Błąd oceny próbki:', error);
                 errorDiv.textContent = error.message;
                 errorDiv.classList.remove('d-none');
             }

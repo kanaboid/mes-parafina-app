@@ -210,6 +210,40 @@
     </div>
 </div>
 
+<!-- Modal Ocena próbki (następny krok po FILTRACJA_KOLO) -->
+<div class="modal fade" id="ocena-probki-modal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Ocena próbki – wynik</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Zamknij"></button>
+            </div>
+            <div class="modal-body">
+                <form id="ocena-probki-form">
+                    <input type="hidden" id="ocena-probki-id-operacji">
+                    <div class="mb-3">
+                        <label class="form-label">Wynik oceny:</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="ocena-wynik" id="ocena-ok" value="OK" checked>
+                            <label class="form-check-label" for="ocena-ok">OK – zatwierdź (możliwość przelewu na magazyn)</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="ocena-wynik" id="ocena-do-ponownej" value="DO_PONOWNEJ_FILTRACJI">
+                            <label class="form-check-label" for="ocena-do-ponownej">Do ponownej filtracji</label>
+                        </div>
+                    </div>
+                    <div class="mb-3 d-none" id="ocena-powod-wrap">
+                        <label class="form-label" for="ocena-powod">Powód (opcjonalnie):</label>
+                        <input type="text" class="form-control" id="ocena-powod" placeholder="np. mętność, zanieczyszczenie">
+                    </div>
+                    <div id="ocena-probki-error" class="alert alert-danger d-none"></div>
+                    <button type="submit" class="btn btn-success"><i class="fas fa-check me-1"></i>Zatwierdź wynik</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Modal Harmonogramu Zadań -->
 <div class="modal fade" id="scheduler-modal" tabindex="-1">
     <div class="modal-dialog modal-xl">

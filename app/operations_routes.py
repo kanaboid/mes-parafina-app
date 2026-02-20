@@ -984,3 +984,152 @@ def continue_to_kolo():
         db.session.rollback()
         traceback.print_exc()
         return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@bp.route('/continue-to-ocena', methods=['POST'])
+def continue_to_ocena():
+    """
+    Kończy operację FILTRACJA_KOLO i na podstawie wyniku oceny próbki ustawia
+    mix.process_status na ZATWIERDZONA (tworzy operację FILTRACJA_KOLO_ZATWIERDZONA)
+    lub DO_PONOWNEJ_FILTRACJI.
+    """
+    dane = request.get_json()
+    if not dane or 'id_operacji' not in dane or 'wynik_oceny' not in dane:
+        return jsonify({
+            "status": "error",
+            "message": "Brak wymaganych pól: id_operacji, wynik_oceny (OK lub DO_PONOWNEJ_FILTRACJI)."
+        }), 400
+
+    id_operacji = dane['id_operacji']
+    wynik_oceny = (dane.get('wynik_oceny') or '').strip().upper()
+    if wynik_oceny not in ('OK', 'DO_PONOWNEJ_FILTRACJI'):
+        return jsonify({
+            "status": "error",
+            "message": "wynik_oceny musi być 'OK' lub 'DO_PONOWNEJ_FILTRACJI'."
+        }), 400
+    powod = dane.get('powod', '').strip() if dane.get('powod') else ''
+    operator = dane.get('operator', 'GUI')
+
+    try:
+        operacja = db.session.get(OperacjeLog, id_operacji)
+        if not operacja:
+            return jsonify({"status": "error", "message": f"Operacja o ID {id_operacji} nie istnieje."}), 404
+        if operacja.status_operacji != 'aktywna':
+            return jsonify({"status": "error", "message": "Operacja nie jest aktywna."}), 409
+        if operacja.typ_operacji != 'FILTRACJA_KOLO':
+            return jsonify({
+                "status": "error",
+                "message": f"Ocena próbki tylko z operacji FILTRACJA_KOLO (obecny: {operacja.typ_operacji})."
+            }), 409
+
+        mix = None
+        if operacja.id_tank_mix:
+            mix = db.session.get(TankMixes, operacja.id_tank_mix)
+        if not mix and operacja.id_sprzetu_zrodlowego:
+            reaktor = db.session.get(Sprzet, operacja.id_sprzetu_zrodlowego)
+            if reaktor and reaktor.active_mix_id:
+                mix = db.session.get(TankMixes, reaktor.active_mix_id)
+        if not mix:
+            return jsonify({"status": "error", "message": "Nie znaleziono mieszaniny dla tej operacji."}), 404
+
+        # 1. Zakończ FILTRACJA_KOLO: zamknij zawory
+        operacja.status_operacji = 'zakonczona'
+        operacja.czas_zakonczenia = dt.now(timezone.utc)
+        if operacja.segmenty:
+            for segment in operacja.segmenty:
+                if segment.zawory:
+                    segment.zawory.stan = 'ZAMKNIETY'
+
+        if wynik_oceny == 'OK':
+            mix.process_status = 'ZATWIERDZONA'
+            tank_id = mix.tank_id
+            nowa_operacja = OperacjeLog(
+                typ_operacji='FILTRACJA_KOLO_ZATWIERDZONA',
+                id_tank_mix=mix.id,
+                id_sprzetu_zrodlowego=tank_id,
+                id_sprzetu_docelowego=tank_id,
+                status_operacji='aktywna',
+                czas_rozpoczecia=dt.now(timezone.utc),
+                opis='Ocena próbki: OK. Mieszanina zatwierdzona – możliwy przelew na magazyn.',
+                zmodyfikowane_przez=operator,
+            )
+            db.session.add(nowa_operacja)
+            db.session.commit()
+            try:
+                broadcast_dashboard_update()
+            except Exception:
+                pass
+            return jsonify({
+                "status": "success",
+                "message": "Ocena: OK. Mieszanina zatwierdzona. Możesz wybrać operację Na magazyn.",
+                "process_status": "ZATWIERDZONA",
+                "id_operacji": nowa_operacja.id,
+            }), 200
+        else:
+            mix.process_status = 'DO_PONOWNEJ_FILTRACJI'
+            log_ocena = OperacjeLog(
+                typ_operacji='OCENA_JAKOSCI',
+                id_tank_mix=mix.id,
+                status_operacji='zakonczona',
+                czas_rozpoczecia=dt.now(timezone.utc),
+                czas_zakonczenia=dt.now(timezone.utc),
+                opis=f"Ocena próbki: do ponownej filtracji. {powod}" if powod else "Ocena próbki: do ponownej filtracji.",
+                zmodyfikowane_przez=operator,
+            )
+            db.session.add(log_ocena)
+            db.session.commit()
+            try:
+                broadcast_dashboard_update()
+            except Exception:
+                pass
+            return jsonify({
+                "status": "success",
+                "message": "Ocena: do ponownej filtracji. Status mieszaniny zaktualizowany.",
+                "process_status": "DO_PONOWNEJ_FILTRACJI",
+            }), 200
+    except Exception as e:
+        db.session.rollback()
+        traceback.print_exc()
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@bp.route('/continue-to-magazyn', methods=['POST'])
+def continue_to_magazyn():
+    """
+    Kończy operację FILTRACJA_KOLO_ZATWIERDZONA. Mix pozostaje w statusie ZATWIERDZONA;
+    operator może wykonać transfer na magazyn (beczka czysta) przez istniejący modal Przelej.
+    """
+    dane = request.get_json()
+    if not dane or 'id_operacji' not in dane:
+        return jsonify({"status": "error", "message": "Brak wymaganego pola: id_operacji."}), 400
+
+    id_operacji = dane['id_operacji']
+    operator = dane.get('operator', 'GUI')
+
+    try:
+        operacja = db.session.get(OperacjeLog, id_operacji)
+        if not operacja:
+            return jsonify({"status": "error", "message": f"Operacja o ID {id_operacji} nie istnieje."}), 404
+        if operacja.status_operacji != 'aktywna':
+            return jsonify({"status": "error", "message": "Operacja nie jest aktywna."}), 409
+        if operacja.typ_operacji != 'FILTRACJA_KOLO_ZATWIERDZONA':
+            return jsonify({
+                "status": "error",
+                "message": f"Kontynuacja na magazyn tylko z operacji FILTRACJA_KOLO_ZATWIERDZONA (obecny: {operacja.typ_operacji})."
+            }), 409
+
+        operacja.status_operacji = 'zakonczona'
+        operacja.czas_zakonczenia = dt.now(timezone.utc)
+        db.session.commit()
+        try:
+            broadcast_dashboard_update()
+        except Exception:
+            pass
+        return jsonify({
+            "status": "success",
+            "message": "Operacja zakończona. Użyj przycisku Przelej / Na magazyn, aby przenieść mieszaninę do beczki czystej.",
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        traceback.print_exc()
+        return jsonify({"status": "error", "message": str(e)}), 500
