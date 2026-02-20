@@ -779,7 +779,7 @@ def zakoncz_operacje():
                 next_status = {
                     'FILTRACJA_PLACEK_KOLO': 'FILTRACJA_PRZELEW',
                     'FILTRACJA_PLACEK_PRZELEW': 'FILTRACJA_KOLO',
-                    'FILTRACJA_PRZELEW': 'FILTRACJA_KOLO',
+                    'FILTRACJA_PRZELEW': 'FILTRACJA_PRZELEW_PRZERWANE',
                     'FILTRACJA_KOLO': 'OCZEKUJE_NA_OCENE',
                     'FILTRACJA_WYDMUCH': 'FILTRACJA_KOLO',
                 }.get(mix.process_status)
@@ -788,9 +788,10 @@ def zakoncz_operacje():
                     if operacja.typ_operacji == 'FILTRACJA_WYDMUCH':
                         mix.is_wydmuch_mix = False
                         mix.filtration_cycles_count = (mix.filtration_cycles_count or 0) + 1
-                # Jeśli cel ≠ źródło – przenieś mieszaninę do reaktora docelowego (tank_id + active_mix)
+                # Jeśli cel ≠ źródło – przenieś mieszaninę do reaktora docelowego (tylko gdy nie przerwano przelewu)
                 if (
-                    operacja.id_sprzetu_zrodlowego is not None
+                    next_status != 'FILTRACJA_PRZELEW_PRZERWANE'
+                    and operacja.id_sprzetu_zrodlowego is not None
                     and operacja.id_sprzetu_docelowego is not None
                     and operacja.id_sprzetu_zrodlowego != operacja.id_sprzetu_docelowego
                 ):
