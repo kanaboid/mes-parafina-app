@@ -203,12 +203,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
-            // --- KOD PARTII ---
+            // --- KOD PARTII I STATUS PROCESU ---
             const partiaHTML = r.partia ? `
-                <div class="d-flex align-items-center mb-3">
+                <div class="d-flex align-items-center mb-2">
                     <i class="fas fa-barcode text-muted me-2"></i>
                     <span class="text-muted me-2">Partia:</span>
                     <span class="fw-semibold">${r.partia.kod}</span>
+                </div>
+                <div class="d-flex align-items-center mb-3">
+                    <span class="text-muted me-2 small">Status procesu:</span>
+                    <span class="badge bg-secondary text-wrap">${r.partia.process_status || '—'}</span>
                 </div>
             ` : '<p class="text-center text-muted fst-italic mb-3"><i class="fas fa-inbox me-2"></i>Reaktor pusty</p>';
             
