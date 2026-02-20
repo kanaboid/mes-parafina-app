@@ -883,9 +883,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!response.ok) throw new Error('Błąd ładowania listy celów');
             const destinations = await response.json();
             container.innerHTML = '';
-            const reaktory = destinations.filter(
-                (item) => item.typ_sprzetu === 'reaktor' && item.nazwa_unikalna !== reaktorNazwa
-            );
+            const reaktory = destinations.filter((item) => item.typ_sprzetu === 'reaktor');
             if (reaktory.length === 0) {
                 container.innerHTML = '<p class="text-muted mb-0">Brak innego reaktora jako celu filtracji.</p>';
                 return;

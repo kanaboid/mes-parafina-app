@@ -766,7 +766,7 @@ def zakoncz_operacje():
                 sprzet_zrodlowy.stan_sprzetu = 'Pusty'
 
         # Krok 4b: Aktualizacja TankMixes przy zakończeniu filtracji (flow reaktorowy)
-        FILTRACJA_TYPY = ('FILTRACJA_PLACEK_KOLO', 'FILTRACJA_PRZELEW', 'FILTRACJA_KOLO', 'FILTRACJA_WYDMUCH')
+        FILTRACJA_TYPY = ('FILTRACJA_PLACEK_KOLO', 'FILTRACJA_PLACEK_PRZELEW', 'FILTRACJA_PRZELEW', 'FILTRACJA_KOLO', 'FILTRACJA_WYDMUCH')
         if operacja.typ_operacji in FILTRACJA_TYPY:
             mix = None
             if operacja.id_tank_mix:
@@ -778,6 +778,7 @@ def zakoncz_operacje():
             if mix:
                 next_status = {
                     'FILTRACJA_PLACEK_KOLO': 'FILTRACJA_PRZELEW',
+                    'FILTRACJA_PLACEK_PRZELEW': 'FILTRACJA_KOLO',
                     'FILTRACJA_PRZELEW': 'FILTRACJA_KOLO',
                     'FILTRACJA_KOLO': 'OCZEKUJE_NA_OCENE',
                     'FILTRACJA_WYDMUCH': 'FILTRACJA_KOLO',

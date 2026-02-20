@@ -234,7 +234,7 @@ class WorkflowService:
             .where(
                 OperacjeLog.id_tank_mix == mix.id,
                 OperacjeLog.typ_operacji.in_(
-                    ('FILTRACJA_PLACEK_KOLO', 'FILTRACJA_PRZELEW', 'FILTRACJA_KOLO', 'FILTRACJA_WYDMUCH')
+                    ('FILTRACJA_PLACEK_KOLO', 'FILTRACJA_PLACEK_PRZELEW', 'FILTRACJA_PRZELEW', 'FILTRACJA_KOLO', 'FILTRACJA_WYDMUCH')
                 ),
             )
             .order_by(OperacjeLog.czas_rozpoczecia.desc())
@@ -256,13 +256,40 @@ class WorkflowService:
                     "Wymagane jest nowe dobielanie przed rozpoczęciem filtracji."
                 )
 
-        typ_operacji = 'FILTRACJA_WYDMUCH' if mix.is_wydmuch_mix else 'FILTRACJA_PLACEK_KOLO'
+        # Identyfikacja sprzętu źródłowego i docelowego z punktów trasy (np. R6_OUT → R6, R8_IN → R8)
+        nazwa_zrodla = start_point.rsplit('_', 1)[0] if start_point and '_' in start_point else None
+        nazwa_celu = end_point.rsplit('_', 1)[0] if end_point and '_' in end_point else None
+        id_sprzetu_zrodlowego = None
+        id_sprzetu_docelowego = None
+        if nazwa_zrodla:
+            id_sprzetu_zrodlowego = db.session.execute(
+                select(Sprzet.id).where(Sprzet.nazwa_unikalna == nazwa_zrodla)
+            ).scalar_one_or_none()
+        if nazwa_celu:
+            id_sprzetu_docelowego = db.session.execute(
+                select(Sprzet.id).where(Sprzet.nazwa_unikalna == nazwa_celu)
+            ).scalar_one_or_none()
+
+        # Typ operacji: WYDMUCH gdy mieszanina wydmuchowa; inaczej KOLO (źródło=cel) lub PLACEK_PRZELEW (źródło≠cel)
+        same_reactor = (
+            id_sprzetu_zrodlowego is not None
+            and id_sprzetu_docelowego is not None
+            and id_sprzetu_zrodlowego == id_sprzetu_docelowego
+        )
+        if mix.is_wydmuch_mix:
+            typ_operacji = 'FILTRACJA_WYDMUCH'
+        elif same_reactor:
+            typ_operacji = 'FILTRACJA_PLACEK_KOLO'
+        else:
+            typ_operacji = 'FILTRACJA_PLACEK_PRZELEW'
         mix.process_status = typ_operacji
 
         opis = f"Operacja {typ_operacji} z {start_point} do {end_point}"
         nowa_operacja = OperacjeLog(
             typ_operacji=typ_operacji,
             id_tank_mix=mix.id,
+            id_sprzetu_zrodlowego=id_sprzetu_zrodlowego,
+            id_sprzetu_docelowego=id_sprzetu_docelowego,
             status_operacji='aktywna',
             czas_rozpoczecia=datetime.now(timezone.utc),
             opis=opis,
