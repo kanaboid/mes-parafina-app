@@ -3,7 +3,7 @@ from flask import Blueprint, jsonify, request, current_app
 from decimal import Decimal, InvalidOperation
 from .workflow_service import WorkflowService
 from .extensions import db
-from .models import OperacjeLog, Segmenty, Zawory
+from .models import OperacjeLog, Segmenty, Zawory, Sprzet
 
 # Stworzenie Blueprintu dla przepływów pracy
 workflow_bp = Blueprint('workflow', __name__, url_prefix='/api/workflow')
@@ -98,7 +98,8 @@ def add_bleaching_earth_endpoint(mix_id: int):
 def start_filtration_endpoint(mix_id: int):
     """
     Rozpoczyna cykl filtracji dla mieszaniny. Pathfinder jest wywoływany na początku.
-    Oczekuje JSON: {"start": "R1_OUT", "cel": "R5_IN", "otwarte_zawory": [...], "operator": "...", "sprzet_posredni": "FZ" (opcjonalnie)}
+    Oczekuje JSON: {"start": "R1_OUT", "cel": "R5_IN"} oraz opcjonalnie:
+    otwarte_zawory (lista; brak = pobranie z bazy), operator (brak = "GUI"), sprzet_posredni.
     """
     data = request.get_json()
     if not data:
@@ -107,40 +108,58 @@ def start_filtration_endpoint(mix_id: int):
     start_point = data.get('start')
     end_point = data.get('cel')
     open_valves_list = data.get('otwarte_zawory')
-    operator = data.get('operator')
+    operator = data.get('operator') or 'GUI'
     sprzet_posredni = data.get('sprzet_posredni')
 
-    if not all([start_point, end_point, open_valves_list, operator]):
+    if not start_point or not end_point:
         return jsonify({
-            'error': 'Wymagane pola: start, cel, otwarte_zawory, operator.'
+            'error': 'Wymagane pola: start, cel.'
         }), 400
+
+    if not open_valves_list:
+        open_valves_list = db.session.execute(
+            db.select(Zawory.nazwa_zaworu).where(Zawory.stan == 'OTWARTY')
+        ).scalars().all()
+        if not open_valves_list:
+            open_valves_list = db.session.execute(db.select(Zawory.nazwa_zaworu)).scalars().all()
 
     try:
         pathfinder = current_app.extensions['pathfinder']
     except KeyError:
         return jsonify({'error': 'Pathfinder nie jest dostępny.'}), 500
 
-    # Pathfinder na początku - znajdź trasę
-    if sprzet_posredni:
-        posredni_in = f"{sprzet_posredni}_IN"
-        posredni_out = f"{sprzet_posredni}_OUT"
-        sciezka_1 = pathfinder.find_path(start_point, posredni_in, open_valves_list)
-        if not sciezka_1:
-            return jsonify({"error": f"Nie znaleziono ścieżki z {start_point} do {posredni_in}."}), 404
-        sciezka_wewnetrzna = pathfinder.find_path(posredni_in, posredni_out, open_valves_list)
-        if not sciezka_wewnetrzna:
-            return jsonify({"error": f"Nie znaleziono ścieżki wewnętrznej w {sprzet_posredni}."}), 404
-        sciezka_2 = pathfinder.find_path(posredni_out, end_point, open_valves_list)
-        if not sciezka_2:
-            return jsonify({"error": f"Nie znaleziono ścieżki z {posredni_out} do {end_point}."}), 404
-        znaleziona_sciezka_nazwy = sciezka_1 + sciezka_wewnetrzna + sciezka_2
-    else:
-        znaleziona_sciezka_nazwy = pathfinder.find_path(start_point, end_point, open_valves_list)
+    # Filtr wybierany automatycznie: tylko ten, który ma fizyczne połączenie z reaktorem docelowym (filtr_OUT → cel)
+    if not sprzet_posredni:
+        filtry = db.session.execute(
+            db.select(Sprzet.nazwa_unikalna).where(Sprzet.typ_sprzetu == 'filtr').order_by(Sprzet.nazwa_unikalna)
+        ).scalars().all()
+        if not filtry:
+            return jsonify({'error': 'Brak zdefiniowanego filtra w systemie. Operacje filtracji muszą przechodzić przez filtr.'}), 400
+        sprzet_posredni = None
+        for nazwa_filtra in filtry:
+            filtr_out = f"{nazwa_filtra}_OUT"
+            trasa_do_celu = pathfinder.find_path(filtr_out, end_point, open_valves_list)
+            if trasa_do_celu:
+                sprzet_posredni = nazwa_filtra
+                break
+        if not sprzet_posredni:
+            return jsonify({
+                'error': f'Żaden filtr ({", ".join(filtry)}) nie ma połączenia z reaktorem docelowym. Sprawdź topologię (wyjście filtra → reaktor).'
+            }), 404
 
-    if not znaleziona_sciezka_nazwy:
-        return jsonify({
-            "error": f"Nie znaleziono ścieżki z {start_point} do {end_point}."
-        }), 404
+    # Trasa zawsze przez wybrany filtr: start → filtr_IN → filtr_OUT → cel
+    posredni_in = f"{sprzet_posredni}_IN"
+    posredni_out = f"{sprzet_posredni}_OUT"
+    sciezka_1 = pathfinder.find_path(start_point, posredni_in, open_valves_list)
+    if not sciezka_1:
+        return jsonify({"error": f"Nie znaleziono ścieżki z {start_point} do {posredni_in}."}), 404
+    sciezka_wewnetrzna = pathfinder.find_path(posredni_in, posredni_out, open_valves_list)
+    if not sciezka_wewnetrzna:
+        return jsonify({"error": f"Nie znaleziono ścieżki wewnętrznej w {sprzet_posredni}."}), 404
+    sciezka_2 = pathfinder.find_path(posredni_out, end_point, open_valves_list)
+    if not sciezka_2:
+        return jsonify({"error": f"Nie znaleziono ścieżki z {posredni_out} do {end_point}."}), 404
+    znaleziona_sciezka_nazwy = sciezka_1 + sciezka_wewnetrzna + sciezka_2
 
     # Sprawdź konflikty tras
     from sqlalchemy import select
@@ -155,14 +174,19 @@ def start_filtration_endpoint(mix_id: int):
             "zajete_segmenty": [k for k in konflikty]
         }), 409
 
-    try:
-        # Otwórz zawory
+    # Otwórz tylko zawory na trasie (jak w start_apollo_transfer), nie wszystkie
+    zawory_na_trasie = set()
+    for u, v, edge_data in pathfinder.graph.edges(data=True):
+        if edge_data.get('segment_name') in znaleziona_sciezka_nazwy:
+            zawory_na_trasie.add(edge_data['valve_name'])
+    if zawory_na_trasie:
         db.session.execute(
             db.update(Zawory)
-            .where(Zawory.nazwa_zaworu.in_(open_valves_list))
+            .where(Zawory.nazwa_zaworu.in_(zawory_na_trasie))
             .values(stan='OTWARTY')
         )
 
+    try:
         result = WorkflowService.start_filtration_cycle(
             mix_id=mix_id,
             operator=operator,

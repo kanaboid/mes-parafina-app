@@ -634,16 +634,21 @@ document.addEventListener('DOMContentLoaded', () => {
             const timeSince = Math.round((new Date() - startTime) / 1000 / 60); // minuty temu
 
             const itemHTML = `
-                <div class="list-group-item">
-                    <div class="d-flex w-100 justify-content-between">
-                        <h6 class="mb-1 text-info">${op.opis}</h6>
-                        <small class="text-muted">${timeSince} min temu</small>
+                <div class="list-group-item d-flex justify-content-between align-items-center">
+                    <div class="flex-grow-1">
+                        <div class="d-flex w-100 justify-content-between">
+                            <h6 class="mb-1 text-info">${op.opis}</h6>
+                            <small class="text-muted">${timeSince} min temu</small>
+                        </div>
+                        <p class="mb-0 small">
+                            <span class="badge bg-secondary">${op.zrodlo}</span>
+                            <i class="fas fa-long-arrow-alt-right mx-2"></i>
+                            <span class="badge bg-success">${op.cel}</span>
+                        </p>
                     </div>
-                    <p class="mb-1 small">
-                        <span class="badge bg-secondary">${op.zrodlo}</span>
-                        <i class="fas fa-long-arrow-alt-right mx-2"></i>
-                        <span class="badge bg-success">${op.cel}</span>
-                    </p>
+                    <button type="button" class="btn btn-sm btn-outline-danger ms-2 end-operation-btn" data-op-id="${op.id}" title="Zakończ operację">
+                        <i class="fas fa-stop-circle me-1"></i>Zakończ
+                    </button>
                 </div>`;
             activeOperationsContainer.innerHTML += itemHTML;
         });
@@ -709,6 +714,34 @@ document.addEventListener('DOMContentLoaded', () => {
     beczkiBrudneContainer.addEventListener('click', handleTankClick);
     beczkiCzysteContainer.addEventListener('click', handleTankClick);
 
+    // Zakończ operację – klik w przycisk w Logu Aktywnych Operacji
+    activeOperationsContainer.addEventListener('click', async (e) => {
+        const btn = e.target.closest('.end-operation-btn');
+        if (!btn) return;
+        e.preventDefault();
+        const opId = btn.getAttribute('data-op-id');
+        if (!opId) return;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Zakończ';
+        try {
+            const response = await fetch('/api/operations/zakoncz', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id_operacji: parseInt(opId, 10) })
+            });
+            const result = await response.json();
+            if (!response.ok) {
+                throw new Error(result.message || result.error || 'Błąd serwera');
+            }
+            showToast(result.message || 'Operacja zakończona.', 'success');
+            initialLoad();
+        } catch (err) {
+            console.error('Błąd zakończenia operacji:', err);
+            showToast(err.message, 'error');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-stop-circle me-1"></i>Zakończ';
+        }
+    });
 
     // --- FUNKCJE OBSŁUGUJĄCE AKCJE ---
 
@@ -836,12 +869,47 @@ document.addEventListener('DOMContentLoaded', () => {
         modals.startHeating.show();
     }
 
-    function handleOpenStartFiltrationModal(mixId, reaktorNazwa) {
+    async function handleOpenStartFiltrationModal(mixId, reaktorNazwa) {
         document.getElementById('start-filtration-mix-id').value = mixId;
         document.getElementById('start-filtration-reaktor-name').textContent = reaktorNazwa;
-        forms.startFiltration.reset();
-        document.getElementById('start-filtration-mix-id').value = mixId;
+        document.getElementById('start-filtration-reaktor-nazwa').value = reaktorNazwa;
+        const container = document.getElementById('start-filtration-destinations-container');
+        container.innerHTML = '<div class="list-group-item text-muted">Ładowanie celów...</div>';
+        document.getElementById('start-filtration-error').classList.add('d-none');
         modals.startFiltration.show();
+
+        try {
+            const response = await fetch('/api/sprzet/dostepne-cele');
+            if (!response.ok) throw new Error('Błąd ładowania listy celów');
+            const destinations = await response.json();
+            container.innerHTML = '';
+            const reaktory = destinations.filter(
+                (item) => item.typ_sprzetu === 'reaktor' && item.nazwa_unikalna !== reaktorNazwa
+            );
+            if (reaktory.length === 0) {
+                container.innerHTML = '<p class="text-muted mb-0">Brak innego reaktora jako celu filtracji.</p>';
+                return;
+            }
+            reaktory.forEach((item, index) => {
+                let labelContent = `<div class="d-flex w-100 justify-content-between"><h6 class="mb-1">${item.nazwa_unikalna}</h6><small>${item.stan_sprzetu || '—'}</small></div>`;
+                if (item.mix_info && item.mix_info.total_weight > 0.01) {
+                    const wagaTon = (item.mix_info.total_weight / 1000).toFixed(2);
+                    const types = (item.mix_info.components || []).map((c) => c.material_type).join(', ');
+                    labelContent += `<p class="mb-1 small text-muted">${wagaTon} t, ${types || '—'}</p>`;
+                } else {
+                    labelContent += `<p class="mb-1 small text-muted">Pusty</p>`;
+                }
+                const radioId = `start-filtration-dest-${item.id}`;
+                const label = document.createElement('label');
+                label.htmlFor = radioId;
+                label.className = 'list-group-item list-group-item-action';
+                label.innerHTML = `<input class="form-check-input me-2" type="radio" name="start-filtration-destination" value="${item.id}" id="${radioId}" data-nazwa="${item.nazwa_unikalna}" ${index === 0 ? 'checked' : ''}>${labelContent}`;
+                container.appendChild(label);
+            });
+        } catch (error) {
+            console.error('Błąd ładowania celów filtracji:', error);
+            container.innerHTML = '<p class="text-danger mb-0">Nie udało się załadować listy reaktorów.</p>';
+        }
     }
 
     // --- OBSŁUGA FORMULARZY ---
@@ -949,30 +1017,26 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Obsługa formularza Start filtracji
+    // Obsługa formularza Start filtracji (tylko wybór celu; start/cel/zawory/operator – automatycznie)
     if (forms.startFiltration) {
         forms.startFiltration.addEventListener('submit', async (e) => {
             e.preventDefault();
             const mixId = document.getElementById('start-filtration-mix-id').value;
-            const startPoint = document.getElementById('start-filtration-start').value.trim();
-            const endPoint = document.getElementById('start-filtration-cel').value.trim();
-            const zaworyStr = document.getElementById('start-filtration-zawory').value.trim();
-            const operator = document.getElementById('start-filtration-operator').value.trim();
-            const posredni = document.getElementById('start-filtration-posredni').value.trim() || null;
+            const reaktorNazwa = document.getElementById('start-filtration-reaktor-nazwa').value.trim();
+            const selectedRadio = document.querySelector('input[name="start-filtration-destination"]:checked');
+            const errorDiv = document.getElementById('start-filtration-error');
 
-            const otwarteZawory = zaworyStr ? zaworyStr.split(',').map(z => z.trim()).filter(Boolean) : [];
-            if (otwarteZawory.length === 0) {
-                showToast('Podaj co najmniej jeden otwarty zawór.', 'error');
+            if (!selectedRadio) {
+                errorDiv.textContent = 'Wybierz reaktor docelowy.';
+                errorDiv.classList.remove('d-none');
                 return;
             }
+            errorDiv.classList.add('d-none');
+            const celNazwa = selectedRadio.getAttribute('data-nazwa');
+            const startPoint = `${reaktorNazwa}_OUT`;
+            const endPoint = `${celNazwa}_IN`;
 
-            const payload = {
-                start: startPoint,
-                cel: endPoint,
-                otwarte_zawory: otwarteZawory,
-                operator: operator
-            };
-            if (posredni) payload.sprzet_posredni = posredni;
+            const payload = { start: startPoint, cel: endPoint };
 
             try {
                 const response = await fetch(`/api/workflow/mix/${mixId}/start-filtration`, {
@@ -988,7 +1052,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 initialLoad();
             } catch (error) {
                 console.error('Błąd startu filtracji:', error);
-                showToast(error.message, 'error');
+                errorDiv.textContent = error.message;
+                errorDiv.classList.remove('d-none');
             }
         });
     }
