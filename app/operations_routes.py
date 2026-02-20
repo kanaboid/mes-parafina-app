@@ -920,6 +920,79 @@ def przelew_destinations():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
+@bp.route('/start-filtration-destinations', methods=['GET'])
+def start_filtration_destinations():
+    """
+    Zwraca listę reaktorów będących możliwymi celami dla "Start filtracji":
+    - ten sam reaktor (koło), jeśli istnieje trasa źródło → filtr → źródło,
+    - inne reaktory tylko puste i z trasą źródło → filtr → cel.
+    Używane są wszystkie zawory (trasę teoretycznie możliwą).
+    Query: id_reaktora_zrodlowego (wymagane).
+    """
+    id_zrodla = request.args.get('id_reaktora_zrodlowego', type=int)
+    if not id_zrodla:
+        return jsonify({"status": "error", "message": "Brak parametru id_reaktora_zrodlowego."}), 400
+
+    try:
+        tank_zrodlo = db.session.get(Sprzet, id_zrodla)
+        if not tank_zrodlo or tank_zrodlo.typ_sprzetu != 'reaktor':
+            return jsonify({"status": "error", "message": "Nieprawidłowy reaktor źródłowy."}), 404
+        nazwa_zrodla = tank_zrodlo.nazwa_unikalna
+        start_point = f"{nazwa_zrodla}_OUT"
+        end_point_same = f"{nazwa_zrodla}_IN"
+
+        all_valves = db.session.execute(db.select(Zawory.nazwa_zaworu)).scalars().all()
+        open_valves_list = [v[0] if isinstance(v, (list, tuple)) else v for v in (all_valves or [])]
+
+        pathfinder = get_pathfinder()
+        wszystkie_filtry = db.session.execute(
+            db.select(Sprzet.nazwa_unikalna).where(Sprzet.typ_sprzetu == 'filtr').order_by(Sprzet.nazwa_unikalna)
+        ).scalars().all()
+        if not wszystkie_filtry:
+            return jsonify({"destinations": [], "message": "Brak filtra w systemie."}), 200
+
+        destinations = []
+
+        # Ten sam reaktor (koło): źródło → filtr → źródło
+        for f in wszystkie_filtry:
+            nazwa_filtra = f[0] if isinstance(f, (list, tuple)) else f
+            posredni_in = f"{nazwa_filtra}_IN"
+            posredni_out = f"{nazwa_filtra}_OUT"
+            sciezka_1 = pathfinder.find_path(start_point, posredni_in, open_valves_list)
+            sciezka_wewnetrzna = pathfinder.find_path(posredni_in, posredni_out, open_valves_list)
+            sciezka_2 = pathfinder.find_path(posredni_out, end_point_same, open_valves_list)
+            if sciezka_1 and sciezka_wewnetrzna and sciezka_2:
+                destinations.append({"id": tank_zrodlo.id, "nazwa_unikalna": nazwa_zrodla, "is_same_reactor": True})
+                break
+
+        # Inne reaktory: tylko puste, z trasą źródło → filtr → cel
+        reaktory_puste_q = db.select(Sprzet).where(
+            Sprzet.typ_sprzetu == 'reaktor',
+            Sprzet.id != id_zrodla,
+            Sprzet.active_mix_id.is_(None)
+        ).order_by(Sprzet.nazwa_unikalna)
+        reaktory_puste = db.session.execute(reaktory_puste_q).scalars().all()
+
+        for reaktor in reaktory_puste:
+            nazwa_celu = reaktor.nazwa_unikalna
+            end_point = f"{nazwa_celu}_IN"
+            for f in wszystkie_filtry:
+                nazwa_filtra = f[0] if isinstance(f, (list, tuple)) else f
+                posredni_in = f"{nazwa_filtra}_IN"
+                posredni_out = f"{nazwa_filtra}_OUT"
+                sciezka_1 = pathfinder.find_path(start_point, posredni_in, open_valves_list)
+                sciezka_wewnetrzna = pathfinder.find_path(posredni_in, posredni_out, open_valves_list)
+                sciezka_2 = pathfinder.find_path(posredni_out, end_point, open_valves_list)
+                if sciezka_1 and sciezka_wewnetrzna and sciezka_2:
+                    destinations.append({"id": reaktor.id, "nazwa_unikalna": reaktor.nazwa_unikalna, "is_same_reactor": False})
+                    break
+
+        return jsonify({"destinations": destinations}), 200
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
 @bp.route('/continue-to-przelew', methods=['POST'])
 def continue_to_przelew():
     """

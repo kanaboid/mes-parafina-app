@@ -754,7 +754,7 @@ document.addEventListener('DOMContentLoaded', () => {
             handleOpenTransferModal(sprzetId, sprzetNazwa, wagaPartii);
         } else if (action === 'open-start-filtration-modal') {
             const mixId = targetElement.dataset.mixId;
-            handleOpenStartFiltrationModal(mixId, sprzetNazwa);
+            handleOpenStartFiltrationModal(mixId, sprzetNazwa, sprzetId);
         } else if (action === 'open-dobielanie-modal') {
             const mixId = targetElement.dataset.mixId;
             document.getElementById('dobielanie-mix-id').value = mixId || '';
@@ -1037,7 +1037,7 @@ document.addEventListener('DOMContentLoaded', () => {
         modals.startHeating.show();
     }
 
-    async function handleOpenStartFiltrationModal(mixId, reaktorNazwa) {
+    async function handleOpenStartFiltrationModal(mixId, reaktorNazwa, idReaktoraZrodlowego) {
         document.getElementById('start-filtration-mix-id').value = mixId;
         document.getElementById('start-filtration-reaktor-name').textContent = reaktorNazwa;
         document.getElementById('start-filtration-reaktor-nazwa').value = reaktorNazwa;
@@ -1046,25 +1046,27 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('start-filtration-error').classList.add('d-none');
         modals.startFiltration.show();
 
+        if (!idReaktoraZrodlowego) {
+            container.innerHTML = '<p class="text-danger mb-0">Brak reaktora źródłowego.</p>';
+            return;
+        }
         try {
-            const response = await fetch('/api/sprzet/dostepne-cele');
-            if (!response.ok) throw new Error('Błąd ładowania listy celów');
-            const destinations = await response.json();
+            const response = await fetch(`/api/operations/start-filtration-destinations?id_reaktora_zrodlowego=${idReaktoraZrodlowego}`);
+            if (!response.ok) {
+                const err = await response.json().catch(() => ({}));
+                throw new Error(err.message || 'Błąd ładowania listy celów');
+            }
+            const data = await response.json();
+            const destinations = data.destinations || [];
             container.innerHTML = '';
-            const reaktory = destinations.filter((item) => item.typ_sprzetu === 'reaktor');
-            if (reaktory.length === 0) {
-                container.innerHTML = '<p class="text-muted mb-0">Brak innego reaktora jako celu filtracji.</p>';
+            if (destinations.length === 0) {
+                container.innerHTML = '<p class="text-muted mb-0">Brak celów z możliwą trasą (tylko puste reaktory z trasą Pathfinder).</p>';
                 return;
             }
-            reaktory.forEach((item, index) => {
-                let labelContent = `<div class="d-flex w-100 justify-content-between"><h6 class="mb-1">${item.nazwa_unikalna}</h6><small>${item.stan_sprzetu || '—'}</small></div>`;
-                if (item.mix_info && item.mix_info.total_weight > 0.01) {
-                    const wagaTon = (item.mix_info.total_weight / 1000).toFixed(2);
-                    const types = (item.mix_info.components || []).map((c) => c.material_type).join(', ');
-                    labelContent += `<p class="mb-1 small text-muted">${wagaTon} t, ${types || '—'}</p>`;
-                } else {
-                    labelContent += `<p class="mb-1 small text-muted">Pusty</p>`;
-                }
+            destinations.forEach((item, index) => {
+                const title = item.is_same_reactor ? `${item.nazwa_unikalna} (koło)` : item.nazwa_unikalna;
+                const subtitle = item.is_same_reactor ? 'Ten sam reaktor' : 'Pusty';
+                const labelContent = `<div class="d-flex w-100 justify-content-between"><h6 class="mb-1">${title}</h6><small class="text-muted">${subtitle}</small></div>`;
                 const radioId = `start-filtration-dest-${item.id}`;
                 const label = document.createElement('label');
                 label.htmlFor = radioId;
@@ -1074,7 +1076,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         } catch (error) {
             console.error('Błąd ładowania celów filtracji:', error);
-            container.innerHTML = '<p class="text-danger mb-0">Nie udało się załadować listy reaktorów.</p>';
+            container.innerHTML = '<p class="text-danger mb-0">' + (error.message || 'Nie udało się załadować listy reaktorów.') + '</p>';
         }
     }
 
