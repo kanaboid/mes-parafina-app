@@ -19,7 +19,8 @@ document.addEventListener('DOMContentLoaded', () => {
         transferTankToTank: new bootstrap.Modal(document.getElementById('transfer-tank-to-tank-modal')),
         startFiltration: new bootstrap.Modal(document.getElementById('start-filtration-modal')),
         ocenaProbki: new bootstrap.Modal(document.getElementById('ocena-probki-modal')),
-        przelewDest: new bootstrap.Modal(document.getElementById('przelew-dest-modal'))
+        przelewDest: new bootstrap.Modal(document.getElementById('przelew-dest-modal')),
+        dobielanie: new bootstrap.Modal(document.getElementById('dobielanie-modal'))
     };
     const forms = {
         planTransfer: document.getElementById('plan-transfer-form'),
@@ -28,7 +29,8 @@ document.addEventListener('DOMContentLoaded', () => {
         transferTankToTank: document.getElementById('transfer-tank-to-tank-form'),
         startFiltration: document.getElementById('start-filtration-form'),
         ocenaProbki: document.getElementById('ocena-probki-form'),
-        przelewDest: document.getElementById('przelew-dest-form')
+        przelewDest: document.getElementById('przelew-dest-form'),
+        dobielanie: document.getElementById('dobielanie-form')
     };
 
     const formatValue = (value, unit = '', decimalPlaces = 1) => {
@@ -119,6 +121,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 <i class="fas fa-exchange-alt"></i>
             </button>`;
 
+            // Przycisk Dobielanie – gdy process_status: SUROWY, PODGRZEWANY, DO_PONOWNEJ_FILTRACJI, FILTRACJA_PRZELEW_PRZERWANE
+            const canDobielanie = r.partia && ['SUROWY', 'PODGRZEWANY', 'DO_PONOWNEJ_FILTRACJI', 'FILTRACJA_PRZELEW_PRZERWANE'].includes(r.partia.process_status);
+            if (canDobielanie) {
+                actionButtonsHTML += `
+                    <button class="btn btn-warning action-btn" 
+                            data-action="open-dobielanie-modal" 
+                            data-sprzet-id="${r.id}"
+                            data-sprzet-nazwa="${r.nazwa}"
+                            data-mix-id="${r.partia.id}"
+                            title="Zarejestruj dodanie ziemi bielącej">
+                        <i class="fas fa-cube me-1"></i>Dobielanie
+                    </button>`;
+            }
             // Sprawdź, czy należy dodać przycisk kontekstowy
             if (r.partia && r.partia.process_status === 'SUROWY') {
                 actionButtonsHTML += `
@@ -740,6 +755,14 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (action === 'open-start-filtration-modal') {
             const mixId = targetElement.dataset.mixId;
             handleOpenStartFiltrationModal(mixId, sprzetNazwa);
+        } else if (action === 'open-dobielanie-modal') {
+            const mixId = targetElement.dataset.mixId;
+            document.getElementById('dobielanie-mix-id').value = mixId || '';
+            document.getElementById('dobielanie-reaktor-name').textContent = sprzetNazwa || '—';
+            document.getElementById('dobielanie-bags').value = 6;
+            document.getElementById('dobielanie-weight').value = 25;
+            document.getElementById('dobielanie-error').classList.add('d-none');
+            modals.dobielanie.show();
         }
     });
 
@@ -1250,6 +1273,43 @@ document.addEventListener('DOMContentLoaded', () => {
                 initialLoad();
             } catch (error) {
                 console.error('Błąd continue-to-przelew:', error);
+                errorDiv.textContent = error.message;
+                errorDiv.classList.remove('d-none');
+            }
+        });
+    }
+
+    // Obsługa formularza Dobielanie
+    if (forms.dobielanie) {
+        forms.dobielanie.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const mixId = document.getElementById('dobielanie-mix-id').value;
+            const bags = parseInt(document.getElementById('dobielanie-bags').value, 10);
+            const weight = parseFloat(document.getElementById('dobielanie-weight').value);
+            const errorDiv = document.getElementById('dobielanie-error');
+            if (!mixId || bags < 1 || !weight || weight <= 0) {
+                errorDiv.textContent = 'Wprowadź poprawną ilość worków i wagę worka (kg).';
+                errorDiv.classList.remove('d-none');
+                return;
+            }
+            errorDiv.classList.add('d-none');
+            try {
+                const response = await fetch(`/api/workflow/mix/${mixId}/add-bleach`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        bags_count: bags,
+                        bag_weight: weight,
+                        operator: 'GUI'
+                    })
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error || result.message || 'Błąd serwera');
+                showToast(result.message || 'Dobielanie zarejestrowane.', 'success');
+                modals.dobielanie.hide();
+                initialLoad();
+            } catch (error) {
+                console.error('Błąd dobielania:', error);
                 errorDiv.textContent = error.message;
                 errorDiv.classList.remove('d-none');
             }
