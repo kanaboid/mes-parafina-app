@@ -137,6 +137,7 @@ class DashboardService:
         active_operations_data = [
             {
                 "id": op.id,
+                "typ_operacji": op.typ_operacji,
                 "opis": op.opis or "Transfer",
                 "zrodlo": op.sprzet_zrodlowy.nazwa_unikalna if op.sprzet_zrodlowy else 'System',
                 "cel": op.sprzet_docelowy.nazwa_unikalna if op.sprzet_docelowy else 'System',

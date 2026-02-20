@@ -125,15 +125,16 @@ document.addEventListener('DOMContentLoaded', () => {
                         Wlącz palnik(INFO)
                     </button>`;
             }
-            // Przycisk Start filtracji – gdy mieszanina w statusie DOBIELONY_OCZEKUJE
-            if (r.partia && r.partia.process_status === 'DOBIELONY_OCZEKUJE') {
+            // Przycisk Start filtracji – gdy mieszanina w statusie DOBIELONY_OCZEKUJE lub FILTRACJA_KOLO
+            if (r.partia && (r.partia.process_status === 'DOBIELONY_OCZEKUJE' || r.partia.process_status === 'FILTRACJA_KOLO')) {
+                const labelFiltracji = r.partia.process_status === 'FILTRACJA_KOLO' ? 'Start filtracji (koło)' : 'Start filtracji';
                 actionButtonsHTML += `
                     <button class="btn btn-success action-btn" 
                             data-action="open-start-filtration-modal" 
                             data-sprzet-id="${r.id}"
                             data-sprzet-nazwa="${r.nazwa}"
                             data-mix-id="${r.partia.id}">
-                        <i class="fas fa-filter me-1"></i>Start filtracji
+                        <i class="fas fa-filter me-1"></i>${labelFiltracji}
                     </button>`;
             }
             
@@ -636,9 +637,15 @@ document.addEventListener('DOMContentLoaded', () => {
         operations.forEach(op => {
             const startTime = new Date(op.czas_rozpoczecia);
             const timeSince = Math.round((new Date() - startTime) / 1000 / 60); // minuty temu
+            const canContinueToKolo = op.typ_operacji === 'FILTRACJA_PLACEK_KOLO' || op.typ_operacji === 'FILTRACJA_PLACEK_PRZELEW';
+            const continueBtn = canContinueToKolo
+                ? `<button type="button" class="btn btn-sm btn-outline-primary ms-2 continue-to-kolo-btn" data-op-id="${op.id}" title="Zakończ ten etap i rozpocznij FILTRACJA_KOLO">
+                        <i class="fas fa-forward me-1"></i>Następny etap (FILTRACJA_KOLO)
+                    </button>`
+                : '';
 
             const itemHTML = `
-                <div class="list-group-item d-flex justify-content-between align-items-center">
+                <div class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <div class="flex-grow-1">
                         <div class="d-flex w-100 justify-content-between">
                             <h6 class="mb-1 text-info">${op.opis}</h6>
@@ -650,9 +657,12 @@ document.addEventListener('DOMContentLoaded', () => {
                             <span class="badge bg-success">${op.cel}</span>
                         </p>
                     </div>
-                    <button type="button" class="btn btn-sm btn-outline-danger ms-2 end-operation-btn" data-op-id="${op.id}" title="Zakończ operację">
-                        <i class="fas fa-stop-circle me-1"></i>Zakończ
-                    </button>
+                    <div class="d-flex gap-1">
+                        ${continueBtn}
+                        <button type="button" class="btn btn-sm btn-outline-danger end-operation-btn" data-op-id="${op.id}" title="Zakończ operację">
+                            <i class="fas fa-stop-circle me-1"></i>Zakończ
+                        </button>
+                    </div>
                 </div>`;
             activeOperationsContainer.innerHTML += itemHTML;
         });
@@ -720,13 +730,38 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Zakończ operację – klik w przycisk w Logu Aktywnych Operacji
     activeOperationsContainer.addEventListener('click', async (e) => {
-        const btn = e.target.closest('.end-operation-btn');
-        if (!btn) return;
+        const endBtn = e.target.closest('.end-operation-btn');
+        const continueBtn = e.target.closest('.continue-to-kolo-btn');
+        if (continueBtn) {
+            e.preventDefault();
+            const opId = continueBtn.getAttribute('data-op-id');
+            if (!opId) return;
+            continueBtn.disabled = true;
+            continueBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Oczekuj...';
+            try {
+                const response = await fetch('/api/operations/continue-to-kolo', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id_operacji: parseInt(opId, 10) })
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.message || result.error || 'Błąd serwera');
+                showToast(result.message || 'Rozpoczęto FILTRACJA_KOLO.', 'success');
+                initialLoad();
+            } catch (err) {
+                console.error('Błąd continue-to-kolo:', err);
+                showToast(err.message, 'error');
+                continueBtn.disabled = false;
+                continueBtn.innerHTML = '<i class="fas fa-forward me-1"></i>Następny etap (FILTRACJA_KOLO)';
+            }
+            return;
+        }
+        if (!endBtn) return;
         e.preventDefault();
-        const opId = btn.getAttribute('data-op-id');
+        const opId = endBtn.getAttribute('data-op-id');
         if (!opId) return;
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Zakończ';
+        endBtn.disabled = true;
+        endBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Zakończ';
         try {
             const response = await fetch('/api/operations/zakoncz', {
                 method: 'POST',
@@ -742,8 +777,8 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (err) {
             console.error('Błąd zakończenia operacji:', err);
             showToast(err.message, 'error');
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-stop-circle me-1"></i>Zakończ';
+            endBtn.disabled = false;
+            endBtn.innerHTML = '<i class="fas fa-stop-circle me-1"></i>Zakończ';
         }
     });
 

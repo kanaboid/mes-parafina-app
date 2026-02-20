@@ -814,3 +814,173 @@ def zakoncz_operacje():
         db.session.rollback()
         traceback.print_exc()
         return jsonify({"status": "error", "message": f"Błąd wewnętrzny serwera: {str(e)}"}), 500
+
+
+@bp.route('/continue-to-kolo', methods=['POST'])
+def continue_to_kolo():
+    """
+    Kończy bieżącą operację FILTRACJA_PLACEK_KOLO lub FILTRACJA_PLACEK_PRZELEW
+    i uruchamia następny etap: FILTRACJA_KOLO (rezerwując trasę przez filtr).
+    """
+    dane = request.get_json()
+    if not dane or 'id_operacji' not in dane:
+        return jsonify({"status": "error", "message": "Brak wymaganego pola: id_operacji."}), 400
+
+    id_operacji = dane['id_operacji']
+    operator = dane.get('operator', 'GUI')
+    try:
+        operacja = db.session.get(OperacjeLog, id_operacji)
+        if not operacja:
+            return jsonify({"status": "error", "message": f"Operacja o ID {id_operacji} nie istnieje."}), 404
+        if operacja.status_operacji != 'aktywna':
+            return jsonify({"status": "error", "message": "Operacja nie jest aktywna."}), 409
+        if operacja.typ_operacji not in ('FILTRACJA_PLACEK_KOLO', 'FILTRACJA_PLACEK_PRZELEW'):
+            return jsonify({
+                "status": "error",
+                "message": f"Kontynuacja do FILTRACJA_KOLO tylko z operacji FILTRACJA_PLACEK_KOLO lub FILTRACJA_PLACEK_PRZELEW (obecny: {operacja.typ_operacji})."
+            }), 409
+
+        mix = None
+        if operacja.id_tank_mix:
+            mix = db.session.get(TankMixes, operacja.id_tank_mix)
+        if not mix and operacja.id_sprzetu_zrodlowego:
+            reaktor = db.session.get(Sprzet, operacja.id_sprzetu_zrodlowego)
+            if reaktor and reaktor.active_mix_id:
+                mix = db.session.get(TankMixes, reaktor.active_mix_id)
+        if not mix:
+            return jsonify({"status": "error", "message": "Nie znaleziono mieszaniny dla tej operacji."}), 404
+
+        # 1. Zakończ bieżącą operację: zamknij zawory, ustaw next_status, przenieś mix jeśli cel≠źródło
+        operacja.status_operacji = 'zakonczona'
+        operacja.czas_zakonczenia = dt.now(timezone.utc)
+        if operacja.segmenty:
+            for segment in operacja.segmenty:
+                if segment.zawory:
+                    segment.zawory.stan = 'ZAMKNIETY'
+
+        next_status = {
+            'FILTRACJA_PLACEK_KOLO': 'FILTRACJA_PRZELEW',
+            'FILTRACJA_PLACEK_PRZELEW': 'FILTRACJA_KOLO',
+        }.get(operacja.typ_operacji)
+        if next_status:
+            mix.process_status = next_status
+        if (
+            operacja.id_sprzetu_zrodlowego is not None
+            and operacja.id_sprzetu_docelowego is not None
+            and operacja.id_sprzetu_zrodlowego != operacja.id_sprzetu_docelowego
+        ):
+            mix.tank_id = operacja.id_sprzetu_docelowego
+            sprzet_zrodlowy = db.session.get(Sprzet, operacja.id_sprzetu_zrodlowego)
+            sprzet_docelowy = db.session.get(Sprzet, operacja.id_sprzetu_docelowego)
+            if sprzet_zrodlowy and sprzet_zrodlowy.active_mix_id == mix.id:
+                sprzet_zrodlowy.active_mix_id = None
+            if sprzet_docelowy:
+                sprzet_docelowy.active_mix_id = mix.id
+
+        # 2. Ustaw mix na etap FILTRACJA_KOLO i wyznacz trasę (reaktor → filtr → ten sam reaktor)
+        mix.process_status = 'FILTRACJA_KOLO'
+        tank = db.session.get(Sprzet, mix.tank_id)
+        if not tank:
+            db.session.rollback()
+            return jsonify({"status": "error", "message": "Brak reaktora dla mieszaniny."}), 404
+        nazwa = tank.nazwa_unikalna
+        start_point = f"{nazwa}_OUT"
+        end_point = f"{nazwa}_IN"
+
+        open_valves_list = db.session.execute(
+            db.select(Zawory.nazwa_zaworu).where(Zawory.stan == 'OTWARTY')
+        ).scalars().all()
+        if not open_valves_list:
+            open_valves_list = db.session.execute(db.select(Zawory.nazwa_zaworu)).scalars().all()
+
+        pathfinder = get_pathfinder()
+        filtry = db.session.execute(
+            db.select(Sprzet.nazwa_unikalna).where(Sprzet.typ_sprzetu == 'filtr').order_by(Sprzet.nazwa_unikalna)
+        ).scalars().all()
+        if not filtry:
+            db.session.rollback()
+            return jsonify({"status": "error", "message": "Brak filtra w systemie."}), 400
+        sprzet_posredni = None
+        for nazwa_filtra in filtry:
+            trasa_do_celu = pathfinder.find_path(f"{nazwa_filtra}_OUT", end_point, open_valves_list)
+            if trasa_do_celu:
+                sprzet_posredni = nazwa_filtra
+                break
+        if not sprzet_posredni:
+            db.session.rollback()
+            return jsonify({
+                "status": "error",
+                "message": f"Żaden filtr nie ma połączenia z reaktorem docelowym ({end_point})."
+            }), 404
+
+        posredni_in = f"{sprzet_posredni}_IN"
+        posredni_out = f"{sprzet_posredni}_OUT"
+        sciezka_1 = pathfinder.find_path(start_point, posredni_in, open_valves_list)
+        if not sciezka_1:
+            db.session.rollback()
+            return jsonify({"status": "error", "message": f"Nie znaleziono ścieżki z {start_point} do {posredni_in}."}), 404
+        sciezka_wewnetrzna = pathfinder.find_path(posredni_in, posredni_out, open_valves_list)
+        if not sciezka_wewnetrzna:
+            db.session.rollback()
+            return jsonify({"status": "error", "message": f"Nie znaleziono ścieżki wewnętrznej w {sprzet_posredni}."}), 404
+        sciezka_2 = pathfinder.find_path(posredni_out, end_point, open_valves_list)
+        if not sciezka_2:
+            db.session.rollback()
+            return jsonify({"status": "error", "message": f"Nie znaleziono ścieżki z {posredni_out} do {end_point}."}), 404
+        znaleziona_sciezka_nazwy = sciezka_1 + sciezka_wewnetrzna + sciezka_2
+
+        konflikt_query = db.select(Segmenty.nazwa_segmentu).join(Segmenty.operacje_log).where(
+            OperacjeLog.status_operacji == 'aktywna',
+            Segmenty.nazwa_segmentu.in_(znaleziona_sciezka_nazwy)
+        )
+        konflikty = db.session.execute(konflikt_query).scalars().all()
+        if konflikty:
+            db.session.rollback()
+            return jsonify({
+                "status": "error",
+                "message": "Konflikt zasobów - trasa zajęta przez inną operację.",
+                "zajete_segmenty": [k for k in konflikty]
+            }), 409
+
+        zawory_na_trasie = set()
+        for u, v, edge_data in pathfinder.graph.edges(data=True):
+            if edge_data.get('segment_name') in znaleziona_sciezka_nazwy:
+                zawory_na_trasie.add(edge_data['valve_name'])
+        if zawory_na_trasie:
+            db.session.execute(
+                db.update(Zawory).where(Zawory.nazwa_zaworu.in_(zawory_na_trasie)).values(stan='OTWARTY')
+            )
+
+        nowa_operacja = OperacjeLog(
+            typ_operacji='FILTRACJA_KOLO',
+            id_tank_mix=mix.id,
+            id_sprzetu_zrodlowego=mix.tank_id,
+            id_sprzetu_docelowego=mix.tank_id,
+            status_operacji='aktywna',
+            czas_rozpoczecia=dt.now(timezone.utc),
+            opis=f"Operacja FILTRACJA_KOLO z {start_point} do {end_point}",
+            punkt_startowy=start_point,
+            punkt_docelowy=end_point,
+            zmodyfikowane_przez=operator,
+        )
+        db.session.add(nowa_operacja)
+        db.session.flush()
+        segmenty_trasy = db.session.execute(
+            db.select(Segmenty).where(Segmenty.nazwa_segmentu.in_(znaleziona_sciezka_nazwy))
+        ).scalars().all()
+        nowa_operacja.segmenty = list(segmenty_trasy)
+
+        db.session.commit()
+        try:
+            broadcast_dashboard_update()
+        except Exception:
+            pass
+        return jsonify({
+            "status": "success",
+            "message": "Zakończono poprzedni etap i rozpoczęto FILTRACJA_KOLO.",
+            "id_operacji": nowa_operacja.id,
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        traceback.print_exc()
+        return jsonify({"status": "error", "message": str(e)}), 500

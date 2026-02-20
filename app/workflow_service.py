@@ -222,39 +222,45 @@ class WorkflowService:
         mix = db.session.get(TankMixes, mix_id)
         if not mix:
             raise ValueError(f"Mieszanina o ID {mix_id} nie istnieje.")
-        if mix.process_status != 'DOBIELONY_OCZEKUJE':
+        if mix.process_status not in ('DOBIELONY_OCZEKUJE', 'FILTRACJA_KOLO'):
             raise ValueError(
                 f"Nie można rozpocząć filtracji. Obecny status: '{mix.process_status}'. "
-                "Wymagany: 'DOBIELONY_OCZEKUJE'."
+                "Dozwolone: 'DOBIELONY_OCZEKUJE' lub 'FILTRACJA_KOLO'."
             )
 
-        # Sprawdzenie: czy od ostatniego cyklu filtracji było nowe dobielanie
-        ostatnia_filtracja = db.session.execute(
-            select(OperacjeLog)
-            .where(
-                OperacjeLog.id_tank_mix == mix.id,
-                OperacjeLog.typ_operacji.in_(
-                    ('FILTRACJA_PLACEK_KOLO', 'FILTRACJA_PLACEK_PRZELEW', 'FILTRACJA_PRZELEW', 'FILTRACJA_KOLO', 'FILTRACJA_WYDMUCH')
-                ),
-            )
-            .order_by(OperacjeLog.czas_rozpoczecia.desc())
-        ).scalars().first()
-
-        ostatnie_dobielanie = db.session.execute(
-            select(OperacjeLog)
-            .where(
-                OperacjeLog.id_tank_mix == mix.id,
-                OperacjeLog.typ_operacji == 'DOBIELANIE',
-            )
-            .order_by(OperacjeLog.czas_rozpoczecia.desc())
-        ).scalars().first()
-
-        if ostatnia_filtracja and ostatnie_dobielanie:
-            if ostatnie_dobielanie.czas_rozpoczecia <= ostatnia_filtracja.czas_rozpoczecia:
-                raise ValueError(
-                    "Od ostatniego cyklu filtracji nie dodano nowych worków z ziemią. "
-                    "Wymagane jest nowe dobielanie przed rozpoczęciem filtracji."
+        # Dla FILTRACJA_KOLO tylko uruchamiamy kolejny cykl (bez sprawdzania dobielania)
+        if mix.process_status == 'FILTRACJA_KOLO':
+            typ_operacji = 'FILTRACJA_KOLO'
+            # Identyfikacja sprzętu i utworzenie operacji – poniżej
+        else:
+            # Sprawdzenie: czy od ostatniego cyklu filtracji było nowe dobielanie
+            ostatnia_filtracja = db.session.execute(
+                select(OperacjeLog)
+                .where(
+                    OperacjeLog.id_tank_mix == mix.id,
+                    OperacjeLog.typ_operacji.in_(
+                        ('FILTRACJA_PLACEK_KOLO', 'FILTRACJA_PLACEK_PRZELEW', 'FILTRACJA_PRZELEW', 'FILTRACJA_KOLO', 'FILTRACJA_WYDMUCH')
+                    ),
                 )
+                .order_by(OperacjeLog.czas_rozpoczecia.desc())
+            ).scalars().first()
+
+            ostatnie_dobielanie = db.session.execute(
+                select(OperacjeLog)
+                .where(
+                    OperacjeLog.id_tank_mix == mix.id,
+                    OperacjeLog.typ_operacji == 'DOBIELANIE',
+                )
+                .order_by(OperacjeLog.czas_rozpoczecia.desc())
+            ).scalars().first()
+
+            if ostatnia_filtracja and ostatnie_dobielanie:
+                if ostatnie_dobielanie.czas_rozpoczecia <= ostatnia_filtracja.czas_rozpoczecia:
+                    raise ValueError(
+                        "Od ostatniego cyklu filtracji nie dodano nowych worków z ziemią. "
+                        "Wymagane jest nowe dobielanie przed rozpoczęciem filtracji."
+                    )
+            # typ_operacji ustawiony poniżej na podstawie wydmuch/same_reactor/przelew
 
         # Identyfikacja sprzętu źródłowego i docelowego z punktów trasy (np. R6_OUT → R6, R8_IN → R8)
         nazwa_zrodla = start_point.rsplit('_', 1)[0] if start_point and '_' in start_point else None
@@ -270,19 +276,20 @@ class WorkflowService:
                 select(Sprzet.id).where(Sprzet.nazwa_unikalna == nazwa_celu)
             ).scalar_one_or_none()
 
-        # Typ operacji: WYDMUCH gdy mieszanina wydmuchowa; inaczej KOLO (źródło=cel) lub PLACEK_PRZELEW (źródło≠cel)
-        same_reactor = (
-            id_sprzetu_zrodlowego is not None
-            and id_sprzetu_docelowego is not None
-            and id_sprzetu_zrodlowego == id_sprzetu_docelowego
-        )
-        if mix.is_wydmuch_mix:
-            typ_operacji = 'FILTRACJA_WYDMUCH'
-        elif same_reactor:
-            typ_operacji = 'FILTRACJA_PLACEK_KOLO'
-        else:
-            typ_operacji = 'FILTRACJA_PLACEK_PRZELEW'
-        mix.process_status = typ_operacji
+        # Typ operacji: dla już FILTRACJA_KOLO pozostaje; inaczej WYDMUCH / PLACEK_KOLO / PLACEK_PRZELEW
+        if mix.process_status != 'FILTRACJA_KOLO':
+            same_reactor = (
+                id_sprzetu_zrodlowego is not None
+                and id_sprzetu_docelowego is not None
+                and id_sprzetu_zrodlowego == id_sprzetu_docelowego
+            )
+            if mix.is_wydmuch_mix:
+                typ_operacji = 'FILTRACJA_WYDMUCH'
+            elif same_reactor:
+                typ_operacji = 'FILTRACJA_PLACEK_KOLO'
+            else:
+                typ_operacji = 'FILTRACJA_PLACEK_PRZELEW'
+            mix.process_status = typ_operacji
 
         opis = f"Operacja {typ_operacji} z {start_point} do {end_point}"
         nowa_operacja = OperacjeLog(
