@@ -788,6 +788,19 @@ def zakoncz_operacje():
                     if operacja.typ_operacji == 'FILTRACJA_WYDMUCH':
                         mix.is_wydmuch_mix = False
                         mix.filtration_cycles_count = (mix.filtration_cycles_count or 0) + 1
+                # Jeśli cel ≠ źródło – przenieś mieszaninę do reaktora docelowego (tank_id + active_mix)
+                if (
+                    operacja.id_sprzetu_zrodlowego is not None
+                    and operacja.id_sprzetu_docelowego is not None
+                    and operacja.id_sprzetu_zrodlowego != operacja.id_sprzetu_docelowego
+                ):
+                    mix.tank_id = operacja.id_sprzetu_docelowego
+                    sprzet_zrodlowy = db.session.get(Sprzet, operacja.id_sprzetu_zrodlowego)
+                    sprzet_docelowy = db.session.get(Sprzet, operacja.id_sprzetu_docelowego)
+                    if sprzet_zrodlowy and sprzet_zrodlowy.active_mix_id == mix.id:
+                        sprzet_zrodlowy.active_mix_id = None
+                    if sprzet_docelowy:
+                        sprzet_docelowy.active_mix_id = mix.id
 
         # Krok 5: Zatwierdź transakcję
         db.session.commit()
