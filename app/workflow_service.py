@@ -222,15 +222,16 @@ class WorkflowService:
         mix = db.session.get(TankMixes, mix_id)
         if not mix:
             raise ValueError(f"Mieszanina o ID {mix_id} nie istnieje.")
-        if mix.process_status not in ('DOBIELONY_OCZEKUJE', 'FILTRACJA_KOLO'):
+        if mix.process_status not in ('DOBIELONY_OCZEKUJE', 'FILTRACJA_KOLO', 'OCZEKUJE_NA_OCENE'):
             raise ValueError(
                 f"Nie można rozpocząć filtracji. Obecny status: '{mix.process_status}'. "
-                "Dozwolone: 'DOBIELONY_OCZEKUJE' lub 'FILTRACJA_KOLO'."
+                "Dozwolone: 'DOBIELONY_OCZEKUJE', 'FILTRACJA_KOLO' lub 'OCZEKUJE_NA_OCENE'."
             )
 
-        # Dla FILTRACJA_KOLO tylko uruchamiamy kolejny cykl (bez sprawdzania dobielania)
-        if mix.process_status == 'FILTRACJA_KOLO':
+        # Dla FILTRACJA_KOLO lub OCZEKUJE_NA_OCENE uruchamiamy kolejny cykl (bez sprawdzania dobielania)
+        if mix.process_status in ('FILTRACJA_KOLO', 'OCZEKUJE_NA_OCENE'):
             typ_operacji = 'FILTRACJA_KOLO'
+            mix.process_status = 'FILTRACJA_KOLO'
             # Identyfikacja sprzętu i utworzenie operacji – poniżej
         else:
             # Sprawdzenie: czy od ostatniego cyklu filtracji było nowe dobielanie
@@ -276,8 +277,8 @@ class WorkflowService:
                 select(Sprzet.id).where(Sprzet.nazwa_unikalna == nazwa_celu)
             ).scalar_one_or_none()
 
-        # Typ operacji: dla już FILTRACJA_KOLO pozostaje; inaczej WYDMUCH / PLACEK_KOLO / PLACEK_PRZELEW
-        if mix.process_status != 'FILTRACJA_KOLO':
+        # Typ operacji: dla FILTRACJA_KOLO już ustawiony; inaczej WYDMUCH / PLACEK_KOLO / PLACEK_PRZELEW
+        if typ_operacji != 'FILTRACJA_KOLO':
             same_reactor = (
                 id_sprzetu_zrodlowego is not None
                 and id_sprzetu_docelowego is not None

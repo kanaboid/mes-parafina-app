@@ -144,9 +144,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         Wlącz palnik(INFO)
                     </button>`;
             }
-            // Przycisk Start filtracji – gdy mieszanina w statusie DOBIELONY_OCZEKUJE lub FILTRACJA_KOLO
-            if (r.partia && (r.partia.process_status === 'DOBIELONY_OCZEKUJE' || r.partia.process_status === 'FILTRACJA_KOLO')) {
-                const labelFiltracji = r.partia.process_status === 'FILTRACJA_KOLO' ? 'Start filtracji (koło)' : 'Start filtracji';
+            // Przycisk Start filtracji – gdy DOBIELONY_OCZEKUJE, FILTRACJA_KOLO lub OCZEKUJE_NA_OCENE
+            if (r.partia && ['DOBIELONY_OCZEKUJE', 'FILTRACJA_KOLO', 'OCZEKUJE_NA_OCENE'].includes(r.partia.process_status)) {
+                const labelFiltracji = r.partia.process_status === 'DOBIELONY_OCZEKUJE' ? 'Start filtracji' : 'Start filtracji (koło)';
                 actionButtonsHTML += `
                     <button class="btn btn-success action-btn" 
                             data-action="open-start-filtration-modal" 
