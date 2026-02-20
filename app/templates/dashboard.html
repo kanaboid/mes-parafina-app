@@ -210,6 +210,32 @@
     </div>
 </div>
 
+<!-- Modal Wybór reaktora docelowego dla FILTRACJA_PRZELEW (następny krok po FILTRACJA_PLACEK_KOLO) -->
+<div class="modal fade" id="przelew-dest-modal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Następny etap: FILTRACJA_PRZELEW – wybierz reaktor docelowy</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Zamknij"></button>
+            </div>
+            <div class="modal-body">
+                <form id="przelew-dest-form">
+                    <input type="hidden" id="przelew-dest-id-operacji">
+                    <p class="text-muted small">Źródło: <span id="przelew-dest-zrodlo-name" class="fw-bold"></span></p>
+                    <div class="mb-3">
+                        <label class="form-label">Reaktor docelowy:</label>
+                        <div id="przelew-dest-container" class="list-group">
+                            <!-- Opcje ładowane przez JS -->
+                        </div>
+                    </div>
+                    <div id="przelew-dest-error" class="alert alert-danger d-none"></div>
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-forward me-1"></i>Rozpocznij FILTRACJA_PRZELEW</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Modal Ocena próbki (następny krok po FILTRACJA_KOLO) -->
 <div class="modal fade" id="ocena-probki-modal" tabindex="-1">
     <div class="modal-dialog">

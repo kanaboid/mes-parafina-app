@@ -18,7 +18,8 @@ document.addEventListener('DOMContentLoaded', () => {
         simulationSettings: new bootstrap.Modal(document.getElementById('simulation-settings-modal')),
         transferTankToTank: new bootstrap.Modal(document.getElementById('transfer-tank-to-tank-modal')),
         startFiltration: new bootstrap.Modal(document.getElementById('start-filtration-modal')),
-        ocenaProbki: new bootstrap.Modal(document.getElementById('ocena-probki-modal'))
+        ocenaProbki: new bootstrap.Modal(document.getElementById('ocena-probki-modal')),
+        przelewDest: new bootstrap.Modal(document.getElementById('przelew-dest-modal'))
     };
     const forms = {
         planTransfer: document.getElementById('plan-transfer-form'),
@@ -26,7 +27,8 @@ document.addEventListener('DOMContentLoaded', () => {
         simulationSettings: document.getElementById('simulation-settings-form'),
         transferTankToTank: document.getElementById('transfer-tank-to-tank-form'),
         startFiltration: document.getElementById('start-filtration-form'),
-        ocenaProbki: document.getElementById('ocena-probki-form')
+        ocenaProbki: document.getElementById('ocena-probki-form'),
+        przelewDest: document.getElementById('przelew-dest-form')
     };
 
     const formatValue = (value, unit = '', decimalPlaces = 1) => {
@@ -651,11 +653,16 @@ document.addEventListener('DOMContentLoaded', () => {
         operations.forEach(op => {
             const startTime = new Date(op.czas_rozpoczecia);
             const timeSince = Math.round((new Date() - startTime) / 1000 / 60); // minuty temu
-            const canContinueToKolo = op.typ_operacji === 'FILTRACJA_PLACEK_KOLO' || op.typ_operacji === 'FILTRACJA_PLACEK_PRZELEW';
+            const canContinueToPrzelew = op.typ_operacji === 'FILTRACJA_PLACEK_KOLO';
+            const canContinueToKolo = op.typ_operacji === 'FILTRACJA_PRZELEW' || op.typ_operacji === 'FILTRACJA_PLACEK_PRZELEW';
             const canContinueToOcena = op.typ_operacji === 'FILTRACJA_KOLO';
             const canContinueToMagazyn = op.typ_operacji === 'FILTRACJA_KOLO_ZATWIERDZONA';
             let continueBtn = '';
-            if (canContinueToKolo) {
+            if (canContinueToPrzelew) {
+                continueBtn = `<button type="button" class="btn btn-sm btn-outline-primary continue-to-przelew-btn" data-op-id="${op.id}" data-zrodlo="${(op.zrodlo || '').replace(/"/g, '&quot;')}" title="Zakończ ten etap i rozpocznij FILTRACJA_PRZELEW (wybór reaktora docelowego)">
+                        <i class="fas fa-forward me-1"></i>Następny etap (FILTRACJA_PRZELEW)
+                    </button>`;
+            } else if (canContinueToKolo) {
                 continueBtn = `<button type="button" class="btn btn-sm btn-outline-primary continue-to-kolo-btn" data-op-id="${op.id}" title="Zakończ ten etap i rozpocznij FILTRACJA_KOLO">
                         <i class="fas fa-forward me-1"></i>Następny etap (FILTRACJA_KOLO)
                     </button>`;
@@ -770,6 +777,51 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('ocena-powod-wrap').classList.add('d-none');
             document.getElementById('ocena-probki-error').classList.add('d-none');
             modals.ocenaProbki.show();
+            return;
+        }
+        const continuePrzelewBtn = e.target.closest('.continue-to-przelew-btn');
+        if (continuePrzelewBtn) {
+            e.preventDefault();
+            const opId = continuePrzelewBtn.getAttribute('data-op-id');
+            const zrodlo = continuePrzelewBtn.getAttribute('data-zrodlo') || '';
+            if (!opId) return;
+            document.getElementById('przelew-dest-id-operacji').value = opId;
+            document.getElementById('przelew-dest-zrodlo-name').textContent = zrodlo || '—';
+            document.getElementById('przelew-dest-error').classList.add('d-none');
+            const container = document.getElementById('przelew-dest-container');
+            container.innerHTML = '<div class="list-group-item text-muted">Ładowanie reaktorów...</div>';
+            modals.przelewDest.show();
+            fetch('/api/sprzet/dostepne-cele')
+                .then(res => res.ok ? res.json() : Promise.reject(new Error('Błąd ładowania')))
+                .then(destinations => {
+                    const reaktory = destinations.filter((item) => item.typ_sprzetu === 'reaktor' && item.nazwa_unikalna !== zrodlo);
+                    container.innerHTML = '';
+                    if (reaktory.length === 0) {
+                        container.innerHTML = '<p class="text-muted mb-0">Brak innego reaktora (wykluczono źródło).</p>';
+                        return;
+                    }
+                    reaktory.forEach((item, index) => {
+                        const radioId = `przelew-dest-${item.id}`;
+                        const mixInfo = item.mix_info;
+                        const hasMix = mixInfo && mixInfo.total_weight > 0.01;
+                        let infoHtml;
+                        if (!hasMix) {
+                            infoHtml = '<span class="badge bg-success">Pusty</span>';
+                        } else {
+                            const wagaT = (mixInfo.total_weight / 1000).toFixed(2);
+                            const sklad = (mixInfo.components || []).map((c) => c.material_type || '—').filter(Boolean).join(', ') || '—';
+                            infoHtml = `<span class="small"><strong>${wagaT} t</strong><br><span class="text-muted">${sklad}</span></span>`;
+                        }
+                        const label = document.createElement('label');
+                        label.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center';
+                        label.setAttribute('for', radioId);
+                        label.innerHTML = `<span><input class="form-check-input me-2" type="radio" name="przelew-dest-reaktor" value="${item.id}" id="${radioId}" data-nazwa="${(item.nazwa_unikalna || '').replace(/"/g, '&quot;')}" ${index === 0 ? 'checked' : ''}> ${item.nazwa_unikalna || item.id}</span><span class="text-end">${infoHtml}</span>`;
+                        container.appendChild(label);
+                    });
+                })
+                .catch(() => {
+                    container.innerHTML = '<p class="text-danger mb-0">Nie udało się załadować listy reaktorów.</p>';
+                });
             return;
         }
         if (continueMagazynBtn) {
@@ -1170,6 +1222,39 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     });
+
+    // Obsługa formularza wyboru reaktora docelowego dla FILTRACJA_PRZELEW
+    if (forms.przelewDest) {
+        forms.przelewDest.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const idOperacji = document.getElementById('przelew-dest-id-operacji').value;
+            const selected = document.querySelector('input[name="przelew-dest-reaktor"]:checked');
+            const errorDiv = document.getElementById('przelew-dest-error');
+            if (!idOperacji || !selected) {
+                errorDiv.textContent = 'Wybierz reaktor docelowy.';
+                errorDiv.classList.remove('d-none');
+                return;
+            }
+            const idReaktoraDocelowego = parseInt(selected.value, 10);
+            errorDiv.classList.add('d-none');
+            try {
+                const response = await fetch('/api/operations/continue-to-przelew', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id_operacji: parseInt(idOperacji, 10), id_reaktora_docelowego: idReaktoraDocelowego })
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.message || result.error || 'Błąd serwera');
+                showToast(result.message || 'Rozpoczęto FILTRACJA_PRZELEW.', 'success');
+                modals.przelewDest.hide();
+                initialLoad();
+            } catch (error) {
+                console.error('Błąd continue-to-przelew:', error);
+                errorDiv.textContent = error.message;
+                errorDiv.classList.remove('d-none');
+            }
+        });
+    }
 
     // Obsługa formularza Ocena próbki (wynik OK / do ponownej filtracji)
     if (forms.ocenaProbki) {
