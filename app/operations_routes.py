@@ -10,6 +10,7 @@ import traceback
 from decimal import Decimal
 from .batch_management_service import BatchManagementService
 
+from sqlalchemy.orm import joinedload
 from .extensions import db
 from .models import Sprzet, PortySprzetu, Segmenty, Zawory, OperacjeLog, t_log_uzyte_segmenty, ApolloSesje, ApolloTracking, PartieApollo, TankMixes
 from app.sockets import broadcast_apollo_update, broadcast_dashboard_update
@@ -1438,14 +1439,19 @@ def continue_to_ocena():
 @bp.route('/continue-to-magazyn', methods=['POST'])
 def continue_to_magazyn():
     """
-    Kończy operację FILTRACJA_KOLO_ZATWIERDZONA. Mix pozostaje w statusie ZATWIERDZONA;
-    operator może wykonać transfer na magazyn (beczka czysta) przez istniejący modal Przelej.
+    Przenosi mieszaninę z reaktora do wybranej beczki czystej, wyznacza nową trasę do celu
+    i ustawia typ_operacji na NA_MAGAZYN. Operacja pozostaje aktywna (możliwość przejścia do DMUCHANIE).
+    Wymaga id_operacji i id_beczki_czystej.
     """
     dane = request.get_json()
-    if not dane or 'id_operacji' not in dane:
-        return jsonify({"status": "error", "message": "Brak wymaganego pola: id_operacji."}), 400
+    if not dane or 'id_operacji' not in dane or 'id_beczki_czystej' not in dane:
+        return jsonify({
+            "status": "error",
+            "message": "Brak wymaganych pól: id_operacji, id_beczki_czystej."
+        }), 400
 
-    id_operacji = dane['id_operacji']
+    id_operacji = int(dane['id_operacji'])
+    id_beczki_czystej = int(dane['id_beczki_czystej'])
     operator = dane.get('operator', 'GUI')
 
     try:
@@ -1460,8 +1466,73 @@ def continue_to_magazyn():
                 "message": f"Kontynuacja na magazyn tylko z operacji FILTRACJA_KOLO_ZATWIERDZONA (obecny: {operacja.typ_operacji})."
             }), 409
 
-        operacja.status_operacji = 'zakonczona'
-        operacja.czas_zakonczenia = dt.now(timezone.utc)
+        id_reaktora = operacja.id_sprzetu_zrodlowego
+        if not id_reaktora:
+            return jsonify({"status": "error", "message": "Operacja nie ma przypisanego reaktora źródłowego."}), 400
+
+        reaktor = db.session.get(Sprzet, id_reaktora)
+        if not reaktor or reaktor.typ_sprzetu != 'reaktor':
+            return jsonify({"status": "error", "message": "Nieprawidłowy reaktor źródłowy operacji."}), 400
+        if not reaktor.active_mix_id:
+            return jsonify({"status": "error", "message": "W reaktorze źródłowym nie ma mieszaniny."}), 400
+
+        beczka = db.session.get(Sprzet, id_beczki_czystej)
+        if not beczka or beczka.typ_sprzetu != 'beczka_czysta':
+            return jsonify({"status": "error", "message": "Wybrany cel nie jest beczką czystą."}), 400
+
+        composition = BatchManagementService.get_mix_composition(reaktor.active_mix_id)
+        total_weight = float(composition.get('total_weight', 0))
+        if total_weight <= 0:
+            return jsonify({"status": "error", "message": "Mieszanina w reaktorze ma zerową wagę."}), 400
+
+        # Wyznaczenie trasy: reaktor_OUT → beczka_IN (wszystkie zawory otwarte)
+        start_point = f"{reaktor.nazwa_unikalna}_OUT"
+        end_point = f"{beczka.nazwa_unikalna}_IN"
+        pathfinder = get_pathfinder()
+        all_valves = db.session.execute(db.select(Zawory.nazwa_zaworu)).scalars().all()
+        open_valves_list = [v[0] if isinstance(v, (list, tuple)) else v for v in (all_valves or [])]
+        znaleziona_sciezka_nazwy = pathfinder.find_path(start_point, end_point, open_valves_list)
+        if not znaleziona_sciezka_nazwy:
+            return jsonify({
+                "status": "error",
+                "message": f"Nie znaleziono trasy z {reaktor.nazwa_unikalna} do {beczka.nazwa_unikalna}."
+            }), 400
+
+        # Konflikt: inne aktywne operacje używające segmentów z nowej trasy (pomijamy bieżącą operację)
+        konflikt_query = db.select(Segmenty.nazwa_segmentu).join(
+            Segmenty.operacje_log
+        ).where(
+            OperacjeLog.status_operacji == 'aktywna',
+            OperacjeLog.id != id_operacji,
+            Segmenty.nazwa_segmentu.in_(znaleziona_sciezka_nazwy)
+        )
+        konflikty = db.session.execute(konflikt_query).scalars().all()
+        if konflikty:
+            return jsonify({
+                "status": "error",
+                "message": "Konflikt zasobów – segmenty trasy są używane przez inną operację.",
+                "zajete_segmenty": [k[0] if isinstance(k, (list, tuple)) else k for k in konflikty]
+            }), 409
+
+        # Aktualizacja operacji: cel, nowa trasa, typ NA_MAGAZYN; operacja pozostaje aktywna
+        operacja.id_sprzetu_docelowego = id_beczki_czystej
+        operacja.typ_operacji = 'NA_MAGAZYN'
+        operacja.opis = f"NA_MAGAZYN: {reaktor.nazwa_unikalna} → {beczka.nazwa_unikalna}"
+        operacja.punkt_startowy = start_point
+        operacja.punkt_docelowy = end_point
+
+        segmenty_trasy = db.session.execute(
+            db.select(Segmenty).where(Segmenty.nazwa_segmentu.in_(znaleziona_sciezka_nazwy))
+        ).scalars().all()
+        operacja.segmenty = list(segmenty_trasy)
+
+        # Przelew mieszaniny
+        BatchManagementService.transfer_between_dirty_tanks(
+            source_tank_id=id_reaktora,
+            destination_tank_id=id_beczki_czystej,
+            quantity_to_transfer=Decimal(str(total_weight)),
+            operator=operator,
+        )
         db.session.commit()
         try:
             broadcast_dashboard_update()
@@ -1469,7 +1540,196 @@ def continue_to_magazyn():
             pass
         return jsonify({
             "status": "success",
-            "message": "Operacja zakończona. Użyj przycisku Przelej / Na magazyn, aby przenieść mieszaninę do beczki czystej.",
+            "message": f"Mieszanina przelana do {beczka.nazwa_unikalna}. Operacja aktywna – możesz przejść do DMUCHANIE.",
+        }), 200
+    except ValueError as e:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        traceback.print_exc()
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@bp.route('/continue-to-dmuchanie', methods=['POST'])
+def continue_to_dmuchanie():
+    """
+    Kończy operację NA_MAGAZYN i tworzy nową, osobną operację DMUCHANIE w operacje_log.
+    Nowa operacja korzysta z tej samej trasy (segmenty) co zakończona NA_MAGAZYN – blokuje ją na czas dmuchania.
+    """
+    dane = request.get_json()
+    if not dane or 'id_operacji' not in dane:
+        return jsonify({"status": "error", "message": "Brak wymaganego pola: id_operacji."}), 400
+
+    id_operacji = int(dane['id_operacji'])
+    operator = dane.get('operator', 'GUI')
+
+    try:
+        operacja = db.session.execute(
+            db.select(OperacjeLog).options(joinedload(OperacjeLog.segmenty)).where(OperacjeLog.id == id_operacji)
+        ).unique().scalar_one_or_none()
+        if not operacja:
+            return jsonify({"status": "error", "message": f"Operacja o ID {id_operacji} nie istnieje."}), 404
+        if operacja.status_operacji != 'aktywna':
+            return jsonify({"status": "error", "message": "Operacja nie jest aktywna."}), 409
+        if operacja.typ_operacji != 'NA_MAGAZYN':
+            return jsonify({
+                "status": "error",
+                "message": f"Przejście do DMUCHANIE tylko z operacji NA_MAGAZYN (obecny: {operacja.typ_operacji})."
+            }), 409
+
+        # Zakończenie operacji NA_MAGAZYN
+        operacja.status_operacji = 'zakonczona'
+        operacja.czas_zakonczenia = dt.now(timezone.utc)
+
+        # Nowa operacja DMUCHANIE – ta sama trasa (źródło, cel, segmenty)
+        zrodlo_nazwa = operacja.sprzet_zrodlowy.nazwa_unikalna if operacja.sprzet_zrodlowy else '—'
+        cel_nazwa = operacja.sprzet_docelowy.nazwa_unikalna if operacja.sprzet_docelowy else '—'
+        nowa_operacja = OperacjeLog(
+            typ_operacji='DMUCHANIE',
+            status_operacji='aktywna',
+            czas_rozpoczecia=dt.now(timezone.utc),
+            id_sprzetu_zrodlowego=operacja.id_sprzetu_zrodlowego,
+            id_sprzetu_docelowego=operacja.id_sprzetu_docelowego,
+            opis=f"DMUCHANIE: {zrodlo_nazwa} → {cel_nazwa}",
+            punkt_startowy=operacja.punkt_startowy,
+            punkt_docelowy=operacja.punkt_docelowy,
+            zmodyfikowane_przez=operator,
+        )
+        db.session.add(nowa_operacja)
+        db.session.flush()
+        nowa_operacja.segmenty = list(operacja.segmenty)
+        db.session.commit()
+        try:
+            broadcast_dashboard_update()
+        except Exception:
+            pass
+        return jsonify({
+            "status": "success",
+            "message": "Operacja NA_MAGAZYN zakończona. Rozpoczęto operację DMUCHANIE (ta sama trasa).",
+            "id_operacji_dmuchanie": nowa_operacja.id,
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        traceback.print_exc()
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@bp.route('/dmuchanie-destinations', methods=['GET'])
+def dmuchanie_destinations():
+    """
+    Zwraca listę możliwych celów dla operacji DMUCHANIE (zmiana celu).
+    Query: id_operacji (wymagane). Źródło z operacji; cele: reaktory (w tym koło) + beczki czyste z trasą Pathfinder.
+    """
+    id_operacji = request.args.get('id_operacji', type=int)
+    if not id_operacji:
+        return jsonify({"status": "error", "message": "Brak parametru id_operacji."}), 400
+
+    try:
+        operacja = db.session.get(OperacjeLog, id_operacji)
+        if not operacja or operacja.status_operacji != 'aktywna' or operacja.typ_operacji != 'DMUCHANIE':
+            return jsonify({"status": "error", "message": "Nieprawidłowa lub nieaktywna operacja DMUCHANIE."}), 404
+        id_zrodla = operacja.id_sprzetu_zrodlowego
+        if not id_zrodla:
+            return jsonify({"status": "error", "message": "Operacja nie ma źródła."}), 400
+
+        tank_zrodlo = db.session.get(Sprzet, id_zrodla)
+        if not tank_zrodlo:
+            return jsonify({"status": "error", "message": "Nie znaleziono urządzenia źródłowego."}), 404
+        nazwa_zrodla = tank_zrodlo.nazwa_unikalna
+        start_point = f"{nazwa_zrodla}_OUT"
+
+        all_valves = db.session.execute(db.select(Zawory.nazwa_zaworu)).scalars().all()
+        open_valves_list = [v[0] if isinstance(v, (list, tuple)) else v for v in (all_valves or [])]
+        pathfinder = get_pathfinder()
+
+        destinations = []
+        # Reaktory: ten sam (koło) + puste
+        reaktory_q = db.select(Sprzet).where(Sprzet.typ_sprzetu == 'reaktor').order_by(Sprzet.nazwa_unikalna)
+        reaktory = db.session.execute(reaktory_q).scalars().all()
+        for r in reaktory:
+            end_point = f"{r.nazwa_unikalna}_IN"
+            if pathfinder.find_path(start_point, end_point, open_valves_list):
+                destinations.append({"id": r.id, "nazwa_unikalna": r.nazwa_unikalna, "typ_sprzetu": "reaktor"})
+        # Beczki czyste
+        beczki_q = db.select(Sprzet).where(Sprzet.typ_sprzetu == 'beczka_czysta').order_by(Sprzet.nazwa_unikalna)
+        beczki = db.session.execute(beczki_q).scalars().all()
+        for b in beczki:
+            end_point = f"{b.nazwa_unikalna}_IN"
+            if pathfinder.find_path(start_point, end_point, open_valves_list):
+                destinations.append({"id": b.id, "nazwa_unikalna": b.nazwa_unikalna, "typ_sprzetu": "beczka_czysta"})
+
+        return jsonify({"destinations": destinations}), 200
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@bp.route('/dmuchanie-change-destination', methods=['POST'])
+def dmuchanie_change_destination():
+    """
+    Zmienia cel aktywnej operacji DMUCHANIE i wyznacza nową trasę do wybranego celu.
+    """
+    dane = request.get_json()
+    if not dane or 'id_operacji' not in dane or 'id_sprzetu_docelowego' not in dane:
+        return jsonify({"status": "error", "message": "Brak wymaganych pól: id_operacji, id_sprzetu_docelowego."}), 400
+
+    id_operacji = int(dane['id_operacji'])
+    id_celu = int(dane['id_sprzetu_docelowego'])
+    operator = dane.get('operator', 'GUI')
+
+    try:
+        operacja = db.session.get(OperacjeLog, id_operacji)
+        if not operacja or operacja.status_operacji != 'aktywna' or operacja.typ_operacji != 'DMUCHANIE':
+            return jsonify({"status": "error", "message": "Nieprawidłowa lub nieaktywna operacja DMUCHANIE."}), 404
+        id_zrodla = operacja.id_sprzetu_zrodlowego
+        if not id_zrodla:
+            return jsonify({"status": "error", "message": "Operacja nie ma źródła."}), 400
+
+        zrodlo = db.session.get(Sprzet, id_zrodla)
+        cel = db.session.get(Sprzet, id_celu)
+        if not zrodlo or not cel:
+            return jsonify({"status": "error", "message": "Nieprawidłowe źródło lub cel."}), 404
+
+        start_point = f"{zrodlo.nazwa_unikalna}_OUT"
+        end_point = f"{cel.nazwa_unikalna}_IN"
+        pathfinder = get_pathfinder()
+        all_valves = db.session.execute(db.select(Zawory.nazwa_zaworu)).scalars().all()
+        open_valves_list = [v[0] if isinstance(v, (list, tuple)) else v for v in (all_valves or [])]
+        znaleziona_sciezka_nazwy = pathfinder.find_path(start_point, end_point, open_valves_list)
+        if not znaleziona_sciezka_nazwy:
+            return jsonify({"status": "error", "message": f"Nie znaleziono trasy do {cel.nazwa_unikalna}."}), 400
+
+        konflikt_query = db.select(Segmenty.nazwa_segmentu).join(Segmenty.operacje_log).where(
+            OperacjeLog.status_operacji == 'aktywna',
+            OperacjeLog.id != id_operacji,
+            Segmenty.nazwa_segmentu.in_(znaleziona_sciezka_nazwy)
+        )
+        konflikty = db.session.execute(konflikt_query).scalars().all()
+        if konflikty:
+            return jsonify({
+                "status": "error",
+                "message": "Konflikt zasobów – segmenty trasy są używane przez inną operację.",
+                "zajete_segmenty": [k[0] if isinstance(k, (list, tuple)) else k for k in konflikty]
+            }), 409
+
+        operacja.id_sprzetu_docelowego = id_celu
+        operacja.punkt_docelowy = end_point
+        operacja.opis = f"DMUCHANIE: {zrodlo.nazwa_unikalna} → {cel.nazwa_unikalna}"
+        operacja.zmodyfikowane_przez = operator
+        operacja.ostatnia_modyfikacja = dt.now(timezone.utc)
+        segmenty_trasy = db.session.execute(
+            db.select(Segmenty).where(Segmenty.nazwa_segmentu.in_(znaleziona_sciezka_nazwy))
+        ).scalars().all()
+        operacja.segmenty = list(segmenty_trasy)
+        db.session.commit()
+        try:
+            broadcast_dashboard_update()
+        except Exception:
+            pass
+        return jsonify({
+            "status": "success",
+            "message": f"Cel operacji DMUCHANIE ustawiony na {cel.nazwa_unikalna}.",
         }), 200
     except Exception as e:
         db.session.rollback()

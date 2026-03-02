@@ -270,6 +270,56 @@
     </div>
 </div>
 
+<!-- Modal NA_MAGAZYN – wybór beczki czystej (cel przelewu) -->
+<div class="modal fade" id="na-magazyn-modal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Następny etap (NA_MAGAZYN) – wybierz beczkę czystą</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Zamknij"></button>
+            </div>
+            <div class="modal-body">
+                <form id="na-magazyn-form">
+                    <input type="hidden" id="na-magazyn-id-operacji">
+                    <div class="mb-3">
+                        <label class="form-label">Beczka docelowa (magazyn czysty):</label>
+                        <div id="na-magazyn-destinations-container" class="list-group">
+                            <!-- Opcje ładowane przez JS z informacją o zawartości -->
+                        </div>
+                    </div>
+                    <div id="na-magazyn-error" class="alert alert-danger d-none"></div>
+                    <button type="submit" class="btn btn-success"><i class="fas fa-warehouse me-1"></i>Zakończ etap i przelej na magazyn</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal DMUCHANIE – zmiana celu operacji -->
+<div class="modal fade" id="dmuchanie-change-dest-modal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">DMUCHANIE – zmiana celu operacji</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Zamknij"></button>
+            </div>
+            <div class="modal-body">
+                <form id="dmuchanie-change-dest-form">
+                    <input type="hidden" id="dmuchanie-change-dest-id-operacji">
+                    <div class="mb-3">
+                        <label class="form-label">Nowy cel (urządzenie docelowe):</label>
+                        <div id="dmuchanie-change-dest-container" class="list-group">
+                            <!-- Opcje ładowane przez JS -->
+                        </div>
+                    </div>
+                    <div id="dmuchanie-change-dest-error" class="alert alert-danger d-none"></div>
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-route me-1"></i>Ustaw cel i trasę</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Modal Dobielanie (ziemia bieląca) -->
 <div class="modal fade" id="dobielanie-modal" tabindex="-1">
     <div class="modal-dialog">

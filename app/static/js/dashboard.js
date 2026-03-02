@@ -20,6 +20,8 @@ document.addEventListener('DOMContentLoaded', () => {
         startFiltration: new bootstrap.Modal(document.getElementById('start-filtration-modal')),
         ocenaProbki: new bootstrap.Modal(document.getElementById('ocena-probki-modal')),
         przelewDest: new bootstrap.Modal(document.getElementById('przelew-dest-modal')),
+        naMagazyn: new bootstrap.Modal(document.getElementById('na-magazyn-modal')),
+        dmuchanieChangeDest: new bootstrap.Modal(document.getElementById('dmuchanie-change-dest-modal')),
         dobielanie: new bootstrap.Modal(document.getElementById('dobielanie-modal'))
     };
     const forms = {
@@ -30,6 +32,8 @@ document.addEventListener('DOMContentLoaded', () => {
         startFiltration: document.getElementById('start-filtration-form'),
         ocenaProbki: document.getElementById('ocena-probki-form'),
         przelewDest: document.getElementById('przelew-dest-form'),
+        naMagazyn: document.getElementById('na-magazyn-form'),
+        dmuchanieChangeDest: document.getElementById('dmuchanie-change-dest-form'),
         dobielanie: document.getElementById('dobielanie-form')
     };
 
@@ -668,11 +672,15 @@ document.addEventListener('DOMContentLoaded', () => {
         operations.forEach(op => {
             const startTime = new Date(op.czas_rozpoczecia);
             const timeSince = Math.round((new Date() - startTime) / 1000 / 60); // minuty temu
-            const canContinueToPrzelew = op.typ_operacji === 'FILTRACJA_PLACEK_KOLO';
-            const canContinueToKolo = op.typ_operacji === 'FILTRACJA_PRZELEW' || op.typ_operacji === 'FILTRACJA_PLACEK_PRZELEW';
-            const canContinueToOcena = op.typ_operacji === 'FILTRACJA_KOLO';
-            const canContinueToMagazyn = op.typ_operacji === 'FILTRACJA_KOLO_ZATWIERDZONA';
+            const typ = (op.typ_operacji || '').toString().trim();
+            const canContinueToPrzelew = typ === 'FILTRACJA_PLACEK_KOLO';
+            const canContinueToKolo = typ === 'FILTRACJA_PRZELEW' || typ === 'FILTRACJA_PLACEK_PRZELEW';
+            const canContinueToOcena = typ === 'FILTRACJA_KOLO';
+            const canContinueToMagazyn = typ === 'FILTRACJA_KOLO_ZATWIERDZONA';
+            const canContinueToDmuchanie = typ === 'NA_MAGAZYN' || (op.opis && String(op.opis).indexOf('NA_MAGAZYN') === 0);
+            const isDmuchanie = typ === 'DMUCHANIE' || (op.opis && String(op.opis).indexOf('DMUCHANIE') === 0);
             let continueBtn = '';
+            let changeDestBtn = '';
             if (canContinueToPrzelew) {
                 continueBtn = `<button type="button" class="btn btn-sm btn-outline-primary continue-to-przelew-btn" data-op-id="${op.id}" data-zrodlo="${(op.zrodlo || '').replace(/"/g, '&quot;')}" title="Zakończ ten etap i rozpocznij FILTRACJA_PRZELEW (wybór reaktora docelowego)">
                         <i class="fas fa-forward me-1"></i>Następny etap (FILTRACJA_PRZELEW)
@@ -686,8 +694,17 @@ document.addEventListener('DOMContentLoaded', () => {
                         <i class="fas fa-vial me-1"></i>Następny etap (Ocena próbki)
                     </button>`;
             } else if (canContinueToMagazyn) {
-                continueBtn = `<button type="button" class="btn btn-sm btn-outline-success continue-to-magazyn-btn" data-op-id="${op.id}" title="Zakończ etap i przelej na magazyn">
+                continueBtn = `<button type="button" class="btn btn-sm btn-outline-success continue-to-magazyn-btn" data-op-id="${op.id}" title="Wybierz beczkę czystą i przelej na magazyn (operacja pozostanie aktywna)">
                         <i class="fas fa-warehouse me-1"></i>Następny etap (NA_MAGAZYN)
+                    </button>`;
+            } else if (canContinueToDmuchanie) {
+                continueBtn = `<button type="button" class="btn btn-sm btn-outline-secondary continue-to-dmuchanie-btn" data-op-id="${op.id}" title="Przedmuchiwanie rurociągu – trasa zablokowana na czas dmuchania">
+                        <i class="fas fa-wind me-1"></i>Przejdź do DMUCHANIE
+                    </button>`;
+            }
+            if (isDmuchanie) {
+                changeDestBtn = `<button type="button" class="btn btn-sm btn-outline-primary dmuchanie-change-dest-btn" data-op-id="${op.id}" title="Zmień cel operacji i wyznacz nową trasę">
+                        <i class="fas fa-route me-1"></i>Zmień cel
                     </button>`;
             }
 
@@ -706,6 +723,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                     <div class="d-flex gap-1">
                         ${continueBtn}
+                        ${changeDestBtn}
                         <button type="button" class="btn btn-sm btn-outline-danger end-operation-btn" data-op-id="${op.id}" title="Zakończ operację">
                             <i class="fas fa-stop-circle me-1"></i>Zakończ
                         </button>
@@ -841,24 +859,91 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             const opId = continueMagazynBtn.getAttribute('data-op-id');
             if (!opId) return;
-            continueMagazynBtn.disabled = true;
-            continueMagazynBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Oczekuj...';
+            document.getElementById('na-magazyn-id-operacji').value = opId;
+            document.getElementById('na-magazyn-error').classList.add('d-none');
+            const container = document.getElementById('na-magazyn-destinations-container');
+            const beczkiCzyste = (latestDashboardData && latestDashboardData.beczki_czyste) ? latestDashboardData.beczki_czyste : [];
+            container.innerHTML = '';
+            if (beczkiCzyste.length === 0) {
+                container.innerHTML = '<p class="text-muted mb-0">Brak beczek czystych w systemie.</p>';
+            } else {
+                beczkiCzyste.forEach((b, index) => {
+                    let zawartosc = 'Pusty';
+                    if (b.partia && b.partia.sklad && b.partia.sklad.length > 0) {
+                        const wagaTon = b.partia.waga_kg ? (b.partia.waga_kg / 1000).toFixed(2) : '0';
+                        const types = b.partia.sklad.map(c => c.material_type || c).join(', ');
+                        zawartosc = `${wagaTon} t, ${types}`;
+                    } else if (b.partia && b.partia.waga_kg > 0.01) {
+                        zawartosc = (b.partia.waga_kg / 1000).toFixed(2) + ' t';
+                    }
+                    const radioId = `na-magazyn-dest-${b.id}`;
+                    const label = document.createElement('label');
+                    label.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-start';
+                    label.setAttribute('for', radioId);
+                    label.innerHTML = `<span class="me-2"><input class="form-check-input" type="radio" name="na-magazyn-destination" value="${b.id}" id="${radioId}" ${index === 0 ? 'checked' : ''}></span><span class="flex-grow-1"><strong>${b.nazwa || b.id}</strong><br><small class="text-muted">${zawartosc}</small></span>`;
+                    container.appendChild(label);
+                });
+            }
+            modals.naMagazyn.show();
+            return;
+        }
+        const continueDmuchanieBtn = e.target.closest('.continue-to-dmuchanie-btn');
+        if (continueDmuchanieBtn) {
+            e.preventDefault();
+            const opId = continueDmuchanieBtn.getAttribute('data-op-id');
+            if (!opId) return;
+            continueDmuchanieBtn.disabled = true;
+            continueDmuchanieBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Oczekuj...';
             try {
-                const response = await fetch('/api/operations/continue-to-magazyn', {
+                const response = await fetch('/api/operations/continue-to-dmuchanie', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id_operacji: parseInt(opId, 10) })
+                    body: JSON.stringify({ id_operacji: parseInt(opId, 10), operator: 'GUI' })
                 });
                 const result = await response.json();
                 if (!response.ok) throw new Error(result.message || result.error || 'Błąd serwera');
-                showToast(result.message || 'Możesz wykonać przelew na magazyn.', 'success');
+                showToast(result.message || 'Operacja NA_MAGAZYN zakończona. Rozpoczęto operację DMUCHANIE.', 'success');
                 initialLoad();
             } catch (err) {
-                console.error('Błąd continue-to-magazyn:', err);
+                console.error('Błąd continue-to-dmuchanie:', err);
                 showToast(err.message, 'error');
-                continueMagazynBtn.disabled = false;
-                continueMagazynBtn.innerHTML = '<i class="fas fa-warehouse me-1"></i>Następny etap (NA_MAGAZYN)';
+                continueDmuchanieBtn.disabled = false;
+                continueDmuchanieBtn.innerHTML = '<i class="fas fa-wind me-1"></i>Przejdź do DMUCHANIE';
             }
+            return;
+        }
+        const dmuchanieChangeDestBtn = e.target.closest('.dmuchanie-change-dest-btn');
+        if (dmuchanieChangeDestBtn) {
+            e.preventDefault();
+            const opId = dmuchanieChangeDestBtn.getAttribute('data-op-id');
+            if (!opId) return;
+            document.getElementById('dmuchanie-change-dest-id-operacji').value = opId;
+            document.getElementById('dmuchanie-change-dest-error').classList.add('d-none');
+            const container = document.getElementById('dmuchanie-change-dest-container');
+            container.innerHTML = '<div class="list-group-item text-muted">Ładowanie celów...</div>';
+            modals.dmuchanieChangeDest.show();
+            fetch(`/api/operations/dmuchanie-destinations?id_operacji=${opId}`)
+                .then(res => res.ok ? res.json() : Promise.reject(new Error('Błąd ładowania')))
+                .then(data => {
+                    const destinations = data.destinations || [];
+                    container.innerHTML = '';
+                    if (destinations.length === 0) {
+                        container.innerHTML = '<p class="text-muted mb-0">Brak celów z możliwą trasą.</p>';
+                        return;
+                    }
+                    destinations.forEach((item, index) => {
+                        const radioId = `dmuchanie-dest-${item.id}`;
+                        const typBadge = item.typ_sprzetu === 'beczka_czysta' ? 'beczka czysta' : 'reaktor';
+                        const label = document.createElement('label');
+                        label.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center';
+                        label.setAttribute('for', radioId);
+                        label.innerHTML = `<span><input class="form-check-input me-2" type="radio" name="dmuchanie-change-dest" value="${item.id}" id="${radioId}" data-nazwa="${(item.nazwa_unikalna || '').replace(/"/g, '&quot;')}" ${index === 0 ? 'checked' : ''}> ${item.nazwa_unikalna || item.id}</span><span class="badge bg-secondary">${typBadge}</span>`;
+                        container.appendChild(label);
+                    });
+                })
+                .catch(() => {
+                    container.innerHTML = '<p class="text-danger mb-0">Nie udało się załadować listy celów.</p>';
+                });
             return;
         }
         if (continueKoloBtn) {
@@ -1265,6 +1350,80 @@ document.addEventListener('DOMContentLoaded', () => {
                 initialLoad();
             } catch (error) {
                 console.error('Błąd continue-to-przelew:', error);
+                errorDiv.textContent = error.message;
+                errorDiv.classList.remove('d-none');
+            }
+        });
+    }
+
+    // Obsługa formularza NA_MAGAZYN – wybór beczki czystej, zakończenie etapu i przelew
+    if (forms.naMagazyn) {
+        forms.naMagazyn.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const idOperacji = document.getElementById('na-magazyn-id-operacji').value;
+            const selected = document.querySelector('input[name="na-magazyn-destination"]:checked');
+            const errorDiv = document.getElementById('na-magazyn-error');
+            if (!idOperacji || !selected) {
+                errorDiv.textContent = 'Wybierz beczkę czystą (cel przelewu).';
+                errorDiv.classList.remove('d-none');
+                return;
+            }
+            const idBeczkiCzystej = parseInt(selected.value, 10);
+            errorDiv.classList.add('d-none');
+            try {
+                const response = await fetch('/api/operations/continue-to-magazyn', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        id_operacji: parseInt(idOperacji, 10),
+                        id_beczki_czystej: idBeczkiCzystej,
+                        operator: 'GUI'
+                    })
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.message || result.error || 'Błąd serwera');
+                showToast(result.message || 'Mieszanina przelana na magazyn. Operacja aktywna – możesz przejść do DMUCHANIE.', 'success');
+                modals.naMagazyn.hide();
+                initialLoad();
+            } catch (error) {
+                console.error('Błąd continue-to-magazyn:', error);
+                errorDiv.textContent = error.message;
+                errorDiv.classList.remove('d-none');
+            }
+        });
+    }
+
+    // Obsługa formularza DMUCHANIE – zmiana celu
+    if (forms.dmuchanieChangeDest) {
+        forms.dmuchanieChangeDest.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const idOperacji = document.getElementById('dmuchanie-change-dest-id-operacji').value;
+            const selected = document.querySelector('input[name="dmuchanie-change-dest"]:checked');
+            const errorDiv = document.getElementById('dmuchanie-change-dest-error');
+            if (!idOperacji || !selected) {
+                errorDiv.textContent = 'Wybierz cel operacji.';
+                errorDiv.classList.remove('d-none');
+                return;
+            }
+            const idSprzetuDocelowego = parseInt(selected.value, 10);
+            errorDiv.classList.add('d-none');
+            try {
+                const response = await fetch('/api/operations/dmuchanie-change-destination', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        id_operacji: parseInt(idOperacji, 10),
+                        id_sprzetu_docelowego: idSprzetuDocelowego,
+                        operator: 'GUI'
+                    })
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.message || result.error || 'Błąd serwera');
+                showToast(result.message || 'Cel operacji DMUCHANIE zaktualizowany.', 'success');
+                modals.dmuchanieChangeDest.hide();
+                initialLoad();
+            } catch (error) {
+                console.error('Błąd dmuchanie-change-destination:', error);
                 errorDiv.textContent = error.message;
                 errorDiv.classList.remove('d-none');
             }
