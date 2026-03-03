@@ -23,7 +23,17 @@
     </div>
 
     <!-- SEKCJA PRZENIESIONA: Aktywne Operacje -->
-    <h2 class="mb-3">Log Aktywnych Operacji</h2>
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="mb-0">Log Aktywnych Operacji</h2>
+        <div class="d-flex gap-2">
+            <button class="btn btn-warning btn-sm" id="open-dmuchanie-czyszczenie-btn" title="Uruchom operację czyszczenia filtra (DMUCHANIE_CZYSZCZENIE)">
+                <i class="fas fa-wind me-1"></i>DMUCHANIE – czyszczenie
+            </button>
+            <button class="btn btn-secondary btn-sm" id="open-dmuchanie-rurociagu-btn" title="Uruchom dmuchanie dowolnego odcinka rurociągu">
+                <i class="fas fa-grip-lines me-1"></i>DMUCHANIE rurociągu
+            </button>
+        </div>
+    </div>
     <div class="card mb-4">
         <div id="active-operations-log" class="list-group list-group-flush">
             <!-- Log operacji będzie wstawiany tutaj -->
@@ -314,6 +324,79 @@
                     </div>
                     <div id="dmuchanie-change-dest-error" class="alert alert-danger d-none"></div>
                     <button type="submit" class="btn btn-primary"><i class="fas fa-route me-1"></i>Ustaw cel i trasę</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal DMUCHANIE_CZYSZCZENIE – start operacji -->
+<div class="modal fade" id="dmuchanie-czyszczenie-modal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-wind me-2 text-warning"></i>DMUCHANIE – czyszczenie filtra</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Zamknij"></button>
+            </div>
+            <div class="modal-body">
+                <form id="dmuchanie-czyszczenie-form">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Sprzęt źródłowy:</label>
+                        <select class="form-select" id="dmuchanie-czyszczenie-zrodlo" required>
+                            <option value="">-- wybierz źródło --</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Sprzęt docelowy:</label>
+                        <select class="form-select" id="dmuchanie-czyszczenie-cel" required>
+                            <option value="">-- wybierz cel --</option>
+                        </select>
+                    </div>
+                    <div class="alert alert-info small mb-3">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Po zakończeniu operacji mix w sprzęcie docelowym zostanie oznaczony jako <strong>wydmuch</strong>
+                        i zostanie do niego dodana nowa partia <strong>W-P-...</strong> (500 kg).
+                    </div>
+                    <div id="dmuchanie-czyszczenie-error" class="alert alert-danger d-none"></div>
+                    <button type="submit" class="btn btn-warning">
+                        <i class="fas fa-wind me-1"></i>Rozpocznij DMUCHANIE_CZYSZCZENIE
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal DMUCHANIE_RUROCIAGU – start operacji -->
+<div class="modal fade" id="dmuchanie-rurociagu-modal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-grip-lines me-2 text-secondary"></i>DMUCHANIE rurociągu</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Zamknij"></button>
+            </div>
+            <div class="modal-body">
+                <form id="dmuchanie-rurociagu-form">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Sprzęt źródłowy:</label>
+                        <select class="form-select" id="dmuchanie-rurociagu-zrodlo" required>
+                            <option value="">-- wybierz źródło --</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Sprzęt docelowy:</label>
+                        <select class="form-select" id="dmuchanie-rurociagu-cel" required>
+                            <option value="">-- wybierz cel --</option>
+                        </select>
+                    </div>
+                    <div class="alert alert-secondary small mb-3">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Operacja zablokuje wybraną trasę rurociągu na czas dmuchania. Nie wpływa na mixy ani partie.
+                    </div>
+                    <div id="dmuchanie-rurociagu-error" class="alert alert-danger d-none"></div>
+                    <button type="submit" class="btn btn-secondary">
+                        <i class="fas fa-grip-lines me-1"></i>Rozpocznij DMUCHANIE rurociągu
+                    </button>
                 </form>
             </div>
         </div>

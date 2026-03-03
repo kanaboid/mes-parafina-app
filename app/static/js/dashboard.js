@@ -22,7 +22,9 @@ document.addEventListener('DOMContentLoaded', () => {
         przelewDest: new bootstrap.Modal(document.getElementById('przelew-dest-modal')),
         naMagazyn: new bootstrap.Modal(document.getElementById('na-magazyn-modal')),
         dmuchanieChangeDest: new bootstrap.Modal(document.getElementById('dmuchanie-change-dest-modal')),
-        dobielanie: new bootstrap.Modal(document.getElementById('dobielanie-modal'))
+        dobielanie: new bootstrap.Modal(document.getElementById('dobielanie-modal')),
+        dmuchanieCzyszczenie: new bootstrap.Modal(document.getElementById('dmuchanie-czyszczenie-modal')),
+        dmuchanieRurociagu: new bootstrap.Modal(document.getElementById('dmuchanie-rurociagu-modal'))
     };
     const forms = {
         planTransfer: document.getElementById('plan-transfer-form'),
@@ -34,7 +36,9 @@ document.addEventListener('DOMContentLoaded', () => {
         przelewDest: document.getElementById('przelew-dest-form'),
         naMagazyn: document.getElementById('na-magazyn-form'),
         dmuchanieChangeDest: document.getElementById('dmuchanie-change-dest-form'),
-        dobielanie: document.getElementById('dobielanie-form')
+        dobielanie: document.getElementById('dobielanie-form'),
+        dmuchanieCzyszczenie: document.getElementById('dmuchanie-czyszczenie-form'),
+        dmuchanieRurociagu: document.getElementById('dmuchanie-rurociagu-form')
     };
 
     const formatValue = (value, unit = '', decimalPlaces = 1) => {
@@ -681,7 +685,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 typ === 'NA_MAGAZYN' ||
                 typ === 'FILTRACJA_KOLO_DO_PONOWNEJ' ||
                 (op.opis && (String(op.opis).indexOf('NA_MAGAZYN') === 0 || String(op.opis).indexOf('FILTRACJA_KOLO_DO_PONOWNEJ') === 0));
-            const isDmuchanie = typ === 'DMUCHANIE' || (op.opis && String(op.opis).indexOf('DMUCHANIE') === 0);
+            const isDmuchanie = typ === 'DMUCHANIE' || (op.opis && String(op.opis).indexOf('DMUCHANIE:') === 0);
+            const isDmuchanieCzyszczenie = typ === 'DMUCHANIE_CZYSZCZENIE';
+            const isDmuchanieRurociagu = typ === 'DMUCHANIE_RUROCIAGU';
             let continueBtn = '';
             let changeDestBtn = '';
             if (canContinueToPrzelew) {
@@ -711,6 +717,22 @@ document.addEventListener('DOMContentLoaded', () => {
                     </button>`;
             }
 
+            // Dedykowane przyciski "Zakończ" dla typów z własną logiką finish
+            let endBtn = '';
+            if (isDmuchanieCzyszczenie) {
+                endBtn = `<button type="button" class="btn btn-sm btn-outline-warning finish-dmuchanie-czyszczenie-btn" data-op-id="${op.id}" title="Zakończ czyszczenie filtra – utworzy partię W-P-... i oznaczy mix jako wydmuch">
+                        <i class="fas fa-check-circle me-1"></i>Zakończ czyszczenie
+                    </button>`;
+            } else if (isDmuchanieRurociagu) {
+                endBtn = `<button type="button" class="btn btn-sm btn-outline-secondary finish-dmuchanie-rurociagu-btn" data-op-id="${op.id}" title="Zakończ dmuchanie rurociągu – zwolni trasę">
+                        <i class="fas fa-check-circle me-1"></i>Zakończ rurociąg
+                    </button>`;
+            } else {
+                endBtn = `<button type="button" class="btn btn-sm btn-outline-danger end-operation-btn" data-op-id="${op.id}" title="Zakończ operację">
+                        <i class="fas fa-stop-circle me-1"></i>Zakończ
+                    </button>`;
+            }
+
             const itemHTML = `
                 <div class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <div class="flex-grow-1">
@@ -727,9 +749,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="d-flex gap-1">
                         ${continueBtn}
                         ${changeDestBtn}
-                        <button type="button" class="btn btn-sm btn-outline-danger end-operation-btn" data-op-id="${op.id}" title="Zakończ operację">
-                            <i class="fas fa-stop-circle me-1"></i>Zakończ
-                        </button>
+                        ${endBtn}
                     </div>
                 </div>`;
             activeOperationsContainer.innerHTML += itemHTML;
@@ -947,6 +967,56 @@ document.addEventListener('DOMContentLoaded', () => {
                 .catch(() => {
                     container.innerHTML = '<p class="text-danger mb-0">Nie udało się załadować listy celów.</p>';
                 });
+            return;
+        }
+        const finishCzyszczenieBtn = e.target.closest('.finish-dmuchanie-czyszczenie-btn');
+        if (finishCzyszczenieBtn) {
+            e.preventDefault();
+            const opId = finishCzyszczenieBtn.getAttribute('data-op-id');
+            if (!opId) return;
+            finishCzyszczenieBtn.disabled = true;
+            finishCzyszczenieBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Oczekuj...';
+            try {
+                const response = await fetch('/api/operations/finish-dmuchanie-czyszczenie', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id_operacji: parseInt(opId, 10), operator: 'GUI' })
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.message || result.error || 'Błąd serwera');
+                showToast(result.message || 'DMUCHANIE_CZYSZCZENIE zakończone.', 'success');
+                initialLoad();
+            } catch (err) {
+                console.error('Błąd finish-dmuchanie-czyszczenie:', err);
+                showToast(err.message, 'error');
+                finishCzyszczenieBtn.disabled = false;
+                finishCzyszczenieBtn.innerHTML = '<i class="fas fa-check-circle me-1"></i>Zakończ czyszczenie';
+            }
+            return;
+        }
+        const finishRurociaguBtn = e.target.closest('.finish-dmuchanie-rurociagu-btn');
+        if (finishRurociaguBtn) {
+            e.preventDefault();
+            const opId = finishRurociaguBtn.getAttribute('data-op-id');
+            if (!opId) return;
+            finishRurociaguBtn.disabled = true;
+            finishRurociaguBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Oczekuj...';
+            try {
+                const response = await fetch('/api/operations/finish-dmuchanie-rurociagu', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id_operacji: parseInt(opId, 10), operator: 'GUI' })
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.message || result.error || 'Błąd serwera');
+                showToast(result.message || 'DMUCHANIE_RUROCIAGU zakończone.', 'success');
+                initialLoad();
+            } catch (err) {
+                console.error('Błąd finish-dmuchanie-rurociagu:', err);
+                showToast(err.message, 'error');
+                finishRurociaguBtn.disabled = false;
+                finishRurociaguBtn.innerHTML = '<i class="fas fa-check-circle me-1"></i>Zakończ rurociąg';
+            }
             return;
         }
         if (continueKoloBtn) {
@@ -1427,6 +1497,121 @@ document.addEventListener('DOMContentLoaded', () => {
                 initialLoad();
             } catch (error) {
                 console.error('Błąd dmuchanie-change-destination:', error);
+                errorDiv.textContent = error.message;
+                errorDiv.classList.remove('d-none');
+            }
+        });
+    }
+
+    // -----------------------------------------------------------------------
+    // Helpery do wypełniania selectów sprzętu w nowych modalach
+    // -----------------------------------------------------------------------
+    function fillSprzetSelects(zrodloSelectId, celSelectId) {
+        const data = latestDashboardData || {};
+        const allSprzet = [
+            ...(data.reaktory || []).map(r => ({ id: r.id, nazwa: r.nazwa_unikalna || r.nazwa || r.id })),
+            ...(data.beczki_czyste || []).map(b => ({ id: b.id, nazwa: b.nazwa_unikalna || b.nazwa || b.id })),
+            ...(data.beczki_brudne || []).map(b => ({ id: b.id, nazwa: b.nazwa_unikalna || b.nazwa || b.id }))
+        ];
+        [zrodloSelectId, celSelectId].forEach(selectId => {
+            const sel = document.getElementById(selectId);
+            if (!sel) return;
+            const currentVal = sel.value;
+            sel.innerHTML = '<option value="">-- wybierz --</option>';
+            allSprzet.forEach(s => {
+                const opt = document.createElement('option');
+                opt.value = s.id;
+                opt.textContent = s.nazwa;
+                sel.appendChild(opt);
+            });
+            if (currentVal) sel.value = currentVal;
+        });
+    }
+
+    // Obsługa globalnego przycisku DMUCHANIE – czyszczenie
+    const openDmuchanieCzyszczenieBtn = document.getElementById('open-dmuchanie-czyszczenie-btn');
+    if (openDmuchanieCzyszczenieBtn) {
+        openDmuchanieCzyszczenieBtn.addEventListener('click', () => {
+            fillSprzetSelects('dmuchanie-czyszczenie-zrodlo', 'dmuchanie-czyszczenie-cel');
+            document.getElementById('dmuchanie-czyszczenie-error').classList.add('d-none');
+            modals.dmuchanieCzyszczenie.show();
+        });
+    }
+
+    // Obsługa globalnego przycisku DMUCHANIE rurociągu
+    const openDmuchanieRurociaguBtn = document.getElementById('open-dmuchanie-rurociagu-btn');
+    if (openDmuchanieRurociaguBtn) {
+        openDmuchanieRurociaguBtn.addEventListener('click', () => {
+            fillSprzetSelects('dmuchanie-rurociagu-zrodlo', 'dmuchanie-rurociagu-cel');
+            document.getElementById('dmuchanie-rurociagu-error').classList.add('d-none');
+            modals.dmuchanieRurociagu.show();
+        });
+    }
+
+    // Obsługa formularza DMUCHANIE_CZYSZCZENIE
+    if (forms.dmuchanieCzyszczenie) {
+        forms.dmuchanieCzyszczenie.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const idZrodla = document.getElementById('dmuchanie-czyszczenie-zrodlo').value;
+            const idCelu = document.getElementById('dmuchanie-czyszczenie-cel').value;
+            const errorDiv = document.getElementById('dmuchanie-czyszczenie-error');
+            if (!idZrodla || !idCelu) {
+                errorDiv.textContent = 'Wybierz sprzęt źródłowy i docelowy.';
+                errorDiv.classList.remove('d-none');
+                return;
+            }
+            errorDiv.classList.add('d-none');
+            try {
+                const response = await fetch('/api/operations/start-dmuchanie-czyszczenie', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        id_sprzetu_zrodlowego: parseInt(idZrodla, 10),
+                        id_sprzetu_docelowego: parseInt(idCelu, 10),
+                        operator: 'GUI'
+                    })
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.message || result.error || 'Błąd serwera');
+                showToast(result.message || 'Operacja DMUCHANIE_CZYSZCZENIE rozpoczęta.', 'success');
+                modals.dmuchanieCzyszczenie.hide();
+                initialLoad();
+            } catch (error) {
+                errorDiv.textContent = error.message;
+                errorDiv.classList.remove('d-none');
+            }
+        });
+    }
+
+    // Obsługa formularza DMUCHANIE_RUROCIAGU
+    if (forms.dmuchanieRurociagu) {
+        forms.dmuchanieRurociagu.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const idZrodla = document.getElementById('dmuchanie-rurociagu-zrodlo').value;
+            const idCelu = document.getElementById('dmuchanie-rurociagu-cel').value;
+            const errorDiv = document.getElementById('dmuchanie-rurociagu-error');
+            if (!idZrodla || !idCelu) {
+                errorDiv.textContent = 'Wybierz sprzęt źródłowy i docelowy.';
+                errorDiv.classList.remove('d-none');
+                return;
+            }
+            errorDiv.classList.add('d-none');
+            try {
+                const response = await fetch('/api/operations/start-dmuchanie-rurociagu', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        id_sprzetu_zrodlowego: parseInt(idZrodla, 10),
+                        id_sprzetu_docelowego: parseInt(idCelu, 10),
+                        operator: 'GUI'
+                    })
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.message || result.error || 'Błąd serwera');
+                showToast(result.message || 'Operacja DMUCHANIE_RUROCIAGU rozpoczęta.', 'success');
+                modals.dmuchanieRurociagu.hide();
+                initialLoad();
+            } catch (error) {
                 errorDiv.textContent = error.message;
                 errorDiv.classList.remove('d-none');
             }
