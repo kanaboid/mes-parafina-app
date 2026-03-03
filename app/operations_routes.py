@@ -1371,13 +1371,16 @@ def continue_to_ocena():
         if not mix:
             return jsonify({"status": "error", "message": "Nie znaleziono mieszaniny dla tej operacji."}), 404
 
-        # 1. Zakończ FILTRACJA_KOLO: zamknij zawory, zwolnij segmenty (trasa wolna dla NA_MAGAZYN)
+        # 1. Zakończ FILTRACJA_KOLO: zamknij zawory. Segmenty przenosimy do nowej operacji
+        # FILTRACJA_KOLO_ZATWIERDZONA, aby nadal blokowały trasę.
         operacja.status_operacji = 'zakonczona'
         operacja.czas_zakonczenia = dt.now(timezone.utc)
+        segmenty_kola = list(operacja.segmenty) if operacja.segmenty else []
         if operacja.segmenty:
             for segment in operacja.segmenty:
                 if segment.zawory:
                     segment.zawory.stan = 'ZAMKNIETY'
+            # Zwolnij powiązanie segmentów z zakończoną operacją – przeniesiemy je do nowej
             operacja.segmenty = []
 
         if wynik_oceny == 'OK':
@@ -1394,6 +1397,13 @@ def continue_to_ocena():
                 zmodyfikowane_przez=operator,
             )
             db.session.add(nowa_operacja)
+            # Przenieś segmenty trasy FILTRACJA_KOLO do nowej operacji, aby nadal blokowały trasę
+            # oraz ponownie otwórz zawory na tej trasie (tak jak przy nowym uruchomieniu operacji).
+            if segmenty_kola:
+                nowa_operacja.segmenty = segmenty_kola
+                for segment in segmenty_kola:
+                    if segment.zawory:
+                        segment.zawory.stan = 'OTWARTY'
             db.session.commit()
             try:
                 broadcast_dashboard_update()
@@ -1482,6 +1492,14 @@ def continue_to_magazyn():
         if total_weight <= 0:
             return jsonify({"status": "error", "message": "Mieszanina w reaktorze ma zerową wagę."}), 400
 
+        # Zamknij zawory i zwolnij starą trasę FILTRACJA_KOLO_ZATWIERDZONA (jak przy zakończeniu operacji),
+        # zanim wyznaczymy nową trasę NA_MAGAZYN.
+        if operacja.segmenty:
+            for segment in operacja.segmenty:
+                if segment.zawory:
+                    segment.zawory.stan = 'ZAMKNIETY'
+            operacja.segmenty = []
+
         # Wyznaczenie trasy: reaktor_OUT → beczka_IN (wszystkie zawory otwarte)
         start_point = f"{reaktor.nazwa_unikalna}_OUT"
         end_point = f"{beczka.nazwa_unikalna}_IN"
@@ -1526,6 +1544,17 @@ def continue_to_magazyn():
             db.select(Segmenty).where(Segmenty.nazwa_segmentu.in_(znaleziona_sciezka_nazwy))
         ).scalars().all()
         operacja.segmenty = list(segmenty_trasy)
+
+        # Otwórz zawory na nowej trasie NA_MAGAZYN (reaktor → beczka),
+        # tak jak przy normalnym uruchamianiu operacji transferu.
+        zawory_na_trasie = set()
+        for u, v, edge_data in pathfinder.graph.edges(data=True):
+            if edge_data.get('segment_name') in znaleziona_sciezka_nazwy and 'valve_name' in edge_data:
+                zawory_na_trasie.add(edge_data['valve_name'])
+        if zawory_na_trasie:
+            db.session.execute(
+                db.update(Zawory).where(Zawory.nazwa_zaworu.in_(zawory_na_trasie)).values(stan='OTWARTY')
+            )
 
         # Przelew mieszaniny
         BatchManagementService.transfer_between_dirty_tanks(
@@ -1692,6 +1721,15 @@ def dmuchanie_change_destination():
         if not zrodlo or not cel:
             return jsonify({"status": "error", "message": "Nieprawidłowe źródło lub cel."}), 404
 
+        # 1) Zamknij zawory starej trasy i wyczyść segmenty
+        if operacja.segmenty:
+            for segment in operacja.segmenty:
+                if segment.zawory:
+                    segment.zawory.stan = 'ZAMKNIETY'
+            operacja.segmenty = []
+            db.session.flush()
+
+        # 2) Wyznacz nową trasę źródło_OUT → cel_IN
         start_point = f"{zrodlo.nazwa_unikalna}_OUT"
         end_point = f"{cel.nazwa_unikalna}_IN"
         pathfinder = get_pathfinder()
@@ -1701,11 +1739,7 @@ def dmuchanie_change_destination():
         if not znaleziona_sciezka_nazwy:
             return jsonify({"status": "error", "message": f"Nie znaleziono trasy do {cel.nazwa_unikalna}."}), 400
 
-        # Zwolnij bieżącą trasę przed sprawdzeniem konfliktu (operacja zmienia cel – nie liczymy jej)
-        operacja.segmenty = []
-        db.session.flush()
-
-        # Konflikt: segmenty z nowej trasy używane przez INNE aktywne operacje
+        # 3) Sprawdź konflikt z INNYMI operacjami (ta jest już bez segmentów)
         konflikt_query = (
             db.select(Segmenty.nazwa_segmentu)
             .select_from(Segmenty)
@@ -1725,15 +1759,28 @@ def dmuchanie_change_destination():
                 "zajete_segmenty": [k[0] if isinstance(k, (list, tuple)) else k for k in konflikty]
             }), 409
 
+        # 4) Zapisz nowy cel, trasę i segmenty
         operacja.id_sprzetu_docelowego = id_celu
         operacja.punkt_docelowy = end_point
         operacja.opis = f"DMUCHANIE: {zrodlo.nazwa_unikalna} → {cel.nazwa_unikalna}"
         operacja.zmodyfikowane_przez = operator
         operacja.ostatnia_modyfikacja = dt.now(timezone.utc)
+
         segmenty_trasy = db.session.execute(
             db.select(Segmenty).where(Segmenty.nazwa_segmentu.in_(znaleziona_sciezka_nazwy))
         ).scalars().all()
         operacja.segmenty = list(segmenty_trasy)
+
+        # 5) Otwórz zawory na nowej trasie DMUCHANIE
+        zawory_na_trasie = set()
+        for u, v, edge_data in pathfinder.graph.edges(data=True):
+            if edge_data.get('segment_name') in znaleziona_sciezka_nazwy and 'valve_name' in edge_data:
+                zawory_na_trasie.add(edge_data['valve_name'])
+        if zawory_na_trasie:
+            db.session.execute(
+                db.update(Zawory).where(Zawory.nazwa_zaworu.in_(zawory_na_trasie)).values(stan='OTWARTY')
+            )
+
         db.session.commit()
         try:
             broadcast_dashboard_update()
