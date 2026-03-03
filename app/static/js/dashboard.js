@@ -677,7 +677,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const canContinueToKolo = typ === 'FILTRACJA_PRZELEW' || typ === 'FILTRACJA_PLACEK_PRZELEW';
             const canContinueToOcena = typ === 'FILTRACJA_KOLO';
             const canContinueToMagazyn = typ === 'FILTRACJA_KOLO_ZATWIERDZONA';
-            const canContinueToDmuchanie = typ === 'NA_MAGAZYN' || (op.opis && String(op.opis).indexOf('NA_MAGAZYN') === 0);
+            const canContinueToDmuchanie =
+                typ === 'NA_MAGAZYN' ||
+                typ === 'FILTRACJA_KOLO_DO_PONOWNEJ' ||
+                (op.opis && (String(op.opis).indexOf('NA_MAGAZYN') === 0 || String(op.opis).indexOf('FILTRACJA_KOLO_DO_PONOWNEJ') === 0));
             const isDmuchanie = typ === 'DMUCHANIE' || (op.opis && String(op.opis).indexOf('DMUCHANIE') === 0);
             let continueBtn = '';
             let changeDestBtn = '';

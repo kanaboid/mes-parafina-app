@@ -1427,6 +1427,28 @@ def continue_to_ocena():
                 zmodyfikowane_przez=operator,
             )
             db.session.add(log_ocena)
+
+            # Utwórz nową operację FILTRACJA_KOLO_DO_PONOWNEJ, która blokuje trasę tak jak FILTRACJA_KOLO
+            # i pozwala przejść do DMUCHANIE (ale bez możliwości NA_MAGAZYN).
+            nowa_operacja = None
+            tank_id = mix.tank_id
+            if tank_id and segmenty_kola:
+                nowa_operacja = OperacjeLog(
+                    typ_operacji='FILTRACJA_KOLO_DO_PONOWNEJ',
+                    id_tank_mix=mix.id,
+                    id_sprzetu_zrodlowego=tank_id,
+                    id_sprzetu_docelowego=tank_id,
+                    status_operacji='aktywna',
+                    czas_rozpoczecia=dt.now(timezone.utc),
+                    opis='Ocena próbki: do ponownej filtracji – trasa zablokowana do DMUCHANIE.',
+                    zmodyfikowane_przez=operator,
+                )
+                db.session.add(nowa_operacja)
+                nowa_operacja.segmenty = segmenty_kola
+                for segment in segmenty_kola:
+                    if segment.zawory:
+                        segment.zawory.stan = 'OTWARTY'
+
             db.session.commit()
             try:
                 broadcast_dashboard_update()
@@ -1436,6 +1458,7 @@ def continue_to_ocena():
                 "status": "success",
                 "message": "Ocena: do ponownej filtracji. Status mieszaniny zaktualizowany.",
                 "process_status": "DO_PONOWNEJ_FILTRACJI",
+                "id_operacji": nowa_operacja.id if nowa_operacja else None,
             }), 200
     except Exception as e:
         db.session.rollback()
@@ -1602,10 +1625,10 @@ def continue_to_dmuchanie():
             return jsonify({"status": "error", "message": f"Operacja o ID {id_operacji} nie istnieje."}), 404
         if operacja.status_operacji != 'aktywna':
             return jsonify({"status": "error", "message": "Operacja nie jest aktywna."}), 409
-        if operacja.typ_operacji != 'NA_MAGAZYN':
+        if operacja.typ_operacji not in ('NA_MAGAZYN', 'FILTRACJA_KOLO_DO_PONOWNEJ'):
             return jsonify({
                 "status": "error",
-                "message": f"Przejście do DMUCHANIE tylko z operacji NA_MAGAZYN (obecny: {operacja.typ_operacji})."
+                "message": f"Przejście do DMUCHANIE tylko z operacji NA_MAGAZYN lub FILTRACJA_KOLO_DO_PONOWNEJ (obecny: {operacja.typ_operacji})."
             }), 409
 
         # Zakończenie operacji NA_MAGAZYN
