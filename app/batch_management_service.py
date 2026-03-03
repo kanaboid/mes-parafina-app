@@ -288,6 +288,93 @@ class BatchManagementService:
             db.session.rollback(); raise e
 
     @staticmethod
+    def create_wydmuch_batch(source_batch_code: str, material_type: str, quantity_kg: Decimal = Decimal('500.00')) -> dict:
+        """
+        Tworzy nową partię pierwotną wydmuchaną (W-P-...) na podstawie kodu partii źródłowej.
+        Używana przy zakończeniu operacji DMUCHANIE_CZYSZCZENIE.
+        Zwraca: {'batch_id': int, 'unique_code': str}
+        """
+        base_code = f"W-P-{source_batch_code}"
+        existing_count = db.session.execute(
+            select(func.count(Batches.id)).where(Batches.unique_code.like(f"{base_code}%"))
+        ).scalar()
+
+        unique_code = base_code if existing_count == 0 else f"{base_code}-{existing_count + 1:02d}"
+
+        new_batch = Batches(
+            unique_code=unique_code,
+            material_type=material_type,
+            source_type='WYDMUCH',
+            source_name=source_batch_code,
+            initial_quantity=quantity_kg,
+            current_quantity=quantity_kg,
+        )
+        db.session.add(new_batch)
+        db.session.flush()
+        return {'batch_id': new_batch.id, 'unique_code': new_batch.unique_code}
+
+    @staticmethod
+    def apply_wydmuch_to_tank(dest_tank_id: int, wydmuch_batch_id: int, source_mix_unique_code: str) -> dict:
+        """
+        Dodaje partię wydmuchaną do zbiornika docelowego i ustawia is_wydmuch_mix=True.
+        - Jeśli zbiornik ma aktywny mix: dodaje partię jako nowy składnik.
+        - Jeśli zbiornik jest pusty: tworzy nowy mix z kodem W-<source_mix_unique_code>.
+        Nie wykonuje commit – commit należy do wywołującego endpointu.
+        Zwraca: {'mix_id': int, 'created_new_mix': bool, 'mix_code': str}
+        """
+        dest_tank = db.session.get(Sprzet, dest_tank_id)
+        wydmuch_batch = db.session.get(Batches, wydmuch_batch_id)
+
+        if not dest_tank:
+            raise ValueError(f"Zbiornik docelowy o ID {dest_tank_id} nie istnieje.")
+        if not wydmuch_batch:
+            raise ValueError(f"Partia wydmuchana o ID {wydmuch_batch_id} nie istnieje.")
+
+        dest_mix = db.session.get(TankMixes, dest_tank.active_mix_id) if dest_tank.active_mix_id else None
+        created_new_mix = False
+
+        if not dest_mix or dest_mix.status == 'ARCHIVED':
+            # Cel pusty – tworzymy nowy mix z prefiksem W-
+            base_mix_code = f"W-{source_mix_unique_code}"
+            existing_mix_count = db.session.execute(
+                select(func.count(TankMixes.id)).where(TankMixes.unique_code.like(f"{base_mix_code}%"))
+            ).scalar()
+            mix_code = base_mix_code if existing_mix_count == 0 else f"{base_mix_code}-{existing_mix_count + 1:02d}"
+
+            dest_mix = TankMixes(
+                unique_code=mix_code,
+                tank_id=dest_tank.id,
+                process_status='SUROWY',
+                is_wydmuch_mix=True,
+            )
+            db.session.add(dest_mix)
+            db.session.flush()
+            dest_tank.active_mix_id = dest_mix.id
+            created_new_mix = True
+        else:
+            dest_mix.is_wydmuch_mix = True
+
+        # Dodaj partię wydmuchaną jako składnik mixa
+        existing_component = next(
+            (c for c in dest_mix.components if c.batch_id == wydmuch_batch_id), None
+        )
+        if existing_component:
+            existing_component.quantity_in_mix += wydmuch_batch.current_quantity
+        else:
+            new_component = MixComponents(
+                mix_id=dest_mix.id,
+                batch_id=wydmuch_batch_id,
+                quantity_in_mix=wydmuch_batch.current_quantity,
+            )
+            db.session.add(new_component)
+
+        return {
+            'mix_id': dest_mix.id,
+            'created_new_mix': created_new_mix,
+            'mix_code': dest_mix.unique_code,
+        }
+
+    @staticmethod
     def create_batch_from_apollo_transfer(apollo_id, destination_tank_id, actual_quantity_transferred, operator):
         """
         Orkiestruje transfer z Apollo do zbiornika, tworzy partię pierwotną,
