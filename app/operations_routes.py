@@ -1059,11 +1059,9 @@ def continue_to_przelew():
         start_point = f"{nazwa_zrodla}_OUT"
         end_point = f"{nazwa_celu}_IN"
 
-        open_valves_list = db.session.execute(
-            db.select(Zawory.nazwa_zaworu).where(Zawory.stan == 'OTWARTY')
-        ).scalars().all()
-        if not open_valves_list:
-            open_valves_list = db.session.execute(db.select(Zawory.nazwa_zaworu)).scalars().all()
+        # Wszystkie zawory – trasę teoretycznie możliwą (zawory poprzedniej operacji są już zamknięte)
+        all_valves = db.session.execute(db.select(Zawory.nazwa_zaworu)).scalars().all()
+        open_valves_list = [v[0] if isinstance(v, (list, tuple)) else v for v in (all_valves or [])]
 
         pathfinder = get_pathfinder()
         filtry = db.session.execute(
@@ -1230,11 +1228,9 @@ def continue_to_kolo():
         start_point = f"{nazwa}_OUT"
         end_point = f"{nazwa}_IN"
 
-        open_valves_list = db.session.execute(
-            db.select(Zawory.nazwa_zaworu).where(Zawory.stan == 'OTWARTY')
-        ).scalars().all()
-        if not open_valves_list:
-            open_valves_list = db.session.execute(db.select(Zawory.nazwa_zaworu)).scalars().all()
+        # Wszystkie zawory – trasę teoretycznie możliwą (zawory poprzedniej operacji są już zamknięte)
+        all_valves = db.session.execute(db.select(Zawory.nazwa_zaworu)).scalars().all()
+        open_valves_list = [v[0] if isinstance(v, (list, tuple)) else v for v in (all_valves or [])]
 
         pathfinder = get_pathfinder()
         filtry = db.session.execute(
@@ -1375,13 +1371,14 @@ def continue_to_ocena():
         if not mix:
             return jsonify({"status": "error", "message": "Nie znaleziono mieszaniny dla tej operacji."}), 404
 
-        # 1. Zakończ FILTRACJA_KOLO: zamknij zawory
+        # 1. Zakończ FILTRACJA_KOLO: zamknij zawory, zwolnij segmenty (trasa wolna dla NA_MAGAZYN)
         operacja.status_operacji = 'zakonczona'
         operacja.czas_zakonczenia = dt.now(timezone.utc)
         if operacja.segmenty:
             for segment in operacja.segmenty:
                 if segment.zawory:
                     segment.zawory.stan = 'ZAMKNIETY'
+            operacja.segmenty = []
 
         if wynik_oceny == 'OK':
             mix.process_status = 'ZATWIERDZONA'
@@ -1498,13 +1495,17 @@ def continue_to_magazyn():
                 "message": f"Nie znaleziono trasy z {reaktor.nazwa_unikalna} do {beczka.nazwa_unikalna}."
             }), 400
 
-        # Konflikt: inne aktywne operacje używające segmentów z nowej trasy (pomijamy bieżącą operację)
-        konflikt_query = db.select(Segmenty.nazwa_segmentu).join(
-            Segmenty.operacje_log
-        ).where(
-            OperacjeLog.status_operacji == 'aktywna',
-            OperacjeLog.id != id_operacji,
-            Segmenty.nazwa_segmentu.in_(znaleziona_sciezka_nazwy)
+        # Konflikt: segmenty z nowej trasy używane przez INNE aktywne operacje (bieżąca jest aktualizowana – nie liczymy jej)
+        konflikt_query = (
+            db.select(Segmenty.nazwa_segmentu)
+            .select_from(Segmenty)
+            .join(t_log_uzyte_segmenty, Segmenty.id == t_log_uzyte_segmenty.c.id_segmentu)
+            .join(OperacjeLog, t_log_uzyte_segmenty.c.id_operacji_log == OperacjeLog.id)
+            .where(
+                OperacjeLog.status_operacji == 'aktywna',
+                OperacjeLog.id != id_operacji,
+                Segmenty.nazwa_segmentu.in_(znaleziona_sciezka_nazwy),
+            )
         )
         konflikty = db.session.execute(konflikt_query).scalars().all()
         if konflikty:
@@ -1700,10 +1701,21 @@ def dmuchanie_change_destination():
         if not znaleziona_sciezka_nazwy:
             return jsonify({"status": "error", "message": f"Nie znaleziono trasy do {cel.nazwa_unikalna}."}), 400
 
-        konflikt_query = db.select(Segmenty.nazwa_segmentu).join(Segmenty.operacje_log).where(
-            OperacjeLog.status_operacji == 'aktywna',
-            OperacjeLog.id != id_operacji,
-            Segmenty.nazwa_segmentu.in_(znaleziona_sciezka_nazwy)
+        # Zwolnij bieżącą trasę przed sprawdzeniem konfliktu (operacja zmienia cel – nie liczymy jej)
+        operacja.segmenty = []
+        db.session.flush()
+
+        # Konflikt: segmenty z nowej trasy używane przez INNE aktywne operacje
+        konflikt_query = (
+            db.select(Segmenty.nazwa_segmentu)
+            .select_from(Segmenty)
+            .join(t_log_uzyte_segmenty, Segmenty.id == t_log_uzyte_segmenty.c.id_segmentu)
+            .join(OperacjeLog, t_log_uzyte_segmenty.c.id_operacji_log == OperacjeLog.id)
+            .where(
+                OperacjeLog.status_operacji == 'aktywna',
+                OperacjeLog.id != id_operacji,
+                Segmenty.nazwa_segmentu.in_(znaleziona_sciezka_nazwy),
+            )
         )
         konflikty = db.session.execute(konflikt_query).scalars().all()
         if konflikty:

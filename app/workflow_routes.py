@@ -116,12 +116,11 @@ def start_filtration_endpoint(mix_id: int):
             'error': 'Wymagane pola: start, cel.'
         }), 400
 
+    # Używamy wszystkich zaworów (trasę teoretycznie możliwą) – konflikt z innymi operacjami
+    # jest sprawdzany osobno. Dzięki temu można uruchomić równoległą operację na innej trasie,
+    # gdy zawory na trasie docelowej są zamknięte (np. po zakończeniu poprzedniej operacji).
     if not open_valves_list:
-        open_valves_list = db.session.execute(
-            db.select(Zawory.nazwa_zaworu).where(Zawory.stan == 'OTWARTY')
-        ).scalars().all()
-        if not open_valves_list:
-            open_valves_list = db.session.execute(db.select(Zawory.nazwa_zaworu)).scalars().all()
+        open_valves_list = db.session.execute(db.select(Zawory.nazwa_zaworu)).scalars().all()
 
     try:
         pathfinder = current_app.extensions['pathfinder']
