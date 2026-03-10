@@ -1,7 +1,8 @@
 #!/bin/bash
-# Skrypt wprowadzający Panel Webowy (Opcja 1) dla Kiosku HP t630
+# Skrypt wprowadzający Panel Webowy dla Kiosku HP t630 (Wersja z Auto-Odświeżaniem)
 
 USER_NAME=$USER
+
 echo "1. Instalacja pakietu Flask..."
 sudo apt update
 sudo apt install python3-flask -y
@@ -12,7 +13,7 @@ sudo ufw allow 22/tcp
 sudo ufw allow 3389/tcp
 # Otwieramy port 5000 dla naszego Panelu Webowego
 sudo ufw allow 5000/tcp
-# Włączamy zaporę (jeśli była wyłączona) - bez przerywania obecnych połączeń
+# Włączamy zaporę - bez przerywania obecnych połączeń
 sudo ufw --force enable
 
 echo "3. Tworzenie podstawowego pliku konfiguracyjnego..."
@@ -22,7 +23,6 @@ URL=https://mes-parafina-app-production.up.railway.app/
 EOL
 
 echo "4. Modyfikacja skryptu Watchdoga..."
-# Używamy 'EOL' (w apostrofach), aby zmienne bashowe nie wykonały się podczas tworzenia pliku
 cat > /home/$USER_NAME/chrome-watchdog.sh << 'EOL'
 #!/bin/bash
 CONFIG_FILE="/home/$USER/kiosk_config.env"
@@ -45,10 +45,12 @@ done
 EOL
 chmod +x /home/$USER_NAME/chrome-watchdog.sh
 
-echo "5. Tworzenie Panelu Webowego w Pythonie..."
+echo "5. Tworzenie zaktualizowanego Panelu Webowego (z Auto-Odświeżaniem)..."
 cat > /home/$USER_NAME/kiosk_admin.py << 'EOL'
-from flask import Flask, request, render_template_string
+from flask import Flask, request, render_template_string, redirect, url_for
 import os
+import threading
+import time
 
 app = Flask(__name__)
 CONFIG_FILE = os.path.expanduser("~/kiosk_config.env")
@@ -68,7 +70,6 @@ HTML_TEMPLATE = """
         input[type="text"], select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
         button { margin-top: 25px; width: 100%; padding: 12px; background-color: #0056b3; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; font-weight: bold; }
         button:hover { background-color: #004494; }
-        .success { text-align: center; color: green; font-size: 18px; margin-top: 20px; }
     </style>
 </head>
 <body>
@@ -93,6 +94,33 @@ HTML_TEMPLATE = """
 </html>
 """
 
+SUCCESS_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="refresh" content="30; url=/">
+    <title>Restartowanie...</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f9; color: #333; padding: 50px; text-align: center; }
+        .box { max-width: 500px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        h2 { color: #28a745; }
+        p { font-size: 16px; color: #555; }
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #0056b3; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 20px auto; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <h2>Zapisano pomyślnie!</h2>
+        <p>Trwa restartowanie terminala...</p>
+        <div class="loader"></div>
+        <p>Strona odświeży się automatycznie za około 30 sekund.</p>
+    </div>
+</body>
+</html>
+"""
+
 def read_config():
     config = {'URL': '', 'ROTATION': 'normal'}
     if os.path.exists(CONFIG_FILE):
@@ -102,6 +130,11 @@ def read_config():
                     key, val = line.strip().split('=', 1)
                     config[key] = val
     return config
+
+def delayed_reboot():
+    # Czekamy 2 sekundy, aby przeglądarka zdążyła odebrać ekran ładowania
+    time.sleep(2)
+    os.system("sudo /usr/sbin/reboot")
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -113,12 +146,17 @@ def index():
             f.write(f"ROTATION={new_rot}\n")
             f.write(f"URL={new_url}\n")
             
-        # Zezwolenie na restart z poziomu skryptu
-        os.system("sudo /usr/sbin/reboot")
-        return "<h2 style='text-align:center; color:green; font-family:sans-serif;'>Zapisano pomyślnie! Trwa restart terminala... <br>Odśwież stronę za 30 sekund.</h2>"
+        # Przekierowanie do strony sukcesu (wzorzec PRG)
+        return redirect(url_for('success'))
 
     config = read_config()
     return render_template_string(HTML_TEMPLATE, url=config.get('URL', ''), rot=config.get('ROTATION', 'normal'))
+
+@app.route('/success')
+def success():
+    # Uruchamiamy restart w tle
+    threading.Thread(target=delayed_reboot).start()
+    return render_template_string(SUCCESS_TEMPLATE)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
@@ -151,7 +189,7 @@ sudo systemctl start kiosk-admin.service
 
 echo "=========================================================="
 echo "Gotowe! Narzędzie administracyjne zostało zainstalowane."
-echo "Z panelu na swoim komputerze wpisz w przeglądarkę:"
+echo "Z panelu na swoim PC wejdź na:"
 echo "http://$(hostname -I | awk '{print $1}'):5000"
 echo "System zostanie teraz zrestartowany, aby zastosować zmiany."
 echo "=========================================================="
