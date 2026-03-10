@@ -24,7 +24,8 @@ document.addEventListener('DOMContentLoaded', () => {
         dmuchanieChangeDest: new bootstrap.Modal(document.getElementById('dmuchanie-change-dest-modal')),
         dobielanie: new bootstrap.Modal(document.getElementById('dobielanie-modal')),
         dmuchanieCzyszczenie: new bootstrap.Modal(document.getElementById('dmuchanie-czyszczenie-modal')),
-        dmuchanieRurociagu: new bootstrap.Modal(document.getElementById('dmuchanie-rurociagu-modal'))
+        dmuchanieRurociagu: new bootstrap.Modal(document.getElementById('dmuchanie-rurociagu-modal')),
+        wyborDmuchania: new bootstrap.Modal(document.getElementById('wybor-dmuchania-modal'))
     };
     const forms = {
         planTransfer: document.getElementById('plan-transfer-form'),
@@ -38,7 +39,8 @@ document.addEventListener('DOMContentLoaded', () => {
         dmuchanieChangeDest: document.getElementById('dmuchanie-change-dest-form'),
         dobielanie: document.getElementById('dobielanie-form'),
         dmuchanieCzyszczenie: document.getElementById('dmuchanie-czyszczenie-form'),
-        dmuchanieRurociagu: document.getElementById('dmuchanie-rurociagu-form')
+        dmuchanieRurociagu: document.getElementById('dmuchanie-rurociagu-form'),
+        wyborDmuchania: document.getElementById('wybor-dmuchania-form')
     };
 
     const formatValue = (value, unit = '', decimalPlaces = 1) => {
@@ -707,7 +709,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         <i class="fas fa-warehouse me-1"></i>Następny etap (NA_MAGAZYN)
                     </button>`;
             } else if (canContinueToDmuchanie) {
-                continueBtn = `<button type="button" class="btn btn-sm btn-outline-secondary continue-to-dmuchanie-btn" data-op-id="${op.id}" title="Przedmuchiwanie rurociągu – trasa zablokowana na czas dmuchania">
+                continueBtn = `<button type="button" class="btn btn-sm btn-outline-secondary continue-to-dmuchanie-btn"
+                        data-op-id="${op.id}"
+                        data-zrodlo-nazwa="${(op.zrodlo || '').replace(/"/g, '&quot;')}"
+                        data-id-zrodla="${op.id_sprzetu_zrodlowego || ''}"
+                        title="Wybierz rodzaj dmuchania i cel">
                         <i class="fas fa-wind me-1"></i>Przejdź do DMUCHANIE
                     </button>`;
             }
@@ -914,25 +920,32 @@ document.addEventListener('DOMContentLoaded', () => {
         if (continueDmuchanieBtn) {
             e.preventDefault();
             const opId = continueDmuchanieBtn.getAttribute('data-op-id');
+            const zrodloNazwa = continueDmuchanieBtn.getAttribute('data-zrodlo-nazwa') || '—';
+            const idZrodla = continueDmuchanieBtn.getAttribute('data-id-zrodla') || '';
             if (!opId) return;
-            continueDmuchanieBtn.disabled = true;
-            continueDmuchanieBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Oczekuj...';
-            try {
-                const response = await fetch('/api/operations/continue-to-dmuchanie', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id_operacji: parseInt(opId, 10), operator: 'GUI' })
-                });
-                const result = await response.json();
-                if (!response.ok) throw new Error(result.message || result.error || 'Błąd serwera');
-                showToast(result.message || 'Operacja NA_MAGAZYN zakończona. Rozpoczęto operację DMUCHANIE.', 'success');
-                initialLoad();
-            } catch (err) {
-                console.error('Błąd continue-to-dmuchanie:', err);
-                showToast(err.message, 'error');
-                continueDmuchanieBtn.disabled = false;
-                continueDmuchanieBtn.innerHTML = '<i class="fas fa-wind me-1"></i>Przejdź do DMUCHANIE';
-            }
+            // Otwórz modal wyboru rodzaju dmuchania
+            document.getElementById('wybor-dmuchania-id-operacji').value = opId;
+            document.getElementById('wybor-dmuchania-id-zrodla').value = idZrodla;
+            document.getElementById('wybor-dmuchania-zrodlo-info').textContent = zrodloNazwa;
+            document.getElementById('dmuchanie-typ-standard').checked = true;
+            document.getElementById('wybor-dmuchania-cel-wrap').style.display = 'none';
+            document.getElementById('wybor-dmuchania-error').classList.add('d-none');
+            // Wypełnij select celu
+            const celSelect = document.getElementById('wybor-dmuchania-cel');
+            const data = latestDashboardData || {};
+            const allSprzet = [
+                ...(data.reaktory || []).map(r => ({ id: r.id, nazwa: r.nazwa_unikalna || r.nazwa || r.id })),
+                ...(data.beczki_czyste || []).map(b => ({ id: b.id, nazwa: b.nazwa_unikalna || b.nazwa || b.id })),
+                ...(data.beczki_brudne || []).map(b => ({ id: b.id, nazwa: b.nazwa_unikalna || b.nazwa || b.id }))
+            ];
+            celSelect.innerHTML = '<option value="">-- wybierz cel --</option>';
+            allSprzet.forEach(s => {
+                const opt = document.createElement('option');
+                opt.value = s.id;
+                opt.textContent = s.nazwa;
+                celSelect.appendChild(opt);
+            });
+            modals.wyborDmuchania.show();
             return;
         }
         const dmuchanieChangeDestBtn = e.target.closest('.dmuchanie-change-dest-btn');
@@ -1499,6 +1512,79 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.error('Błąd dmuchanie-change-destination:', error);
                 errorDiv.textContent = error.message;
                 errorDiv.classList.remove('d-none');
+            }
+        });
+    }
+
+    // -----------------------------------------------------------------------
+    // Modal wyboru rodzaju dmuchania (z NA_MAGAZYN / FILTRACJA_KOLO_DO_PONOWNEJ)
+    // -----------------------------------------------------------------------
+    document.querySelectorAll('input[name="wybor-dmuchania-typ"]').forEach(radio => {
+        radio.addEventListener('change', () => {
+            const celWrap = document.getElementById('wybor-dmuchania-cel-wrap');
+            if (celWrap) {
+                celWrap.style.display = radio.value === 'DMUCHANIE_CZYSZCZENIE' ? '' : 'none';
+            }
+        });
+    });
+
+    if (forms.wyborDmuchania) {
+        forms.wyborDmuchania.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const idOperacji = document.getElementById('wybor-dmuchania-id-operacji').value;
+            const errorDiv = document.getElementById('wybor-dmuchania-error');
+            const selectedTyp = document.querySelector('input[name="wybor-dmuchania-typ"]:checked');
+            if (!idOperacji || !selectedTyp) {
+                errorDiv.textContent = 'Wybierz rodzaj dmuchania.';
+                errorDiv.classList.remove('d-none');
+                return;
+            }
+            const typ = selectedTyp.value;
+            errorDiv.classList.add('d-none');
+
+            if (typ === 'DMUCHANIE') {
+                // Istniejąca ścieżka – ta sama trasa
+                try {
+                    const response = await fetch('/api/operations/continue-to-dmuchanie', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ id_operacji: parseInt(idOperacji, 10), operator: 'GUI' })
+                    });
+                    const result = await response.json();
+                    if (!response.ok) throw new Error(result.message || result.error || 'Błąd serwera');
+                    showToast(result.message || 'Rozpoczęto operację DMUCHANIE.', 'success');
+                    modals.wyborDmuchania.hide();
+                    initialLoad();
+                } catch (err) {
+                    errorDiv.textContent = err.message;
+                    errorDiv.classList.remove('d-none');
+                }
+            } else if (typ === 'DMUCHANIE_CZYSZCZENIE') {
+                const idCelu = document.getElementById('wybor-dmuchania-cel').value;
+                if (!idCelu) {
+                    errorDiv.textContent = 'Wybierz cel dla DMUCHANIE_CZYSZCZENIE.';
+                    errorDiv.classList.remove('d-none');
+                    return;
+                }
+                try {
+                    const response = await fetch('/api/operations/continue-to-dmuchanie-czyszczenie', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            id_operacji: parseInt(idOperacji, 10),
+                            id_sprzetu_docelowego: parseInt(idCelu, 10),
+                            operator: 'GUI'
+                        })
+                    });
+                    const result = await response.json();
+                    if (!response.ok) throw new Error(result.message || result.error || 'Błąd serwera');
+                    showToast(result.message || 'Rozpoczęto operację DMUCHANIE_CZYSZCZENIE.', 'success');
+                    modals.wyborDmuchania.hide();
+                    initialLoad();
+                } catch (err) {
+                    errorDiv.textContent = err.message;
+                    errorDiv.classList.remove('d-none');
+                }
             }
         });
     }
