@@ -23,6 +23,7 @@ document.addEventListener('DOMContentLoaded', () => {
         naMagazyn: new bootstrap.Modal(document.getElementById('na-magazyn-modal')),
         dmuchanieChangeDest: new bootstrap.Modal(document.getElementById('dmuchanie-change-dest-modal')),
         dobielanie: new bootstrap.Modal(document.getElementById('dobielanie-modal')),
+        filtracjaNaPlacku: new bootstrap.Modal(document.getElementById('filtracja-na-placku-modal')),
         dmuchanieCzyszczenie: new bootstrap.Modal(document.getElementById('dmuchanie-czyszczenie-modal')),
         dmuchanieRurociagu: new bootstrap.Modal(document.getElementById('dmuchanie-rurociagu-modal')),
         wyborDmuchania: new bootstrap.Modal(document.getElementById('wybor-dmuchania-modal'))
@@ -40,7 +41,8 @@ document.addEventListener('DOMContentLoaded', () => {
         dobielanie: document.getElementById('dobielanie-form'),
         dmuchanieCzyszczenie: document.getElementById('dmuchanie-czyszczenie-form'),
         dmuchanieRurociagu: document.getElementById('dmuchanie-rurociagu-form'),
-        wyborDmuchania: document.getElementById('wybor-dmuchania-form')
+        wyborDmuchania: document.getElementById('wybor-dmuchania-form'),
+        filtracjaNaPlacku: document.getElementById('filtracja-na-placku-form')
     };
 
     const formatValue = (value, unit = '', decimalPlaces = 1) => {
@@ -154,17 +156,53 @@ document.addEventListener('DOMContentLoaded', () => {
                         Wlącz palnik(INFO)
                     </button>`;
             }
-            // Przycisk Start filtracji – gdy DOBIELONY_OCZEKUJE, FILTRACJA_KOLO lub OCZEKUJE_NA_OCENE
-            if (r.partia && ['DOBIELONY_OCZEKUJE', 'FILTRACJA_KOLO', 'OCZEKUJE_NA_OCENE'].includes(r.partia.process_status)) {
-                const labelFiltracji = r.partia.process_status === 'DOBIELONY_OCZEKUJE' ? 'Start filtracji' : 'Start filtracji (koło)';
-                actionButtonsHTML += `
-                    <button class="btn btn-success action-btn" 
-                            data-action="open-start-filtration-modal" 
-                            data-sprzet-id="${r.id}"
-                            data-sprzet-nazwa="${r.nazwa}"
-                            data-mix-id="${r.partia.id}">
-                        <i class="fas fa-filter me-1"></i>${labelFiltracji}
-                    </button>`;
+            // Przyciski filtracji – warunkowe na podstawie process_status
+            if (r.partia) {
+                const ps = r.partia.process_status;
+
+                if (ps === 'DOBIELONY_OCZEKUJE') {
+                    // Standardowa filtracja po dobielaniu
+                    actionButtonsHTML += `
+                        <button class="btn btn-success action-btn" 
+                                data-action="open-start-filtration-modal" 
+                                data-sprzet-id="${r.id}"
+                                data-sprzet-nazwa="${r.nazwa}"
+                                data-mix-id="${r.partia.id}"
+                                title="Rozpocznij cykl filtracji po dobielaniu">
+                            <i class="fas fa-filter me-1"></i>Start filtracji
+                        </button>`;
+                } else if (ps === 'FILTRACJA_KOLO' || ps === 'OCZEKUJE_NA_OCENE') {
+                    // Kolejny cykl filtracji kołowej
+                    actionButtonsHTML += `
+                        <button class="btn btn-success action-btn" 
+                                data-action="open-start-filtration-modal" 
+                                data-sprzet-id="${r.id}"
+                                data-sprzet-nazwa="${r.nazwa}"
+                                data-mix-id="${r.partia.id}"
+                                title="Rozpocznij kolejny cykl filtracji kołowej">
+                            <i class="fas fa-filter me-1"></i>Start filtracji (koło)
+                        </button>`;
+                }
+
+                // FILTRACJA_NA_PLACKU – dostępna dla każdego statusu OPRÓCZ DOBIELONY_OCZEKUJE
+                // i statusów aktywnej filtracji (operacja już trwa)
+                const AKTYWNA_FILTRACJA = [
+                    'DOBIELONY_OCZEKUJE',
+                    'FILTRACJA_PLACEK_KOLO', 'FILTRACJA_PLACEK_PRZELEW',
+                    'FILTRACJA_PRZELEW', 'FILTRACJA_WYDMUCH', 'FILTRACJA_NA_PLACKU',
+                ];
+                if (!AKTYWNA_FILTRACJA.includes(ps)) {
+                    actionButtonsHTML += `
+                        <button class="btn action-btn" 
+                                style="background-color:#6f42c1;border-color:#6f42c1;color:#fff;"
+                                data-action="open-filtracja-na-placku-modal" 
+                                data-sprzet-id="${r.id}"
+                                data-sprzet-nazwa="${r.nazwa}"
+                                data-mix-id="${r.partia.id}"
+                                title="Filtracja na placku – odfiltrowanie wydmuchów, następny etap: FILTRACJA_KOLO">
+                            <i class="fas fa-filter me-1"></i>Filtracja na placku
+                        </button>`;
+                }
             }
             // Przycisk Na magazyn – gdy mieszanina zatwierdzona (można przelewać do beczki czystej)
             if (r.partia && r.partia.process_status === 'ZATWIERDZONA') {
@@ -680,7 +718,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const timeSince = Math.round((new Date() - startTime) / 1000 / 60); // minuty temu
             const typ = (op.typ_operacji || '').toString().trim();
             const canContinueToPrzelew = typ === 'FILTRACJA_PLACEK_KOLO';
-            const canContinueToKolo = typ === 'FILTRACJA_PRZELEW' || typ === 'FILTRACJA_PLACEK_PRZELEW';
+            const canContinueToKolo = typ === 'FILTRACJA_PRZELEW' || typ === 'FILTRACJA_PLACEK_PRZELEW' || typ === 'FILTRACJA_NA_PLACKU';
             const canContinueToOcena = typ === 'FILTRACJA_KOLO';
             const canContinueToMagazyn = typ === 'FILTRACJA_KOLO_ZATWIERDZONA';
             const canContinueToDmuchanie =
@@ -806,6 +844,38 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (action === 'open-start-filtration-modal') {
             const mixId = targetElement.dataset.mixId;
             handleOpenStartFiltrationModal(mixId, sprzetNazwa, sprzetId);
+        } else if (action === 'open-filtracja-na-placku-modal') {
+            const idZrodla = sprzetId;
+            document.getElementById('filtracja-na-placku-id-zrodla').value = idZrodla;
+            document.getElementById('filtracja-na-placku-zrodlo-name').textContent = sprzetNazwa || '—';
+            document.getElementById('filtracja-na-placku-error').classList.add('d-none');
+            const container = document.getElementById('filtracja-na-placku-destinations-container');
+            container.innerHTML = '<div class="list-group-item text-muted">Ładowanie reaktorów z możliwą trasą...</div>';
+            modals.filtracjaNaPlacku.show();
+            fetch(`/api/operations/filtracja-na-placku-destinations?id_sprzetu_zrodlowego=${idZrodla}`)
+                .then(res => res.ok ? res.json() : Promise.reject(new Error('Błąd ładowania')))
+                .then(data => {
+                    const destinations = data.destinations || [];
+                    container.innerHTML = '';
+                    if (destinations.length === 0) {
+                        container.innerHTML = '<p class="text-muted mb-0 p-2">Brak reaktorów z możliwą trasą przez filtr.</p>';
+                        return;
+                    }
+                    destinations.forEach((item, index) => {
+                        const radioId = `fnp-dest-${item.id}`;
+                        const emptyBadge = item.is_empty
+                            ? '<span class="badge bg-success ms-2">Pusty</span>'
+                            : '<span class="badge bg-warning ms-2">Zajęty</span>';
+                        const label = document.createElement('label');
+                        label.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center';
+                        label.setAttribute('for', radioId);
+                        label.innerHTML = `<span><input class="form-check-input me-2" type="radio" name="fnp-destination" value="${item.id}" id="${radioId}" ${index === 0 ? 'checked' : ''}> ${item.nazwa_unikalna || item.id}</span>${emptyBadge}`;
+                        container.appendChild(label);
+                    });
+                })
+                .catch(() => {
+                    container.innerHTML = '<p class="text-danger mb-0 p-2">Nie udało się załadować listy reaktorów.</p>';
+                });
         } else if (action === 'open-dobielanie-modal') {
             const mixId = targetElement.dataset.mixId;
             document.getElementById('dobielanie-mix-id').value = mixId || '';
@@ -1690,6 +1760,41 @@ document.addEventListener('DOMContentLoaded', () => {
             fillSprzetSelects('dmuchanie-rurociagu-zrodlo', 'dmuchanie-rurociagu-cel');
             document.getElementById('dmuchanie-rurociagu-error').classList.add('d-none');
             modals.dmuchanieRurociagu.show();
+        });
+    }
+
+    // Obsługa formularza FILTRACJA_NA_PLACKU
+    if (forms.filtracjaNaPlacku) {
+        forms.filtracjaNaPlacku.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const idZrodla = document.getElementById('filtracja-na-placku-id-zrodla').value;
+            const selected = document.querySelector('input[name="fnp-destination"]:checked');
+            const errorDiv = document.getElementById('filtracja-na-placku-error');
+            if (!idZrodla || !selected) {
+                errorDiv.textContent = 'Wybierz reaktor docelowy.';
+                errorDiv.classList.remove('d-none');
+                return;
+            }
+            errorDiv.classList.add('d-none');
+            try {
+                const response = await fetch('/api/operations/start-filtracja-na-placku', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        id_sprzetu_zrodlowego: parseInt(idZrodla, 10),
+                        id_sprzetu_docelowego: parseInt(selected.value, 10),
+                        operator: 'GUI'
+                    })
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.message || result.error || 'Błąd serwera');
+                showToast(result.message || 'Filtracja na placku rozpoczęta.', 'success');
+                modals.filtracjaNaPlacku.hide();
+                initialLoad();
+            } catch (error) {
+                errorDiv.textContent = error.message;
+                errorDiv.classList.remove('d-none');
+            }
         });
     }
 

@@ -32,6 +32,30 @@ def get_pathfinder():
     print(f"DEBUG: pathfinder retrieved: {type(pathfinder)}")
     return pathfinder
 
+
+def _apply_filtracja_na_placku_finish(mix):
+    """
+    Wykonuje logikę zakończenia FILTRACJA_NA_PLACKU na tank_mix:
+    - filtration_cycles_count += 1
+    - is_wydmuch_mix = False
+    - Usuwa składniki material_type='WYDMUCH', dodaje 20% ich masy proporcjonalnie do pozostałych.
+    """
+    mix.filtration_cycles_count = (mix.filtration_cycles_count or 0) + 1
+    mix.is_wydmuch_mix = False
+    komponenty = list(mix.components)
+    wydmuch_komp = [c for c in komponenty if c.batch and c.batch.material_type == 'WYDMUCH']
+    inne_komp = [c for c in komponenty if c not in wydmuch_komp]
+    total_wydmuch = sum(c.quantity_in_mix for c in wydmuch_komp)
+    total_inne = sum(c.quantity_in_mix for c in inne_komp)
+    if total_wydmuch > 0 and total_inne > 0:
+        odzysk = total_wydmuch * Decimal('0.20')
+        for comp in inne_komp:
+            prop = comp.quantity_in_mix / total_inne
+            comp.quantity_in_mix += odzysk * prop
+    for comp in wydmuch_komp:
+        db.session.delete(comp)
+
+
 # Endpoint do tworzenia nowej partii przez tankowanie
 
 
@@ -767,7 +791,7 @@ def zakoncz_operacje():
                 sprzet_zrodlowy.stan_sprzetu = 'Pusty'
 
         # Krok 4b: Aktualizacja TankMixes przy zakończeniu filtracji (flow reaktorowy)
-        FILTRACJA_TYPY = ('FILTRACJA_PLACEK_KOLO', 'FILTRACJA_PLACEK_PRZELEW', 'FILTRACJA_PRZELEW', 'FILTRACJA_KOLO', 'FILTRACJA_WYDMUCH')
+        FILTRACJA_TYPY = ('FILTRACJA_PLACEK_KOLO', 'FILTRACJA_PLACEK_PRZELEW', 'FILTRACJA_PRZELEW', 'FILTRACJA_KOLO', 'FILTRACJA_WYDMUCH', 'FILTRACJA_NA_PLACKU')
         if operacja.typ_operacji in FILTRACJA_TYPY:
             mix = None
             if operacja.id_tank_mix:
@@ -783,12 +807,15 @@ def zakoncz_operacje():
                     'FILTRACJA_PRZELEW': 'FILTRACJA_PRZELEW_PRZERWANE',
                     'FILTRACJA_KOLO': 'OCZEKUJE_NA_OCENE',
                     'FILTRACJA_WYDMUCH': 'FILTRACJA_KOLO',
+                    'FILTRACJA_NA_PLACKU': 'FILTRACJA_KOLO',
                 }.get(mix.process_status)
                 if next_status:
                     mix.process_status = next_status
                     if operacja.typ_operacji == 'FILTRACJA_WYDMUCH':
                         mix.is_wydmuch_mix = False
                         mix.filtration_cycles_count = (mix.filtration_cycles_count or 0) + 1
+                    if operacja.typ_operacji == 'FILTRACJA_NA_PLACKU':
+                        _apply_filtracja_na_placku_finish(mix)
                 # Jeśli cel ≠ źródło – przenieś mieszaninę do reaktora docelowego (tylko gdy nie przerwano przelewu)
                 if (
                     next_status != 'FILTRACJA_PRZELEW_PRZERWANE'
@@ -1174,10 +1201,10 @@ def continue_to_kolo():
             return jsonify({"status": "error", "message": f"Operacja o ID {id_operacji} nie istnieje."}), 404
         if operacja.status_operacji != 'aktywna':
             return jsonify({"status": "error", "message": "Operacja nie jest aktywna."}), 409
-        if operacja.typ_operacji not in ('FILTRACJA_PRZELEW', 'FILTRACJA_PLACEK_PRZELEW'):
+        if operacja.typ_operacji not in ('FILTRACJA_PRZELEW', 'FILTRACJA_PLACEK_PRZELEW', 'FILTRACJA_NA_PLACKU'):
             return jsonify({
                 "status": "error",
-                "message": f"Kontynuacja do FILTRACJA_KOLO tylko z operacji FILTRACJA_PRZELEW lub FILTRACJA_PLACEK_PRZELEW (obecny: {operacja.typ_operacji})."
+                "message": f"Kontynuacja do FILTRACJA_KOLO tylko z operacji FILTRACJA_PRZELEW, FILTRACJA_PLACEK_PRZELEW lub FILTRACJA_NA_PLACKU (obecny: {operacja.typ_operacji})."
             }), 409
 
         mix = None
@@ -1190,6 +1217,10 @@ def continue_to_kolo():
         if not mix:
             return jsonify({"status": "error", "message": "Nie znaleziono mieszaniny dla tej operacji."}), 404
 
+        # Dla FILTRACJA_NA_PLACKU: najpierw zakończ etap (filtration_cycles_count, is_wydmuch_mix, usunięcie WYDMUCH, 20% do pozostałych)
+        if operacja.typ_operacji == 'FILTRACJA_NA_PLACKU':
+            _apply_filtracja_na_placku_finish(mix)
+
         # 1. Zakończ bieżącą operację: zamknij zawory, ustaw next_status, przenieś mix jeśli cel≠źródło
         operacja.status_operacji = 'zakonczona'
         operacja.czas_zakonczenia = dt.now(timezone.utc)
@@ -1198,10 +1229,11 @@ def continue_to_kolo():
                 if segment.zawory:
                     segment.zawory.stan = 'ZAMKNIETY'
 
-        # Po FILTRACJA_PRZELEW / FILTRACJA_PLACEK_PRZELEW mix jest już w reaktorze docelowym (lub źródłowym)
+        # Po FILTRACJA_PRZELEW / FILTRACJA_PLACEK_PRZELEW / FILTRACJA_NA_PLACKU mix jest już w reaktorze docelowym
         next_status = {
             'FILTRACJA_PRZELEW': 'FILTRACJA_KOLO',
             'FILTRACJA_PLACEK_PRZELEW': 'FILTRACJA_KOLO',
+            'FILTRACJA_NA_PLACKU': 'FILTRACJA_KOLO',
         }.get(operacja.typ_operacji)
         if next_status:
             mix.process_status = next_status
@@ -1937,6 +1969,222 @@ def dmuchanie_change_destination():
         return jsonify({
             "status": "success",
             "message": f"Cel operacji DMUCHANIE ustawiony na {cel.nazwa_unikalna}.",
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        traceback.print_exc()
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+# ---------------------------------------------------------------------------
+# FILTRACJA_NA_PLACKU – destinations (reaktory do wyboru jako cel)
+# ---------------------------------------------------------------------------
+@bp.route('/filtracja-na-placku-destinations', methods=['GET'])
+def filtracja_na_placku_destinations():
+    """
+    Zwraca listę reaktorów możliwych jako cel FILTRACJA_NA_PLACKU:
+    - inne niż źródłowy, z fizycznie możliwą trasą przez filtr (wszystkie zawory).
+    Query: id_sprzetu_zrodlowego (wymagane).
+    """
+    id_zrodla = request.args.get('id_sprzetu_zrodlowego', type=int)
+    if not id_zrodla:
+        return jsonify({"status": "error", "message": "Brak parametru id_sprzetu_zrodlowego."}), 400
+
+    try:
+        tank_zrodlo = db.session.get(Sprzet, id_zrodla)
+        if not tank_zrodlo:
+            return jsonify({"status": "error", "message": f"Sprzęt o ID {id_zrodla} nie istnieje."}), 404
+
+        nazwa_zrodla = tank_zrodlo.nazwa_unikalna
+        start_point = f"{nazwa_zrodla}_OUT"
+
+        all_valves = db.session.execute(db.select(Zawory.nazwa_zaworu)).scalars().all()
+        open_valves_list = [v[0] if isinstance(v, (list, tuple)) else v for v in (all_valves or [])]
+        pathfinder = get_pathfinder()
+
+        filtry = db.session.execute(
+            db.select(Sprzet.nazwa_unikalna).where(Sprzet.typ_sprzetu == 'filtr').order_by(Sprzet.nazwa_unikalna)
+        ).scalars().all()
+
+        reaktory = db.session.execute(
+            db.select(Sprzet)
+            .where(Sprzet.typ_sprzetu == 'reaktor', Sprzet.id != id_zrodla)
+            .order_by(Sprzet.nazwa_unikalna)
+        ).scalars().all()
+
+        destinations = []
+        for r in reaktory:
+            end_point = f"{r.nazwa_unikalna}_IN"
+            trasa_ok = False
+            for nazwa_filtra in filtry:
+                filtr_in = f"{nazwa_filtra}_IN"
+                filtr_out = f"{nazwa_filtra}_OUT"
+                s1 = pathfinder.find_path(start_point, filtr_in, open_valves_list)
+                if not s1:
+                    continue
+                sw = pathfinder.find_path(filtr_in, filtr_out, open_valves_list)
+                if not sw:
+                    continue
+                s2 = pathfinder.find_path(filtr_out, end_point, open_valves_list)
+                if s2:
+                    trasa_ok = True
+                    break
+            if trasa_ok:
+                destinations.append({
+                    "id": r.id,
+                    "nazwa_unikalna": r.nazwa_unikalna,
+                    "nazwa": r.nazwa_unikalna,
+                    "is_empty": r.active_mix_id is None,
+                })
+
+        return jsonify({"destinations": destinations}), 200
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+# ---------------------------------------------------------------------------
+# FILTRACJA_NA_PLACKU – start operacji
+# ---------------------------------------------------------------------------
+@bp.route('/start-filtracja-na-placku', methods=['POST'])
+def start_filtracja_na_placku():
+    """
+    Rozpoczyna operację FILTRACJA_NA_PLACKU dla mieszaniny w reaktorze źródłowym.
+    Dozwolone z każdego process_status OPRÓCZ 'DOBIELONY_OCZEKUJE'.
+    Trasa: źródło_OUT → filtr_IN → filtr_OUT → cel_IN (jak FILTRACJA_PRZELEW).
+    Body: { id_sprzetu_zrodlowego, id_sprzetu_docelowego, operator? }
+    """
+    dane = request.get_json()
+    if not dane or 'id_sprzetu_zrodlowego' not in dane or 'id_sprzetu_docelowego' not in dane:
+        return jsonify({"status": "error", "message": "Wymagane pola: id_sprzetu_zrodlowego, id_sprzetu_docelowego."}), 400
+
+    id_zrodla = int(dane['id_sprzetu_zrodlowego'])
+    id_celu = int(dane['id_sprzetu_docelowego'])
+    operator = dane.get('operator', 'GUI')
+
+    if id_zrodla == id_celu:
+        return jsonify({"status": "error", "message": "Reaktor docelowy musi być inny niż źródłowy."}), 400
+
+    try:
+        reaktor_zrodlo = db.session.get(Sprzet, id_zrodla)
+        reaktor_cel = db.session.get(Sprzet, id_celu)
+        if not reaktor_zrodlo:
+            return jsonify({"status": "error", "message": f"Sprzęt źródłowy o ID {id_zrodla} nie istnieje."}), 404
+        if not reaktor_cel or reaktor_cel.typ_sprzetu != 'reaktor':
+            return jsonify({"status": "error", "message": "Sprzęt docelowy musi być reaktorem."}), 400
+
+        if not reaktor_zrodlo.active_mix_id:
+            return jsonify({"status": "error", "message": "Reaktor źródłowy nie zawiera aktywnej mieszaniny."}), 409
+
+        mix = db.session.get(TankMixes, reaktor_zrodlo.active_mix_id)
+        if not mix:
+            return jsonify({"status": "error", "message": "Nie znaleziono mieszaniny w reaktorze źródłowym."}), 404
+        if mix.process_status == 'DOBIELONY_OCZEKUJE':
+            return jsonify({
+                "status": "error",
+                "message": "FILTRACJA_NA_PLACKU niedozwolona dla mieszaniny w stanie DOBIELONY_OCZEKUJE."
+            }), 409
+
+        start_point = f"{reaktor_zrodlo.nazwa_unikalna}_OUT"
+        end_point = f"{reaktor_cel.nazwa_unikalna}_IN"
+
+        all_valves = db.session.execute(db.select(Zawory.nazwa_zaworu)).scalars().all()
+        open_valves_list = [v[0] if isinstance(v, (list, tuple)) else v for v in (all_valves or [])]
+        pathfinder = get_pathfinder()
+
+        filtry = db.session.execute(
+            db.select(Sprzet.nazwa_unikalna).where(Sprzet.typ_sprzetu == 'filtr').order_by(Sprzet.nazwa_unikalna)
+        ).scalars().all()
+        if not filtry:
+            return jsonify({"status": "error", "message": "Brak filtra w systemie."}), 400
+
+        sprzet_posredni = None
+        sciezka_1 = sciezka_wewn = sciezka_2 = []
+        for nazwa_filtra in filtry:
+            posredni_in = f"{nazwa_filtra}_IN"
+            posredni_out = f"{nazwa_filtra}_OUT"
+            s1 = pathfinder.find_path(start_point, posredni_in, open_valves_list)
+            if not s1:
+                continue
+            sw = pathfinder.find_path(posredni_in, posredni_out, open_valves_list)
+            if not sw:
+                continue
+            s2 = pathfinder.find_path(posredni_out, end_point, open_valves_list)
+            if s2:
+                sprzet_posredni = nazwa_filtra
+                sciezka_1, sciezka_wewn, sciezka_2 = s1, sw, s2
+                break
+
+        if not sprzet_posredni:
+            return jsonify({
+                "status": "error",
+                "message": f"Żaden filtr nie ma połączenia ze ścieżką {start_point} → cel ({end_point})."
+            }), 404
+
+        znaleziona_sciezka_nazwy = sciezka_1 + sciezka_wewn + sciezka_2
+
+        # Sprawdź konflikty z innymi aktywnymi operacjami
+        konflikt_query = (
+            db.select(Segmenty.nazwa_segmentu)
+            .select_from(Segmenty)
+            .join(t_log_uzyte_segmenty, Segmenty.id == t_log_uzyte_segmenty.c.id_segmentu)
+            .join(OperacjeLog, t_log_uzyte_segmenty.c.id_operacji_log == OperacjeLog.id)
+            .where(
+                OperacjeLog.status_operacji == 'aktywna',
+                Segmenty.nazwa_segmentu.in_(znaleziona_sciezka_nazwy),
+            )
+        )
+        konflikty = db.session.execute(konflikt_query).all()
+        if konflikty:
+            return jsonify({
+                "status": "error",
+                "message": "Konflikt zasobów – segmenty trasy są używane przez inną aktywną operację.",
+                "zajete_segmenty": [k[0] if isinstance(k, (list, tuple)) else k for k in konflikty],
+            }), 409
+
+        # Otwórz zawory na trasie
+        zawory_na_trasie = set()
+        for u, v, edge_data in pathfinder.graph.edges(data=True):
+            if edge_data.get('segment_name') in znaleziona_sciezka_nazwy:
+                zawory_na_trasie.add(edge_data.get('valve_name', ''))
+        zawory_na_trasie.discard('')
+        if zawory_na_trasie:
+            db.session.execute(
+                db.update(Zawory).where(Zawory.nazwa_zaworu.in_(zawory_na_trasie)).values(stan='OTWARTY')
+            )
+
+        mix.process_status = 'FILTRACJA_NA_PLACKU'
+
+        nowa_operacja = OperacjeLog(
+            typ_operacji='FILTRACJA_NA_PLACKU',
+            id_tank_mix=mix.id,
+            status_operacji='aktywna',
+            czas_rozpoczecia=dt.now(timezone.utc),
+            id_sprzetu_zrodlowego=reaktor_zrodlo.id,
+            id_sprzetu_docelowego=reaktor_cel.id,
+            opis=f"FILTRACJA_NA_PLACKU: {reaktor_zrodlo.nazwa_unikalna} → {sprzet_posredni} → {reaktor_cel.nazwa_unikalna}",
+            punkt_startowy=start_point,
+            punkt_docelowy=end_point,
+            zmodyfikowane_przez=operator,
+        )
+        db.session.add(nowa_operacja)
+        db.session.flush()
+
+        segmenty_trasy = db.session.execute(
+            db.select(Segmenty).where(Segmenty.nazwa_segmentu.in_(znaleziona_sciezka_nazwy))
+        ).scalars().all()
+        nowa_operacja.segmenty = list(segmenty_trasy)
+
+        db.session.commit()
+        try:
+            broadcast_dashboard_update()
+        except Exception:
+            pass
+        return jsonify({
+            "status": "success",
+            "message": f"Rozpoczęto FILTRACJA_NA_PLACKU: {reaktor_zrodlo.nazwa_unikalna} → {sprzet_posredni} → {reaktor_cel.nazwa_unikalna}.",
+            "id_operacji": nowa_operacja.id,
+            "filtr": sprzet_posredni,
         }), 200
     except Exception as e:
         db.session.rollback()

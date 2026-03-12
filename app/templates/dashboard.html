@@ -465,6 +465,44 @@
     </div>
 </div>
 
+<!-- Modal FILTRACJA_NA_PLACKU – wybór reaktora docelowego -->
+<div class="modal fade" id="filtracja-na-placku-modal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-filter me-2 text-info"></i>Filtracja na placku – <span id="filtracja-na-placku-zrodlo-name" class="fw-bold"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Zamknij"></button>
+            </div>
+            <div class="modal-body">
+                <form id="filtracja-na-placku-form">
+                    <input type="hidden" id="filtracja-na-placku-id-zrodla">
+                    <div class="alert alert-info small mb-3">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Trasa przejdzie przez filtr. Po zakończeniu:
+                        <ul class="mb-0 mt-1">
+                            <li>Składniki <strong>WYDMUCH</strong> zostaną usunięte (20% ich masy wróci do pozostałych składników)</li>
+                            <li><code>is_wydmuch_mix</code> zostanie wyzerowane</li>
+                            <li>Następny etap: <strong>FILTRACJA_KOLO</strong></li>
+                        </ul>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Reaktor docelowy:</label>
+                        <div id="filtracja-na-placku-destinations-container" class="list-group">
+                            <div class="list-group-item text-muted">Ładowanie reaktorów...</div>
+                        </div>
+                    </div>
+                    <div id="filtracja-na-placku-error" class="alert alert-danger d-none"></div>
+                    <button type="submit" class="btn btn-info w-100">
+                        <i class="fas fa-filter me-1"></i>Rozpocznij filtrację na placku
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Modal Dobielanie (ziemia bieląca) -->
 <div class="modal fade" id="dobielanie-modal" tabindex="-1">
     <div class="modal-dialog">
