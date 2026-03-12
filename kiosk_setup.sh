@@ -6,7 +6,7 @@
 USER_NAME=$USER
 
 echo "1. Aktualizacja i instalacja pakietów..."
-sudo apt update && sudo apt install openssh-server xrdp xfce4 xfce4-goodies python3-flask -y
+sudo apt update && sudo apt install openssh-server xrdp xfce4 xfce4-goodies python3-flask unclutter -y
 wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
 sudo apt install ./google-chrome-stable_current_amd64.deb -y
 rm google-chrome-stable_current_amd64.deb
@@ -23,7 +23,7 @@ sudo ufw allow 5000/tcp
 sudo ufw --force enable
 
 echo "4. Ubijanie wygaszaczy ekranu..."
-sudo apt purge xscreensaver -y
+sudo apt purge xscreensaver mintupdate mintwelcome xfce4-notifyd -y
 xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/blank-on-ac --create -t int -s 0
 xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/dpms-on-ac-off --create -t int -s 0
 xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/dpms-on-ac-sleep --create -t int -s 0
@@ -62,6 +62,9 @@ while true; do
     timeout 4h google-chrome --kiosk --incognito --no-first-run --disable-infobars --disable-features=Translate --disable-save-password-bubble --noerrdialogs --password-store=basic "$URL"
     sleep 2
 done
+
+sleep 5
+unclutter -idle 0.1 -root &
 EOL
 chmod +x /home/$USER_NAME/chrome-watchdog.sh
 
