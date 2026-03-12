@@ -1945,6 +1945,136 @@ def dmuchanie_change_destination():
 
 
 # ---------------------------------------------------------------------------
+# DMUCHANIE → DMUCHANIE_CZYSZCZENIE – konwersja aktywnej operacji
+# ---------------------------------------------------------------------------
+@bp.route('/convert-dmuchanie-to-czyszczenie', methods=['POST'])
+def convert_dmuchanie_to_czyszczenie():
+    """
+    Konwertuje aktywną operację DMUCHANIE na DMUCHANIE_CZYSZCZENIE.
+    Zamyka istniejącą operację DMUCHANIE (zawory, segmenty), wyznacza nową
+    trasę do wskazanego reaktora docelowego i tworzy operację DMUCHANIE_CZYSZCZENIE.
+    Body: { id_operacji, id_sprzetu_docelowego, operator? }
+    """
+    dane = request.get_json()
+    if not dane or 'id_operacji' not in dane or 'id_sprzetu_docelowego' not in dane:
+        return jsonify({"status": "error", "message": "Wymagane pola: id_operacji, id_sprzetu_docelowego."}), 400
+
+    id_operacji = int(dane['id_operacji'])
+    id_celu = int(dane['id_sprzetu_docelowego'])
+    operator = dane.get('operator', 'GUI')
+
+    try:
+        operacja = db.session.execute(
+            db.select(OperacjeLog).options(joinedload(OperacjeLog.segmenty)).where(OperacjeLog.id == id_operacji)
+        ).unique().scalar_one_or_none()
+
+        if not operacja:
+            return jsonify({"status": "error", "message": f"Operacja o ID {id_operacji} nie istnieje."}), 404
+        if operacja.status_operacji != 'aktywna':
+            return jsonify({"status": "error", "message": "Operacja nie jest aktywna."}), 409
+        if operacja.typ_operacji != 'DMUCHANIE':
+            return jsonify({"status": "error",
+                            "message": f"Konwersja możliwa tylko dla operacji DMUCHANIE (obecny: {operacja.typ_operacji})."}), 409
+
+        cel = db.session.get(Sprzet, id_celu)
+        if not cel:
+            return jsonify({"status": "error", "message": f"Sprzęt docelowy o ID {id_celu} nie istnieje."}), 404
+        if cel.typ_sprzetu != 'reaktor':
+            return jsonify({"status": "error", "message": "Cel dla DMUCHANIE_CZYSZCZENIE musi być reaktorem."}), 400
+
+        zrodlo = db.session.get(Sprzet, operacja.id_sprzetu_zrodlowego) if operacja.id_sprzetu_zrodlowego else None
+        if not zrodlo:
+            return jsonify({"status": "error", "message": "Operacja nie ma przypisanego sprzętu źródłowego."}), 409
+
+        # Zamknij zawory i zwolnij segmenty aktywnego DMUCHANIE
+        if operacja.segmenty:
+            for segment in operacja.segmenty:
+                if segment.zawory:
+                    segment.zawory.stan = 'ZAMKNIETY'
+            operacja.segmenty = []
+        operacja.status_operacji = 'zakonczona'
+        operacja.czas_zakonczenia = dt.now(timezone.utc)
+        db.session.flush()
+
+        # Wyznacz nową trasę: źródło_OUT → cel_IN
+        start_point = f"{zrodlo.nazwa_unikalna}_OUT"
+        end_point = f"{cel.nazwa_unikalna}_IN"
+        pathfinder = get_pathfinder()
+        all_valves = db.session.execute(db.select(Zawory.nazwa_zaworu)).scalars().all()
+        open_valves_list = [v[0] if isinstance(v, (list, tuple)) else v for v in (all_valves or [])]
+        znaleziona_sciezka_nazwy = pathfinder.find_path(start_point, end_point, open_valves_list)
+
+        if not znaleziona_sciezka_nazwy:
+            return jsonify({"status": "error", "message": f"Nie znaleziono trasy od {start_point} do {end_point}."}), 409
+
+        # Sprawdź konflikty z innymi aktywnymi operacjami
+        konflikt_query = (
+            db.select(Segmenty.nazwa_segmentu)
+            .select_from(Segmenty)
+            .join(t_log_uzyte_segmenty, Segmenty.id == t_log_uzyte_segmenty.c.id_segmentu)
+            .join(OperacjeLog, t_log_uzyte_segmenty.c.id_operacji_log == OperacjeLog.id)
+            .where(
+                OperacjeLog.status_operacji == 'aktywna',
+                Segmenty.nazwa_segmentu.in_(znaleziona_sciezka_nazwy),
+            )
+        )
+        konflikty = db.session.execute(konflikt_query).all()
+        if konflikty:
+            return jsonify({
+                "status": "error",
+                "message": "Konflikt zasobów – segmenty nowej trasy są używane przez inną aktywną operację.",
+                "zajete_segmenty": [k[0] if isinstance(k, (list, tuple)) else k for k in konflikty],
+            }), 409
+
+        # ID mixa źródłowego do oznaczenia przy finish
+        id_mix_zrodla = zrodlo.active_mix_id if zrodlo.active_mix_id else operacja.id_tank_mix
+
+        nowa_operacja = OperacjeLog(
+            typ_operacji='DMUCHANIE_CZYSZCZENIE',
+            status_operacji='aktywna',
+            czas_rozpoczecia=dt.now(timezone.utc),
+            id_sprzetu_zrodlowego=zrodlo.id,
+            id_sprzetu_docelowego=cel.id,
+            id_tank_mix=id_mix_zrodla,
+            opis=f"DMUCHANIE_CZYSZCZENIE: {zrodlo.nazwa_unikalna} → {cel.nazwa_unikalna}",
+            punkt_startowy=start_point,
+            punkt_docelowy=end_point,
+            zmodyfikowane_przez=operator,
+        )
+        db.session.add(nowa_operacja)
+        db.session.flush()
+
+        segmenty_trasy = db.session.execute(
+            db.select(Segmenty).where(Segmenty.nazwa_segmentu.in_(znaleziona_sciezka_nazwy))
+        ).scalars().all()
+        nowa_operacja.segmenty = list(segmenty_trasy)
+
+        zawory_na_trasie = set()
+        for u, v, edge_data in pathfinder.graph.edges(data=True):
+            if edge_data.get('segment_name') in znaleziona_sciezka_nazwy and 'valve_name' in edge_data:
+                zawory_na_trasie.add(edge_data['valve_name'])
+        if zawory_na_trasie:
+            db.session.execute(
+                db.update(Zawory).where(Zawory.nazwa_zaworu.in_(zawory_na_trasie)).values(stan='OTWARTY')
+            )
+
+        db.session.commit()
+        try:
+            broadcast_dashboard_update()
+        except Exception:
+            pass
+        return jsonify({
+            "status": "success",
+            "message": f"DMUCHANIE przekształcone w DMUCHANIE_CZYSZCZENIE: {zrodlo.nazwa_unikalna} → {cel.nazwa_unikalna}.",
+            "id_operacji_czyszczenie": nowa_operacja.id,
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        traceback.print_exc()
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+# ---------------------------------------------------------------------------
 # DMUCHANIE_CZYSZCZENIE – start
 # ---------------------------------------------------------------------------
 @bp.route('/start-dmuchanie-czyszczenie', methods=['POST'])

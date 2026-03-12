@@ -342,13 +342,15 @@
                 <form id="wybor-dmuchania-form">
                     <input type="hidden" id="wybor-dmuchania-id-operacji">
                     <input type="hidden" id="wybor-dmuchania-id-zrodla">
+                    <!-- mode: "continue" (z NA_MAGAZYN) | "convert" (zmiana aktywnego DMUCHANIE) -->
+                    <input type="hidden" id="wybor-dmuchania-mode" value="continue">
 
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Sprzęt źródłowy:</label>
                         <div class="alert alert-light py-2 mb-0" id="wybor-dmuchania-zrodlo-info">—</div>
                     </div>
 
-                    <div class="mb-3">
+                    <div class="mb-3 wybor-dmuchania-typ-wrap">
                         <label class="form-label fw-semibold">Rodzaj dmuchania:</label>
                         <div class="d-flex flex-column gap-2">
                             <label class="list-group-item list-group-item-action rounded border d-flex align-items-start gap-2 p-3">
@@ -366,17 +368,18 @@
                                     value="DMUCHANIE_CZYSZCZENIE">
                                 <span>
                                     <strong>DMUCHANIE_CZYSZCZENIE</strong> – czyszczenie filtra<br>
-                                    <small class="text-muted">Nowa trasa do wybranego celu. Oznaczy mix w celu jako wydmuch i doda partię W-P-... (500 kg).</small>
+                                    <small class="text-muted">Nowa trasa do wybranego reaktora. Oznaczy mix jako wydmuch i doda partię W-P-... (500 kg).</small>
                                 </span>
                             </label>
                         </div>
                     </div>
 
                     <div class="mb-3" id="wybor-dmuchania-cel-wrap" style="display:none;">
-                        <label class="form-label fw-semibold">Cel (dla DMUCHANIE_CZYSZCZENIE):</label>
+                        <label class="form-label fw-semibold">Reaktor docelowy (DMUCHANIE_CZYSZCZENIE):</label>
                         <select class="form-select" id="wybor-dmuchania-cel">
-                            <option value="">-- wybierz cel --</option>
+                            <option value="">-- wybierz reaktor --</option>
                         </select>
+                        <div class="form-text">Mix w wybranym reaktorze zostanie oznaczony jako wydmuch i otrzyma partię W-P-... (500 kg).</div>
                     </div>
 
                     <div id="wybor-dmuchania-error" class="alert alert-danger d-none"></div>
