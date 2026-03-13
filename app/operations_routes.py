@@ -1842,6 +1842,106 @@ def continue_to_dmuchanie_czyszczenie():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
+# ---------------------------------------------------------------------------
+# DMUCHANIE_CZYSZCZENIE – destinations (reaktory do wyboru jako cel)
+# ---------------------------------------------------------------------------
+@bp.route('/dmuchanie-czyszczenie-destinations', methods=['GET'])
+def dmuchanie_czyszczenie_destinations():
+    """
+    Zwraca listę reaktorów możliwych jako cel DMUCHANIE_CZYSZCZENIE:
+    - wszystkie reaktory (puste i z mixem – wydmuch można dodać do istniejącego mixu),
+    - z fizycznie możliwą trasą od filtra poprzedniej operacji (FZ_OUT → cel_IN).
+    Gdy id_operacji: filtr z segmentów operacji. Gdy id_sprzetu_zrodlowego: użyj jako źródło.
+    Query: id_operacji (zalecane) LUB id_sprzetu_zrodlowego.
+    """
+    id_operacji = request.args.get('id_operacji', type=int)
+    id_zrodla = request.args.get('id_sprzetu_zrodlowego', type=int)
+    if not id_operacji and not id_zrodla:
+        return jsonify({"status": "error", "message": "Wymagany parametr: id_operacji lub id_sprzetu_zrodlowego."}), 400
+
+    try:
+        from sqlalchemy.orm import joinedload
+
+        filtry_z_operacji = []
+
+        if id_operacji:
+            operacja = db.session.execute(
+                db.select(OperacjeLog).options(joinedload(OperacjeLog.segmenty)).where(OperacjeLog.id == id_operacji)
+            ).unique().scalar_one_or_none()
+            if not operacja:
+                return jsonify({"status": "error", "message": f"Operacja o ID {id_operacji} nie istnieje."}), 404
+            # Filtr(y) z segmentów poprzedniej operacji
+            port_ids = set()
+            for seg in (operacja.segmenty or []):
+                if getattr(seg, 'id_portu_startowego', None):
+                    port_ids.add(seg.id_portu_startowego)
+                if getattr(seg, 'id_portu_koncowego', None):
+                    port_ids.add(seg.id_portu_koncowego)
+            if port_ids:
+                raw = db.session.execute(
+                    db.select(Sprzet.nazwa_unikalna)
+                    .join(PortySprzetu, PortySprzetu.id_sprzetu == Sprzet.id)
+                    .where(PortySprzetu.id.in_(port_ids), Sprzet.typ_sprzetu == 'filtr')
+                    .distinct()
+                ).scalars().all()
+                filtry_z_operacji = [r[0] if isinstance(r, (list, tuple)) else r for r in raw]
+
+        all_valves = db.session.execute(db.select(Zawory.nazwa_zaworu)).scalars().all()
+        open_valves_list = [v[0] if isinstance(v, (list, tuple)) else v for v in (all_valves or [])]
+        pathfinder = get_pathfinder()
+        wszystkie_filtry = db.session.execute(
+            db.select(Sprzet.nazwa_unikalna).where(Sprzet.typ_sprzetu == 'filtr').order_by(Sprzet.nazwa_unikalna)
+        ).scalars().all()
+        if not wszystkie_filtry:
+            return jsonify({"destinations": [], "message": "Brak filtra w systemie."}), 200
+
+        # Wszystkie reaktory (puste i z mixem – wydmuch można dodać do istniejącego mixu)
+        reaktory_q = db.select(Sprzet).where(Sprzet.typ_sprzetu == 'reaktor').order_by(Sprzet.nazwa_unikalna)
+        reaktory = db.session.execute(reaktory_q).scalars().all()
+
+        destinations = []
+        for r in reaktory:
+            end_point = f"{r.nazwa_unikalna}_IN"
+            trasa_ok = False
+            if filtry_z_operacji:
+                for nazwa_filtra in filtry_z_operacji:
+                    if pathfinder.find_path(f"{nazwa_filtra}_OUT", end_point, open_valves_list):
+                        trasa_ok = True
+                        break
+            else:
+                # Fallback: id_sprzetu_zrodlowego (np. filtr) lub dowolny filtr
+                if id_zrodla:
+                    zrodlo = db.session.get(Sprzet, id_zrodla)
+                    if zrodlo and r.id != id_zrodla:
+                        start_pt = f"{zrodlo.nazwa_unikalna}_OUT"
+                        if pathfinder.find_path(start_pt, end_point, open_valves_list):
+                            trasa_ok = True
+                if not trasa_ok:
+                    for f in wszystkie_filtry:
+                        nazwa_filtra = f[0] if isinstance(f, (list, tuple)) else f
+                        if pathfinder.find_path(f"{nazwa_filtra}_OUT", end_point, open_valves_list):
+                            trasa_ok = True
+                            break
+            if trasa_ok:
+                material_types_text = None
+                if r.active_mix_id:
+                    composition = BatchManagementService.get_mix_composition(r.active_mix_id)
+                    material_types = [s['material_type'] for s in composition.get('summary_by_material', [])]
+                    if material_types:
+                        material_types_text = ' + '.join(material_types)
+                destinations.append({
+                    "id": r.id,
+                    "nazwa_unikalna": r.nazwa_unikalna,
+                    "is_empty": r.active_mix_id is None,
+                    "material_types_text": material_types_text,
+                })
+
+        return jsonify({"destinations": destinations}), 200
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
 @bp.route('/dmuchanie-destinations', methods=['GET'])
 def dmuchanie_destinations():
     """
@@ -2000,7 +2100,8 @@ def dmuchanie_change_destination():
 def filtracja_na_placku_destinations():
     """
     Zwraca listę reaktorów możliwych jako cel FILTRACJA_NA_PLACKU:
-    - inne niż źródłowy, z fizycznie możliwą trasą przez filtr (wszystkie zawory).
+    - puste (brak aktywnego mixa), różne od źródła,
+    - z fizycznie możliwą trasą: źródło → filtr → cel (jak przelew-destinations).
     Query: id_sprzetu_zrodlowego (wymagane).
     """
     id_zrodla = request.args.get('id_sprzetu_zrodlowego', type=int)
@@ -2022,15 +2123,22 @@ def filtracja_na_placku_destinations():
         filtry = db.session.execute(
             db.select(Sprzet.nazwa_unikalna).where(Sprzet.typ_sprzetu == 'filtr').order_by(Sprzet.nazwa_unikalna)
         ).scalars().all()
+        if not filtry:
+            return jsonify({"destinations": [], "message": "Brak filtra w systemie."}), 200
 
-        reaktory = db.session.execute(
+        # Tylko reaktory puste (bez aktywnego mixa), inne niż źródło – jak przelew-destinations
+        reaktory_puste = db.session.execute(
             db.select(Sprzet)
-            .where(Sprzet.typ_sprzetu == 'reaktor', Sprzet.id != id_zrodla)
+            .where(
+                Sprzet.typ_sprzetu == 'reaktor',
+                Sprzet.id != id_zrodla,
+                Sprzet.active_mix_id.is_(None)
+            )
             .order_by(Sprzet.nazwa_unikalna)
         ).scalars().all()
 
         destinations = []
-        for r in reaktory:
+        for r in reaktory_puste:
             end_point = f"{r.nazwa_unikalna}_IN"
             trasa_ok = False
             for nazwa_filtra in filtry:
@@ -2047,12 +2155,7 @@ def filtracja_na_placku_destinations():
                     trasa_ok = True
                     break
             if trasa_ok:
-                destinations.append({
-                    "id": r.id,
-                    "nazwa_unikalna": r.nazwa_unikalna,
-                    "nazwa": r.nazwa_unikalna,
-                    "is_empty": r.active_mix_id is None,
-                })
+                destinations.append({"id": r.id, "nazwa_unikalna": r.nazwa_unikalna})
 
         return jsonify({"destinations": destinations}), 200
     except Exception as e:

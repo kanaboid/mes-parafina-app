@@ -854,7 +854,7 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('filtracja-na-placku-zrodlo-name').textContent = sprzetNazwa || '—';
             document.getElementById('filtracja-na-placku-error').classList.add('d-none');
             const container = document.getElementById('filtracja-na-placku-destinations-container');
-            container.innerHTML = '<div class="list-group-item text-muted">Ładowanie reaktorów z możliwą trasą...</div>';
+            container.innerHTML = '<div class="list-group-item text-muted">Ładowanie celów (puste, z możliwą trasą)...</div>';
             modals.filtracjaNaPlacku.show();
             fetch(`/api/operations/filtracja-na-placku-destinations?id_sprzetu_zrodlowego=${idZrodla}`)
                 .then(res => res.ok ? res.json() : Promise.reject(new Error('Błąd ładowania')))
@@ -862,18 +862,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     const destinations = data.destinations || [];
                     container.innerHTML = '';
                     if (destinations.length === 0) {
-                        container.innerHTML = '<p class="text-muted mb-0 p-2">Brak reaktorów z możliwą trasą przez filtr.</p>';
+                        container.innerHTML = '<p class="text-muted mb-0 p-2">Brak pustych reaktorów z możliwą trasą przelewu (źródło → filtr → cel).</p>';
                         return;
                     }
                     destinations.forEach((item, index) => {
                         const radioId = `fnp-dest-${item.id}`;
-                        const emptyBadge = item.is_empty
-                            ? '<span class="badge bg-success ms-2">Pusty</span>'
-                            : '<span class="badge bg-warning ms-2">Zajęty</span>';
                         const label = document.createElement('label');
                         label.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center';
                         label.setAttribute('for', radioId);
-                        label.innerHTML = `<span><input class="form-check-input me-2" type="radio" name="fnp-destination" value="${item.id}" id="${radioId}" ${index === 0 ? 'checked' : ''}> ${item.nazwa_unikalna || item.id}</span>${emptyBadge}`;
+                        label.innerHTML = `<span><input class="form-check-input me-2" type="radio" name="fnp-destination" value="${item.id}" id="${radioId}" ${index === 0 ? 'checked' : ''}> ${item.nazwa_unikalna || item.id}</span><span class="badge bg-success">Pusty</span>`;
                         container.appendChild(label);
                     });
                 })
@@ -1066,7 +1063,34 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('dmuchanie-typ-czyszczenie').checked = true;
             document.getElementById('wybor-dmuchania-cel-wrap').style.display = '';
             document.getElementById('wybor-dmuchania-error').classList.add('d-none');
-            fillReaktoryCelSelect('wybor-dmuchania-cel');
+            // Załaduj cele (reaktory z trasą od filtra poprzedniej operacji) z API – id_operacji dla filtra z segmentów
+            const celSelect = document.getElementById('wybor-dmuchania-cel');
+            if (celSelect && opId) {
+                celSelect.innerHTML = '<option value="">Ładowanie celów...</option>';
+                celSelect.disabled = true;
+                fetch(`/api/operations/dmuchanie-czyszczenie-destinations?id_operacji=${opId}`)
+                    .then(res => res.ok ? res.json() : { destinations: [] })
+                    .then(data => {
+                        const destinations = data.destinations || [];
+                        celSelect.innerHTML = '<option value="">-- wybierz reaktor --</option>';
+                        destinations.forEach(d => {
+                            const opt = document.createElement('option');
+                            opt.value = d.id;
+                            opt.textContent = (d.nazwa_unikalna || d.id) + (d.material_types_text ? ` (${d.material_types_text})` : '');
+                            celSelect.appendChild(opt);
+                        });
+                        if (destinations.length === 0) {
+                            celSelect.innerHTML = '<option value="">Brak reaktorów z możliwą trasą od filtra</option>';
+                        }
+                        celSelect.disabled = false;
+                    })
+                    .catch(() => {
+                        celSelect.innerHTML = '<option value="">Błąd ładowania</option>';
+                        celSelect.disabled = false;
+                    });
+            } else {
+                fillReaktoryCelSelect('wybor-dmuchania-cel');
+            }
             modals.wyborDmuchania.show();
             return;
         }
@@ -1608,10 +1632,45 @@ document.addEventListener('DOMContentLoaded', () => {
     // Modal wyboru rodzaju dmuchania (z NA_MAGAZYN / FILTRACJA_KOLO_DO_PONOWNEJ)
     // -----------------------------------------------------------------------
     document.querySelectorAll('input[name="wybor-dmuchania-typ"]').forEach(radio => {
-        radio.addEventListener('change', () => {
+        radio.addEventListener('change', async () => {
             const celWrap = document.getElementById('wybor-dmuchania-cel-wrap');
+            const celSelect = document.getElementById('wybor-dmuchania-cel');
             if (celWrap) {
                 celWrap.style.display = radio.value === 'DMUCHANIE_CZYSZCZENIE' ? '' : 'none';
+            }
+            // Gdy wybrano DMUCHANIE_CZYSZCZENIE – załaduj cele (reaktory z trasą od filtra) – id_operacji dla filtra z segmentów
+            if (radio.value === 'DMUCHANIE_CZYSZCZENIE' && celSelect) {
+                const idOperacji = document.getElementById('wybor-dmuchania-id-operacji').value;
+                const idZrodla = document.getElementById('wybor-dmuchania-id-zrodla').value;
+                const url = idOperacji
+                    ? `/api/operations/dmuchanie-czyszczenie-destinations?id_operacji=${idOperacji}`
+                    : idZrodla
+                        ? `/api/operations/dmuchanie-czyszczenie-destinations?id_sprzetu_zrodlowego=${idZrodla}`
+                        : null;
+                if (url) {
+                    celSelect.innerHTML = '<option value="">Ładowanie celów...</option>';
+                    celSelect.disabled = true;
+                    try {
+                        const res = await fetch(url);
+                        const data = res.ok ? await res.json() : { destinations: [] };
+                        const destinations = data.destinations || [];
+                        celSelect.innerHTML = '<option value="">-- wybierz reaktor --</option>';
+                        destinations.forEach(d => {
+                            const opt = document.createElement('option');
+                            opt.value = d.id;
+                            opt.textContent = (d.nazwa_unikalna || d.id) + (d.material_types_text ? ` (${d.material_types_text})` : '');
+                            celSelect.appendChild(opt);
+                        });
+                        if (destinations.length === 0) {
+                            celSelect.innerHTML = '<option value="">Brak reaktorów z możliwą trasą</option>';
+                        }
+                    } catch {
+                        celSelect.innerHTML = '<option value="">Błąd ładowania</option>';
+                    }
+                    celSelect.disabled = false;
+                } else {
+                    fillReaktoryCelSelect('wybor-dmuchania-cel');
+                }
             }
         });
     });
@@ -1750,10 +1809,70 @@ document.addEventListener('DOMContentLoaded', () => {
     // Obsługa globalnego przycisku DMUCHANIE – czyszczenie
     const openDmuchanieCzyszczenieBtn = document.getElementById('open-dmuchanie-czyszczenie-btn');
     if (openDmuchanieCzyszczenieBtn) {
-        openDmuchanieCzyszczenieBtn.addEventListener('click', () => {
-            fillSprzetSelects('dmuchanie-czyszczenie-zrodlo', 'dmuchanie-czyszczenie-cel');
+        openDmuchanieCzyszczenieBtn.addEventListener('click', async () => {
+            const zrodloSelect = document.getElementById('dmuchanie-czyszczenie-zrodlo');
+            const celSelect = document.getElementById('dmuchanie-czyszczenie-cel');
+            const data = latestDashboardData || {};
+            const allSprzet = [
+                ...(data.all_reactors || []).map(r => ({ id: r.id, nazwa: (r.nazwa || r.nazwa_unikalna || String(r.id)) + ' (reaktor)' })),
+                ...(data.beczki_czyste || []).map(b => ({ id: b.id, nazwa: (b.nazwa || b.nazwa_unikalna || String(b.id)) + ' (beczka)' })),
+                ...(data.beczki_brudne || []).map(b => ({ id: b.id, nazwa: (b.nazwa || b.nazwa_unikalna || String(b.id)) + ' (beczka)' }))
+            ];
+            try {
+                const res = await fetch('/api/sprzet/filtry');
+                const filtry = res.ok ? await res.json() : [];
+                filtry.forEach(f => {
+                    allSprzet.push({ id: f.id, nazwa: (f.nazwa_unikalna || f.id) + ' (filtr)' });
+                });
+            } catch (_) {}
+            if (zrodloSelect) {
+                zrodloSelect.innerHTML = '<option value="">-- wybierz źródło (zalecane: filtr) --</option>';
+                allSprzet.forEach(s => {
+                    const opt = document.createElement('option');
+                    opt.value = s.id;
+                    opt.textContent = s.nazwa;
+                    zrodloSelect.appendChild(opt);
+                });
+            }
+            if (celSelect) {
+                celSelect.innerHTML = '<option value="">-- wybierz najpierw źródło --</option>';
+            }
             document.getElementById('dmuchanie-czyszczenie-error').classList.add('d-none');
             modals.dmuchanieCzyszczenie.show();
+        });
+    }
+
+    // Gdy zmieni się źródło w DMUCHANIE_CZYSZCZENIE – załaduj cele (puste reaktory z trasą)
+    const dmuchanieCzyszczenieZrodlo = document.getElementById('dmuchanie-czyszczenie-zrodlo');
+    if (dmuchanieCzyszczenieZrodlo) {
+        dmuchanieCzyszczenieZrodlo.addEventListener('change', async () => {
+            const idZrodla = dmuchanieCzyszczenieZrodlo.value;
+            const celSelect = document.getElementById('dmuchanie-czyszczenie-cel');
+            if (!celSelect) return;
+            if (!idZrodla) {
+                celSelect.innerHTML = '<option value="">-- wybierz najpierw źródło --</option>';
+                return;
+            }
+            celSelect.innerHTML = '<option value="">Ładowanie celów...</option>';
+            celSelect.disabled = true;
+            try {
+                const res = await fetch(`/api/operations/dmuchanie-czyszczenie-destinations?id_sprzetu_zrodlowego=${idZrodla}`);
+                const data = res.ok ? await res.json() : { destinations: [] };
+                const destinations = data.destinations || [];
+                celSelect.innerHTML = '<option value="">-- wybierz cel --</option>';
+                destinations.forEach(d => {
+                    const opt = document.createElement('option');
+                    opt.value = d.id;
+                    opt.textContent = (d.nazwa_unikalna || d.id) + (d.material_types_text ? ` (${d.material_types_text})` : '');
+                    celSelect.appendChild(opt);
+                });
+                if (destinations.length === 0) {
+                    celSelect.innerHTML = '<option value="">Brak reaktorów z możliwą trasą</option>';
+                }
+            } catch {
+                celSelect.innerHTML = '<option value="">Błąd ładowania</option>';
+            }
+            celSelect.disabled = false;
         });
     }
 
