@@ -6,6 +6,7 @@ from decimal import Decimal
 from .extensions import db
 from .models import *
 from .batch_management_service import BatchManagementService
+from .operations_routes import get_pathfinder
 
 
 # Nowy Blueprint dla operacji na partiach
@@ -92,6 +93,44 @@ def transfer_between_dirty_tanks():
         destination_tank_id = int(data['destination_tank_id'])
         quantity = Decimal(data['quantity_kg'])
         operator = data.get('operator', 'API_USER')
+
+        # --- Walidacja topologii i trasy PathFinder między zbiornikami ---
+        source_tank = db.session.get(Sprzet, source_tank_id)
+        dest_tank = db.session.get(Sprzet, destination_tank_id)
+        if not source_tank or not dest_tank:
+            return jsonify({'status': 'error', 'message': 'Jeden ze zbiorników nie istnieje.'}), 400
+
+        start_point = f"{source_tank.nazwa_unikalna}_OUT"
+        end_point = f"{dest_tank.nazwa_unikalna}_IN"
+
+        pathfinder = get_pathfinder()
+        all_valves = db.session.execute(db.select(Zawory.nazwa_zaworu)).scalars().all()
+        open_valves_list = [v[0] if isinstance(v, (list, tuple)) else v for v in (all_valves or [])]
+        znaleziona_sciezka_nazwy = pathfinder.find_path(start_point, end_point, open_valves_list)
+
+        if not znaleziona_sciezka_nazwy:
+            return jsonify({
+                'status': 'error',
+                'message': f'Nie znaleziono trasy od {start_point} do {end_point}.'
+            }), 409
+
+        konflikt_query = (
+            db.select(Segmenty.nazwa_segmentu)
+            .select_from(Segmenty)
+            .join(t_log_uzyte_segmenty, Segmenty.id == t_log_uzyte_segmenty.c.id_segmentu)
+            .join(OperacjeLog, t_log_uzyte_segmenty.c.id_operacji_log == OperacjeLog.id)
+            .where(
+                OperacjeLog.status_operacji == 'aktywna',
+                Segmenty.nazwa_segmentu.in_(znaleziona_sciezka_nazwy),
+            )
+        )
+        konflikty = db.session.execute(konflikt_query).all()
+        if konflikty:
+            return jsonify({
+                'status': 'error',
+                'message': 'Konflikt zasobów – segmenty trasy są używane przez inną aktywną operację.',
+                'zajete_segmenty': [k[0] if isinstance(k, (list, tuple)) else k for k in konflikty],
+            }), 409
 
         # Wywołanie serwisu, który zajmuje się całą logiką
         BatchManagementService.transfer_between_dirty_tanks(

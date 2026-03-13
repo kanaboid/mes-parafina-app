@@ -232,6 +232,9 @@ class BatchManagementService:
                 if dest_tank.typ_sprzetu == 'beczka_czysta':
                     mix_code = BatchManagementService._generate_clean_tank_mix_code(dest_tank.nazwa_unikalna)
                     process_status_dest = 'W_MAGAZYNIE_CZYSTYM'
+                elif dest_tank.typ_sprzetu == 'reaktor':
+                    mix_code = BatchManagementService.generate_reactor_mix_code(dest_tank.nazwa_unikalna)
+                    process_status_dest = 'SUROWY'
                 else:
                     mix_code = BatchManagementService._generate_dirty_tank_mix_code(dest_tank.nazwa_unikalna)
                     process_status_dest = 'SUROWY'

@@ -26,7 +26,8 @@ document.addEventListener('DOMContentLoaded', () => {
         filtracjaNaPlacku: new bootstrap.Modal(document.getElementById('filtracja-na-placku-modal')),
         dmuchanieCzyszczenie: new bootstrap.Modal(document.getElementById('dmuchanie-czyszczenie-modal')),
         dmuchanieRurociagu: new bootstrap.Modal(document.getElementById('dmuchanie-rurociagu-modal')),
-        wyborDmuchania: new bootstrap.Modal(document.getElementById('wybor-dmuchania-modal'))
+        wyborDmuchania: new bootstrap.Modal(document.getElementById('wybor-dmuchania-modal')),
+        finishTransferTankToTank: new bootstrap.Modal(document.getElementById('finish-transfer-tank-to-tank-modal'))
     };
     const forms = {
         planTransfer: document.getElementById('plan-transfer-form'),
@@ -40,6 +41,7 @@ document.addEventListener('DOMContentLoaded', () => {
         dmuchanieChangeDest: document.getElementById('dmuchanie-change-dest-form'),
         dobielanie: document.getElementById('dobielanie-form'),
         dmuchanieCzyszczenie: document.getElementById('dmuchanie-czyszczenie-form'),
+        finishTransferTankToTank: document.getElementById('finish-transfer-tank-to-tank-form'),
         dmuchanieRurociagu: document.getElementById('dmuchanie-rurociagu-form'),
         wyborDmuchania: document.getElementById('wybor-dmuchania-form'),
         filtracjaNaPlacku: document.getElementById('filtracja-na-placku-form')
@@ -732,6 +734,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const isDmuchanie = typ === 'DMUCHANIE' || (op.opis && String(op.opis).indexOf('DMUCHANIE:') === 0);
             const isDmuchanieCzyszczenie = typ === 'DMUCHANIE_CZYSZCZENIE';
             const isDmuchanieRurociagu = typ === 'DMUCHANIE_RUROCIAGU';
+            const isTransferTankToTank = typ === 'TRANSFER_TANK_TO_TANK';
             let continueBtn = '';
             let changeDestBtn = '';
             if (canContinueToPrzelew) {
@@ -778,6 +781,10 @@ document.addEventListener('DOMContentLoaded', () => {
             } else if (isDmuchanieRurociagu) {
                 endBtn = `<button type="button" class="btn btn-sm btn-outline-secondary finish-dmuchanie-rurociagu-btn" data-op-id="${op.id}" title="Zakończ dmuchanie rurociągu – zwolni trasę">
                         <i class="fas fa-check-circle me-1"></i>Zakończ rurociąg
+                    </button>`;
+            } else if (isTransferTankToTank) {
+                endBtn = `<button type="button" class="btn btn-sm btn-outline-secondary finish-transfer-tank-to-tank-btn" data-op-id="${op.id}" title="Zakończ transfer między zbiornikami – zwolni trasę">
+                        <i class="fas fa-check-circle me-1"></i>Zakończ transfer
                     </button>`;
             } else {
                 endBtn = `<button type="button" class="btn btn-sm btn-outline-danger end-operation-btn" data-op-id="${op.id}" title="Zakończ operację">
@@ -1144,6 +1151,17 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             return;
         }
+        const finishTransferTankBtn = e.target.closest('.finish-transfer-tank-to-tank-btn');
+        if (finishTransferTankBtn) {
+            e.preventDefault();
+            const opId = finishTransferTankBtn.getAttribute('data-op-id');
+            if (!opId) return;
+            document.getElementById('finish-transfer-id-operacji').value = opId;
+            document.getElementById('finish-transfer-quantity').value = '';
+            document.getElementById('finish-transfer-quantity').focus();
+            modals.finishTransferTankToTank.show();
+            return;
+        }
         if (continueKoloBtn) {
             e.preventDefault();
             const opId = continueKoloBtn.getAttribute('data-op-id');
@@ -1201,9 +1219,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Ustaw wartości w modalu
         document.getElementById('transfer-source-id').value = sourceId;
         document.getElementById('transfer-source-name').textContent = sourceName;
-        // Ustaw domyślną ilość, ale tylko jeśli jest większa od zera
-        document.getElementById('transfer-quantity').value = parseFloat(wagaPartii) > 0 ? wagaPartii : '';
-        
+
         const destinationSelect = document.getElementById('transfer-destination-id');
         destinationSelect.innerHTML = '<option>Ładowanie celów...</option>';
         destinationSelect.disabled = true;
@@ -1432,12 +1448,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // NOWA OBSŁUGA FORMULARZA: Przelej między zbiornikami
+    // NOWA OBSŁUGA FORMULARZA: Przelej między zbiornikami (start – tylko blokada trasy; ilość przy zakończeniu)
     forms.transferTankToTank.addEventListener('submit', async (e) => {
         e.preventDefault();
         const sourceId = document.getElementById('transfer-source-id').value;
         const destinationId = document.getElementById('transfer-destination-id').value;
-        const quantity = document.getElementById('transfer-quantity').value;
 
         if (!destinationId) {
             showToast('Proszę wybrać zbiornik docelowy.', 'error');
@@ -1445,28 +1460,61 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const payload = {
-            source_tank_id: parseInt(sourceId),
-            destination_tank_id: parseInt(destinationId),
-            quantity_kg: parseFloat(quantity)
+            source_tank_id: parseInt(sourceId, 10),
+            destination_tank_id: parseInt(destinationId, 10),
+            operator: 'GUI'
         };
 
         try {
-            const response = await fetch('/api/batches/transfer/tank-to-tank', {
+            const response = await fetch('/api/operations/start-transfer-tank-to-tank', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
 
             const result = await response.json();
-            if (!response.ok) throw new Error(result.message || 'Błąd serwera');
+            if (!response.ok) throw new Error(result.message || result.error || 'Błąd serwera');
 
-            showToast(`Transfer z ID ${sourceId} do ID ${destinationId} został pomyślnie zainicjowany.`, 'success');
+            showToast(result.message || `Rozpoczęto transfer z ID ${sourceId} do ID ${destinationId}.`, 'success');
             modals.transferTankToTank.hide();
+            initialLoad();
         } catch (error) {
-            console.error('Błąd podczas transferu:', error);
+            console.error('Błąd podczas start-transfer-tank-to-tank:', error);
             showToast(`Błąd transferu: ${error.message}`, 'error');
         }
     });
+
+    // Zakończ transfer – podaj ilość przelaną (kg), potem wykonaj transfer i zwolnij trasę
+    if (forms.finishTransferTankToTank) {
+        forms.finishTransferTankToTank.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const idOperacji = document.getElementById('finish-transfer-id-operacji').value;
+            const quantity = document.getElementById('finish-transfer-quantity').value;
+            if (!idOperacji || !quantity || parseFloat(quantity) <= 0) {
+                showToast('Podaj ilość przelaną (kg) większą od zera.', 'error');
+                return;
+            }
+            try {
+                const response = await fetch('/api/operations/finish-transfer-tank-to-tank', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        id_operacji: parseInt(idOperacji, 10),
+                        quantity_kg: parseFloat(quantity),
+                        operator: 'GUI'
+                    })
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.message || result.error || 'Błąd serwera');
+                showToast(result.message || 'Transfer zakończony.', 'success');
+                modals.finishTransferTankToTank.hide();
+                initialLoad();
+            } catch (err) {
+                console.error('Błąd finish-transfer-tank-to-tank:', err);
+                showToast(err.message, 'error');
+            }
+        });
+    }
 
     // Obsługa formularza Start filtracji (tylko wybór celu; start/cel/zawory/operator – automatycznie)
     if (forms.startFiltration) {

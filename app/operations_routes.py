@@ -1992,6 +1992,119 @@ def dmuchanie_destinations():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
+# ---------------------------------------------------------------------------
+# TRANSFER_TANK_TO_TANK – start
+# ---------------------------------------------------------------------------
+@bp.route('/start-transfer-tank-to-tank', methods=['POST'])
+def start_transfer_tank_to_tank():
+    """
+    Tworzy nową operację TRANSFER_TANK_TO_TANK między dwoma zbiornikami.
+    Wyznacza trasę PathFinder, blokuje segmenty i otwiera zawory.
+    Ilość przelana jest podawana przy zakończeniu operacji (finish).
+
+    Body: { source_tank_id, destination_tank_id, operator? }
+    """
+    dane = request.get_json()
+    if not dane:
+        return jsonify({"status": "error", "message": "Brak danych JSON."}), 400
+
+    try:
+        source_tank_id = int(dane.get("source_tank_id"))
+        destination_tank_id = int(dane.get("destination_tank_id"))
+        operator = dane.get("operator", "GUI")
+    except (TypeError, ValueError):
+        return jsonify({"status": "error", "message": "Nieprawidłowe dane wejściowe."}), 400
+
+    if not source_tank_id or not destination_tank_id:
+        return jsonify({"status": "error", "message": "Wymagane pola: source_tank_id, destination_tank_id."}), 400
+
+    try:
+        zrodlo = db.session.get(Sprzet, source_tank_id)
+        cel = db.session.get(Sprzet, destination_tank_id)
+        if not zrodlo:
+            return jsonify({"status": "error", "message": f"Zbiornik źródłowy o ID {source_tank_id} nie istnieje."}), 404
+        if not cel:
+            return jsonify({"status": "error", "message": f"Zbiornik docelowy o ID {destination_tank_id} nie istnieje."}), 404
+
+        start_point = f"{zrodlo.nazwa_unikalna}_OUT"
+        end_point = f"{cel.nazwa_unikalna}_IN"
+
+        pathfinder = get_pathfinder()
+        all_valves = db.session.execute(db.select(Zawory.nazwa_zaworu)).scalars().all()
+        open_valves_list = [v[0] if isinstance(v, (list, tuple)) else v for v in (all_valves or [])]
+        znaleziona_sciezka_nazwy = pathfinder.find_path(start_point, end_point, open_valves_list)
+
+        if not znaleziona_sciezka_nazwy:
+            return jsonify({
+                "status": "error",
+                "message": f"Nie znaleziono trasy od {start_point} do {end_point}.",
+            }), 409
+
+        konflikt_query = (
+            db.select(Segmenty.nazwa_segmentu)
+            .select_from(Segmenty)
+            .join(t_log_uzyte_segmenty, Segmenty.id == t_log_uzyte_segmenty.c.id_segmentu)
+            .join(OperacjeLog, t_log_uzyte_segmenty.c.id_operacji_log == OperacjeLog.id)
+            .where(
+                OperacjeLog.status_operacji == "aktywna",
+                Segmenty.nazwa_segmentu.in_(znaleziona_sciezka_nazwy),
+            )
+        )
+        konflikty = db.session.execute(konflikt_query).all()
+        if konflikty:
+            return jsonify({
+                "status": "error",
+                "message": "Konflikt zasobów – segmenty trasy są używane przez inną aktywną operację.",
+                "zajete_segmenty": [k[0] if isinstance(k, (list, tuple)) else k for k in konflikty],
+            }), 409
+
+        nowa_operacja = OperacjeLog(
+            typ_operacji="TRANSFER_TANK_TO_TANK",
+            status_operacji="aktywna",
+            czas_rozpoczecia=dt.now(timezone.utc),
+            id_sprzetu_zrodlowego=zrodlo.id,
+            id_sprzetu_docelowego=cel.id,
+            opis=f"TRANSFER_TANK_TO_TANK: {zrodlo.nazwa_unikalna} → {cel.nazwa_unikalna}",
+            punkt_startowy=start_point,
+            punkt_docelowy=end_point,
+            zmodyfikowane_przez=operator,
+        )
+        db.session.add(nowa_operacja)
+        db.session.flush()
+
+        segmenty_trasy = db.session.execute(
+            db.select(Segmenty).where(Segmenty.nazwa_segmentu.in_(znaleziona_sciezka_nazwy))
+        ).scalars().all()
+        nowa_operacja.segmenty = list(segmenty_trasy)
+
+        zawory_na_trasie = set()
+        for u, v, edge_data in pathfinder.graph.edges(data=True):
+            if edge_data.get("segment_name") in znaleziona_sciezka_nazwy and "valve_name" in edge_data:
+                zawory_na_trasie.add(edge_data["valve_name"])
+        if zawory_na_trasie:
+            db.session.execute(
+                db.update(Zawory).where(Zawory.nazwa_zaworu.in_(zawory_na_trasie)).values(stan="OTWARTY")
+            )
+
+        db.session.commit()
+        try:
+            broadcast_dashboard_update()
+        except Exception:
+            pass
+        return jsonify({
+            "status": "success",
+            "message": f"Operacja TRANSFER_TANK_TO_TANK rozpoczęta: {zrodlo.nazwa_unikalna} → {cel.nazwa_unikalna}.",
+            "id_operacji": nowa_operacja.id,
+        }), 200
+    except ValueError as e:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        traceback.print_exc()
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
 @bp.route('/dmuchanie-change-destination', methods=['POST'])
 def dmuchanie_change_destination():
     """
@@ -2806,6 +2919,84 @@ def finish_dmuchanie_rurociagu():
         return jsonify({
             "status": "success",
             "message": "Operacja DMUCHANIE_RUROCIAGU zakończona. Trasa zwolniona.",
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        traceback.print_exc()
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+# ---------------------------------------------------------------------------
+# TRANSFER_TANK_TO_TANK – finish
+# ---------------------------------------------------------------------------
+@bp.route('/finish-transfer-tank-to-tank', methods=['POST'])
+def finish_transfer_tank_to_tank():
+    """
+    Kończy operację TRANSFER_TANK_TO_TANK.
+    Wykonuje transfer mieszaniny o podanej ilości (quantity_kg), następnie
+    zamyka zawory i zwalnia segmenty trasy.
+
+    Body: { id_operacji, quantity_kg, operator? }
+    """
+    dane = request.get_json()
+    if not dane or "id_operacji" not in dane:
+        return jsonify({"status": "error", "message": "Brak wymaganego pola: id_operacji."}), 400
+    if "quantity_kg" not in dane:
+        return jsonify({"status": "error", "message": "Brak wymaganego pola: quantity_kg (ilość przelana w kg)."}), 400
+
+    try:
+        id_operacji = int(dane["id_operacji"])
+        quantity_kg = Decimal(str(dane["quantity_kg"]))
+        operator = dane.get("operator", "GUI")
+    except (TypeError, ValueError):
+        return jsonify({"status": "error", "message": "Nieprawidłowa wartość id_operacji lub quantity_kg."}), 400
+
+    if quantity_kg <= 0:
+        return jsonify({"status": "error", "message": "Ilość przelana (quantity_kg) musi być większa od zera."}), 400
+
+    try:
+        operacja = db.session.execute(
+            db.select(OperacjeLog)
+            .options(joinedload(OperacjeLog.segmenty))
+            .where(OperacjeLog.id == id_operacji)
+        ).unique().scalar_one_or_none()
+
+        if not operacja:
+            return jsonify({"status": "error", "message": f"Operacja o ID {id_operacji} nie istnieje."}), 404
+        if operacja.status_operacji != "aktywna":
+            return jsonify({"status": "error", "message": "Operacja nie jest aktywna."}), 409
+        if operacja.typ_operacji != "TRANSFER_TANK_TO_TANK":
+            return jsonify({
+                "status": "error",
+                "message": f"Operacja nie jest typu TRANSFER_TANK_TO_TANK (obecny: {operacja.typ_operacji}).",
+            }), 409
+
+        # Wykonaj transfer mieszaniny (źródło i cel z operacji)
+        BatchManagementService.transfer_between_dirty_tanks(
+            source_tank_id=operacja.id_sprzetu_zrodlowego,
+            destination_tank_id=operacja.id_sprzetu_docelowego,
+            quantity_to_transfer=quantity_kg,
+            operator=operator,
+        )
+
+        if operacja.segmenty:
+            for segment in operacja.segmenty:
+                if segment.zawory:
+                    segment.zawory.stan = "ZAMKNIETY"
+            operacja.segmenty = []
+
+        operacja.status_operacji = "zakonczona"
+        operacja.czas_zakonczenia = dt.now(timezone.utc)
+        operacja.zmodyfikowane_przez = operator
+
+        db.session.commit()
+        try:
+            broadcast_dashboard_update()
+        except Exception:
+            pass
+        return jsonify({
+            "status": "success",
+            "message": "Operacja TRANSFER_TANK_TO_TANK zakończona. Trasa zwolniona.",
         }), 200
     except Exception as e:
         db.session.rollback()
