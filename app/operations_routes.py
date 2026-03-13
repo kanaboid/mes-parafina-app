@@ -2971,7 +2971,15 @@ def finish_transfer_tank_to_tank():
                 "message": f"Operacja nie jest typu TRANSFER_TANK_TO_TANK (obecny: {operacja.typ_operacji}).",
             }), 409
 
-        # Wykonaj transfer mieszaniny (źródło i cel z operacji)
+        # Najpierw: jeśli mix docelowy już ma tylko WYDMUCH, ustaw jego kod wg konwencji PRZELEJ (przed dodaniem payloadu)
+        normalize_result = None
+        dest_tank = db.session.get(Sprzet, operacja.id_sprzetu_docelowego)
+        if dest_tank and dest_tank.active_mix_id:
+            normalize_result = BatchManagementService.normalize_mix_code_if_only_wydmuch(
+                dest_tank.active_mix_id, commit=True
+            )
+
+        # Potem: wykonaj transfer mieszaniny (dodanie payloadu do celu)
         BatchManagementService.transfer_between_dirty_tanks(
             source_tank_id=operacja.id_sprzetu_zrodlowego,
             destination_tank_id=operacja.id_sprzetu_docelowego,
@@ -2994,10 +3002,10 @@ def finish_transfer_tank_to_tank():
             broadcast_dashboard_update()
         except Exception:
             pass
-        return jsonify({
-            "status": "success",
-            "message": "Operacja TRANSFER_TANK_TO_TANK zakończona. Trasa zwolniona.",
-        }), 200
+        payload = {"status": "success", "message": "Operacja TRANSFER_TANK_TO_TANK zakończona. Trasa zwolniona."}
+        if normalize_result:
+            payload["normalize_mix_code"] = normalize_result
+        return jsonify(payload), 200
     except Exception as e:
         db.session.rollback()
         traceback.print_exc()
