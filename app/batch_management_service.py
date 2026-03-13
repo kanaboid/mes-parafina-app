@@ -188,9 +188,9 @@ class BatchManagementService:
             source_mix = db.session.get(TankMixes, source_tank.active_mix_id) if source_tank.active_mix_id else None
             if not source_mix or source_mix.status == 'ARCHIVED':
                 raise ValueError("Zbiornik źródłowy jest pusty.")
-            if dest_tank.typ_sprzetu == 'beczka_czysta' and source_mix.process_status != 'ZATWIERDZONA':
+            if dest_tank.typ_sprzetu == 'beczka_czysta' and source_mix.process_status != 'ZATWIERDZONA' and source_mix.process_status != 'W_MAGAZYNIE_CZYSTYM':
                 raise ValueError(
-                    f"Transfer do magazynu czystego dozwolony tylko dla mieszaniny ZATWIERDZONA. "
+                    f"Transfer do magazynu czystego dozwolony tylko dla mieszaniny ZATWIERDZONA lub W_MAGAZYNIE_CZYSTYM. "
                     f"Obecny status: '{source_mix.process_status}'."
                 )
 
