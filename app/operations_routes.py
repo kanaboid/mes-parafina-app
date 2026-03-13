@@ -814,7 +814,7 @@ def zakoncz_operacje():
                     if operacja.typ_operacji == 'FILTRACJA_WYDMUCH':
                         mix.is_wydmuch_mix = False
                         mix.filtration_cycles_count = (mix.filtration_cycles_count or 0) + 1
-                    if operacja.typ_operacji == 'FILTRACJA_NA_PLACKU':
+                    if operacja.typ_operacji in ('FILTRACJA_NA_PLACKU', 'FILTRACJA_PLACEK_KOLO', 'FILTRACJA_PLACEK_PRZELEW'):
                         _apply_filtracja_na_placku_finish(mix)
                 # Jeśli cel ≠ źródło – przenieś mieszaninę do reaktora docelowego (tylko gdy nie przerwano przelewu)
                 if (
@@ -1060,6 +1060,9 @@ def continue_to_przelew():
         if not mix:
             return jsonify({"status": "error", "message": "Nie znaleziono mieszaniny dla tej operacji."}), 404
 
+        # Dla FILTRACJA_PLACEK_KOLO: najpierw zakończ etap (filtration_cycles_count, is_wydmuch_mix, usunięcie WYDMUCH, 20% do pozostałych)
+        _apply_filtracja_na_placku_finish(mix)
+
         id_zrodla = operacja.id_sprzetu_zrodlowego or mix.tank_id
         if id_zrodla == id_reaktora_docelowego:
             return jsonify({
@@ -1217,8 +1220,8 @@ def continue_to_kolo():
         if not mix:
             return jsonify({"status": "error", "message": "Nie znaleziono mieszaniny dla tej operacji."}), 404
 
-        # Dla FILTRACJA_NA_PLACKU: najpierw zakończ etap (filtration_cycles_count, is_wydmuch_mix, usunięcie WYDMUCH, 20% do pozostałych)
-        if operacja.typ_operacji == 'FILTRACJA_NA_PLACKU':
+        # Dla FILTRACJA_NA_PLACKU i FILTRACJA_PLACEK_PRZELEW: najpierw zakończ etap (filtration_cycles_count, is_wydmuch_mix, usunięcie WYDMUCH, 20% do pozostałych)
+        if operacja.typ_operacji in ('FILTRACJA_NA_PLACKU', 'FILTRACJA_PLACEK_PRZELEW'):
             _apply_filtracja_na_placku_finish(mix)
 
         # 1. Zakończ bieżącą operację: zamknij zawory, ustaw next_status, przenieś mix jeśli cel≠źródło
