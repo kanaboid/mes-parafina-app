@@ -288,11 +288,12 @@ class BatchManagementService:
             db.session.rollback(); raise e
 
     @staticmethod
-    def create_wydmuch_batch(source_batch_code: str, material_type: str, quantity_kg: Decimal = Decimal('500.00')) -> dict:
+    def create_wydmuch_batch(source_batch_code: str, material_type: str = None, quantity_kg: Decimal = Decimal('500.00')) -> dict:
         """
         Tworzy nową partię pierwotną wydmuchaną (W-P-...) na podstawie kodu partii źródłowej.
         Używana przy zakończeniu operacji DMUCHANIE_CZYSZCZENIE.
         Zwraca: {'batch_id': int, 'unique_code': str}
+        Partia W-P- zawsze ma material_type='WYDMUCH' (parametr material_type jest ignorowany).
         """
         base_code = f"W-P-{source_batch_code}"
         existing_count = db.session.execute(
@@ -303,7 +304,7 @@ class BatchManagementService:
 
         new_batch = Batches(
             unique_code=unique_code,
-            material_type=material_type,
+            material_type='WYDMUCH',
             source_type='WYDMUCH',
             source_name=source_batch_code,
             initial_quantity=quantity_kg,
