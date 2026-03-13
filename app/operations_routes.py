@@ -33,15 +33,11 @@ def get_pathfinder():
     return pathfinder
 
 
-def _apply_filtracja_na_placku_finish(mix):
+def _apply_wydmuch_components_cleanup(mix):
     """
-    Wykonuje logikę zakończenia FILTRACJA_NA_PLACKU na tank_mix:
-    - filtration_cycles_count += 1
-    - is_wydmuch_mix = False
-    - Usuwa składniki material_type='WYDMUCH', dodaje 20% ich masy proporcjonalnie do pozostałych.
+    Usuwa składniki material_type='WYDMUCH' i dodaje 20% ich masy proporcjonalnie do pozostałych.
+    Bez filtration_cycles_count i is_wydmuch_mix – używane tam, gdzie te pola są ustawiane osobno.
     """
-    mix.filtration_cycles_count = (mix.filtration_cycles_count or 0) + 1
-    mix.is_wydmuch_mix = False
     komponenty = list(mix.components)
     wydmuch_komp = [c for c in komponenty if c.batch and c.batch.material_type == 'WYDMUCH']
     inne_komp = [c for c in komponenty if c not in wydmuch_komp]
@@ -54,6 +50,18 @@ def _apply_filtracja_na_placku_finish(mix):
             comp.quantity_in_mix += odzysk * prop
     for comp in wydmuch_komp:
         db.session.delete(comp)
+
+
+def _apply_filtracja_na_placku_finish(mix):
+    """
+    Wykonuje logikę zakończenia FILTRACJA_NA_PLACKU / FILTRACJA_PLACEK_* na tank_mix:
+    - filtration_cycles_count += 1
+    - is_wydmuch_mix = False
+    - Usuwa składniki material_type='WYDMUCH', dodaje 20% ich masy proporcjonalnie do pozostałych.
+    """
+    mix.filtration_cycles_count = (mix.filtration_cycles_count or 0) + 1
+    mix.is_wydmuch_mix = False
+    _apply_wydmuch_components_cleanup(mix)
 
 
 # Endpoint do tworzenia nowej partii przez tankowanie
@@ -806,7 +814,7 @@ def zakoncz_operacje():
                     'FILTRACJA_PLACEK_PRZELEW': 'FILTRACJA_KOLO',
                     'FILTRACJA_PRZELEW': 'FILTRACJA_PRZELEW_PRZERWANE',
                     'FILTRACJA_KOLO': 'OCZEKUJE_NA_OCENE',
-                    'FILTRACJA_WYDMUCH': 'FILTRACJA_KOLO',
+                    'FILTRACJA_WYDMUCH': 'FILTRACJA_PRZELEW',
                     'FILTRACJA_NA_PLACKU': 'FILTRACJA_KOLO',
                 }.get(mix.process_status)
                 if next_status:
@@ -1024,7 +1032,7 @@ def start_filtration_destinations():
 @bp.route('/continue-to-przelew', methods=['POST'])
 def continue_to_przelew():
     """
-    Kończy operację FILTRACJA_PLACEK_KOLO i uruchamia FILTRACJA_PRZELEW
+    Kończy operację FILTRACJA_PLACEK_KOLO lub FILTRACJA_WYDMUCH i uruchamia FILTRACJA_PRZELEW
     (reaktor źródłowy → filtr → reaktor docelowy). Wymaga id_reaktora_docelowego.
     """
     dane = request.get_json()
@@ -1044,10 +1052,10 @@ def continue_to_przelew():
             return jsonify({"status": "error", "message": f"Operacja o ID {id_operacji} nie istnieje."}), 404
         if operacja.status_operacji != 'aktywna':
             return jsonify({"status": "error", "message": "Operacja nie jest aktywna."}), 409
-        if operacja.typ_operacji != 'FILTRACJA_PLACEK_KOLO':
+        if operacja.typ_operacji not in ('FILTRACJA_PLACEK_KOLO', 'FILTRACJA_WYDMUCH'):
             return jsonify({
                 "status": "error",
-                "message": f"Kontynuacja do FILTRACJA_PRZELEW tylko z operacji FILTRACJA_PLACEK_KOLO (obecny: {operacja.typ_operacji})."
+                "message": f"Kontynuacja do FILTRACJA_PRZELEW tylko z operacji FILTRACJA_PLACEK_KOLO lub FILTRACJA_WYDMUCH (obecny: {operacja.typ_operacji})."
             }), 409
 
         mix = None
@@ -1061,7 +1069,13 @@ def continue_to_przelew():
             return jsonify({"status": "error", "message": "Nie znaleziono mieszaniny dla tej operacji."}), 404
 
         # Dla FILTRACJA_PLACEK_KOLO: najpierw zakończ etap (filtration_cycles_count, is_wydmuch_mix, usunięcie WYDMUCH, 20% do pozostałych)
-        _apply_filtracja_na_placku_finish(mix)
+        if operacja.typ_operacji == 'FILTRACJA_PLACEK_KOLO':
+            _apply_filtracja_na_placku_finish(mix)
+        # Dla FILTRACJA_WYDMUCH: tylko usunięcie WYDMUCH + 20% do pozostałych, potem filtration_cycles_count i is_wydmuch_mix
+        if operacja.typ_operacji == 'FILTRACJA_WYDMUCH':
+            _apply_wydmuch_components_cleanup(mix)
+            mix.filtration_cycles_count = (mix.filtration_cycles_count or 0) + 1
+            mix.is_wydmuch_mix = False
 
         id_zrodla = operacja.id_sprzetu_zrodlowego or mix.tank_id
         if id_zrodla == id_reaktora_docelowego:

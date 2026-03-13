@@ -717,7 +717,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const startTime = new Date(op.czas_rozpoczecia);
             const timeSince = Math.round((new Date() - startTime) / 1000 / 60); // minuty temu
             const typ = (op.typ_operacji || '').toString().trim();
-            const canContinueToPrzelew = typ === 'FILTRACJA_PLACEK_KOLO';
+            const canContinueToPrzelew = typ === 'FILTRACJA_PLACEK_KOLO' || typ === 'FILTRACJA_WYDMUCH';
             const canContinueToKolo = typ === 'FILTRACJA_PRZELEW' || typ === 'FILTRACJA_PLACEK_PRZELEW' || typ === 'FILTRACJA_NA_PLACKU';
             const canContinueToOcena = typ === 'FILTRACJA_KOLO';
             const canContinueToMagazyn = typ === 'FILTRACJA_KOLO_ZATWIERDZONA';
