@@ -133,8 +133,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 <i class="fas fa-exchange-alt"></i>
             </button>`;
 
-            // Przycisk Dobielanie – gdy process_status: SUROWY, PODGRZEWANY, DO_PONOWNEJ_FILTRACJI, FILTRACJA_PRZELEW_PRZERWANE
-            const canDobielanie = r.partia && ['SUROWY', 'PODGRZEWANY', 'DO_PONOWNEJ_FILTRACJI', 'FILTRACJA_PRZELEW_PRZERWANE'].includes(r.partia.process_status);
+            // Mieszanina zawiera tylko batche WYDMUCH – ukryj dobielanie i filtrację
+            const isOnlyWydmuch = r.partia && r.partia.sklad && r.partia.sklad.length > 0 &&
+                r.partia.sklad.every(item => (item.material_type || '').toUpperCase() === 'WYDMUCH');
+
+            // Przycisk Dobielanie – gdy process_status: SUROWY, PODGRZEWANY, DO_PONOWNEJ_FILTRACJI, FILTRACJA_PRZELEW_PRZERWANE (nie gdy tylko WYDMUCH)
+            const canDobielanie = r.partia && !isOnlyWydmuch && ['SUROWY', 'PODGRZEWANY', 'DO_PONOWNEJ_FILTRACJI', 'FILTRACJA_PRZELEW_PRZERWANE'].includes(r.partia.process_status);
             if (canDobielanie) {
                 actionButtonsHTML += `
                     <button class="btn btn-warning action-btn" 
@@ -156,8 +160,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         Wlącz palnik(INFO)
                     </button>`;
             }
-            // Przyciski filtracji – warunkowe na podstawie process_status
-            if (r.partia) {
+            // Przyciski filtracji – warunkowe na podstawie process_status (ukryte gdy mix zawiera tylko WYDMUCH)
+            if (r.partia && !isOnlyWydmuch) {
                 const ps = r.partia.process_status;
 
                 if (ps === 'DOBIELONY_OCZEKUJE') {
