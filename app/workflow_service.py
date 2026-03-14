@@ -2,7 +2,7 @@
 from datetime import datetime, timezone
 from decimal import Decimal
 from app.extensions import db
-from app.models import TankMixes, OperacjeLog, Sprzet, MixComponents, Batches
+from app.models import TankMixes, OperacjeLog, Sprzet, MixComponents, Batches, Segmenty
 from app.batch_management_service import BatchManagementService
 from sqlalchemy import select
 class WorkflowService:
@@ -61,7 +61,6 @@ class WorkflowService:
         mix = db.session.get(TankMixes, mix_id)
         if not mix: raise ValueError(f"Mieszanina o ID {mix_id} nie istnieje.")
         if not mix.tank: raise ValueError("Mieszanina nie jest przypisana do żadnego reaktora.")
-        if mix.is_wydmuch_mix: raise ValueError("Nie można dodawać ziemi bielącej do mieszaniny będącej wydmuchem.")
         if not mix.tank.temperatura_aktualna or mix.tank.temperatura_aktualna < 110.0:
             raise ValueError(f"Zbyt niska temperatura reaktora ({mix.tank.temperatura_aktualna}°C). Wymagane min. 110°C.")
         
@@ -198,3 +197,127 @@ class WorkflowService:
         except Exception as e:
             db.session.rollback()
             raise e
+
+    @classmethod
+    def start_filtration_cycle(
+        cls,
+        mix_id: int,
+        operator: str,
+        segment_names: list[str],
+        start_point: str,
+        end_point: str,
+    ) -> dict:
+        """
+        Rozpoczyna cykl filtracji dla mieszaniny. Pathfinder musi być wywołany wcześniej;
+        segment_names to lista nazw segmentów zwrócona przez Pathfinder.
+
+        :param mix_id: ID mieszaniny (TankMixes).
+        :param operator: Identyfikator operatora.
+        :param segment_names: Lista nazw segmentów trasy (z Pathfinder).
+        :param start_point: Punkt startowy trasy.
+        :param end_point: Punkt docelowy trasy.
+        :return: Słownik z mix, id_operacji, typ_operacji, trasa.
+        :raises ValueError: Gdy walidacja się nie powiedzie.
+        """
+        mix = db.session.get(TankMixes, mix_id)
+        if not mix:
+            raise ValueError(f"Mieszanina o ID {mix_id} nie istnieje.")
+        if mix.process_status not in ('DOBIELONY_OCZEKUJE', 'FILTRACJA_KOLO', 'OCZEKUJE_NA_OCENE'):
+            raise ValueError(
+                f"Nie można rozpocząć filtracji. Obecny status: '{mix.process_status}'. "
+                "Dozwolone: 'DOBIELONY_OCZEKUJE', 'FILTRACJA_KOLO' lub 'OCZEKUJE_NA_OCENE'."
+            )
+
+        # Dla FILTRACJA_KOLO lub OCZEKUJE_NA_OCENE uruchamiamy kolejny cykl (bez sprawdzania dobielania)
+        if mix.process_status in ('FILTRACJA_KOLO', 'OCZEKUJE_NA_OCENE'):
+            typ_operacji = 'FILTRACJA_KOLO'
+            mix.process_status = 'FILTRACJA_KOLO'
+            # Identyfikacja sprzętu i utworzenie operacji – poniżej
+        else:
+            # Sprawdzenie: czy od ostatniego cyklu filtracji było nowe dobielanie
+            ostatnia_filtracja = db.session.execute(
+                select(OperacjeLog)
+                .where(
+                    OperacjeLog.id_tank_mix == mix.id,
+                    OperacjeLog.typ_operacji.in_(
+                        ('FILTRACJA_PLACEK_KOLO', 'FILTRACJA_PLACEK_PRZELEW', 'FILTRACJA_PRZELEW', 'FILTRACJA_KOLO', 'FILTRACJA_WYDMUCH')
+                    ),
+                )
+                .order_by(OperacjeLog.czas_rozpoczecia.desc())
+            ).scalars().first()
+
+            ostatnie_dobielanie = db.session.execute(
+                select(OperacjeLog)
+                .where(
+                    OperacjeLog.id_tank_mix == mix.id,
+                    OperacjeLog.typ_operacji == 'DOBIELANIE',
+                )
+                .order_by(OperacjeLog.czas_rozpoczecia.desc())
+            ).scalars().first()
+
+            if ostatnia_filtracja and ostatnie_dobielanie:
+                if ostatnie_dobielanie.czas_rozpoczecia <= ostatnia_filtracja.czas_rozpoczecia:
+                    raise ValueError(
+                        "Od ostatniego cyklu filtracji nie dodano nowych worków z ziemią. "
+                        "Wymagane jest nowe dobielanie przed rozpoczęciem filtracji."
+                    )
+            # typ_operacji ustawiony poniżej na podstawie wydmuch/same_reactor/przelew
+
+        # Identyfikacja sprzętu źródłowego i docelowego z punktów trasy (np. R6_OUT → R6, R8_IN → R8)
+        nazwa_zrodla = start_point.rsplit('_', 1)[0] if start_point and '_' in start_point else None
+        nazwa_celu = end_point.rsplit('_', 1)[0] if end_point and '_' in end_point else None
+        id_sprzetu_zrodlowego = None
+        id_sprzetu_docelowego = None
+        if nazwa_zrodla:
+            id_sprzetu_zrodlowego = db.session.execute(
+                select(Sprzet.id).where(Sprzet.nazwa_unikalna == nazwa_zrodla)
+            ).scalar_one_or_none()
+        if nazwa_celu:
+            id_sprzetu_docelowego = db.session.execute(
+                select(Sprzet.id).where(Sprzet.nazwa_unikalna == nazwa_celu)
+            ).scalar_one_or_none()
+
+        # Typ operacji: dla FILTRACJA_KOLO już ustawiony wyżej; inaczej WYDMUCH / PLACEK_KOLO / PLACEK_PRZELEW
+        if mix.process_status != 'FILTRACJA_KOLO':
+            same_reactor = (
+                id_sprzetu_zrodlowego is not None
+                and id_sprzetu_docelowego is not None
+                and id_sprzetu_zrodlowego == id_sprzetu_docelowego
+            )
+            if mix.is_wydmuch_mix:
+                typ_operacji = 'FILTRACJA_WYDMUCH'
+            elif same_reactor:
+                typ_operacji = 'FILTRACJA_PLACEK_KOLO'
+            else:
+                typ_operacji = 'FILTRACJA_PLACEK_PRZELEW'
+            mix.process_status = typ_operacji
+
+        opis = f"Operacja {typ_operacji} z {start_point} do {end_point}"
+        nowa_operacja = OperacjeLog(
+            typ_operacji=typ_operacji,
+            id_tank_mix=mix.id,
+            id_sprzetu_zrodlowego=id_sprzetu_zrodlowego,
+            id_sprzetu_docelowego=id_sprzetu_docelowego,
+            status_operacji='aktywna',
+            czas_rozpoczecia=datetime.now(timezone.utc),
+            opis=opis,
+            punkt_startowy=start_point,
+            punkt_docelowy=end_point,
+            zmodyfikowane_przez=operator,
+        )
+        db.session.add(nowa_operacja)
+        db.session.flush()
+
+        if segment_names:
+            segmenty_trasy = db.session.execute(
+                select(Segmenty).where(Segmenty.nazwa_segmentu.in_(segment_names))
+            ).scalars().all()
+            nowa_operacja.segmenty = segmenty_trasy
+
+        db.session.commit()
+        return {
+            'mix': mix,
+            'id_operacji': nowa_operacja.id,
+            'typ_operacji': typ_operacji,
+            'trasa': {'start': start_point, 'cel': end_point, 'uzyte_segmenty': segment_names},
+        }

@@ -23,7 +23,17 @@
     </div>
 
     <!-- SEKCJA PRZENIESIONA: Aktywne Operacje -->
-    <h2 class="mb-3">Log Aktywnych Operacji</h2>
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="mb-0">Log Aktywnych Operacji</h2>
+        <div class="d-flex gap-2">
+            <button class="btn btn-warning btn-sm" id="open-dmuchanie-czyszczenie-btn" title="Uruchom operację czyszczenia filtra (DMUCHANIE_CZYSZCZENIE)">
+                <i class="fas fa-wind me-1"></i>DMUCHANIE – czyszczenie
+            </button>
+            <button class="btn btn-secondary btn-sm" id="open-dmuchanie-rurociagu-btn" title="Uruchom dmuchanie dowolnego odcinka rurociągu">
+                <i class="fas fa-grip-lines me-1"></i>DMUCHANIE rurociągu
+            </button>
+        </div>
+    </div>
     <div class="card mb-4">
         <div id="active-operations-log" class="list-group list-group-flush">
             <!-- Log operacji będzie wstawiany tutaj -->
@@ -173,11 +183,366 @@
                             <!-- Opcje ładowane dynamicznie -->
                         </select>
                     </div>
+                    <p class="text-muted small mb-0">Ilość przelana (kg) podajesz przy zakończeniu operacji w sekcji „Aktywne operacje”.</p>
+                    <button type="submit" class="btn btn-primary mt-3">Rozpocznij przelew (zablokuj trasę)</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Zakończ transfer (podaj ilość przelaną) -->
+<div class="modal fade" id="finish-transfer-tank-to-tank-modal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Zakończ transfer – podaj ilość przelaną</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="finish-transfer-tank-to-tank-form">
+                    <input type="hidden" id="finish-transfer-id-operacji">
                     <div class="mb-3">
-                        <label for="transfer-quantity" class="form-label">Ilość do przelania (kg):</label>
-                        <input type="number" id="transfer-quantity" class="form-control" step="0.01" required>
+                        <label for="finish-transfer-quantity" class="form-label">Ilość przelana (kg):</label>
+                        <input type="number" id="finish-transfer-quantity" class="form-control" step="0.01" min="0.01" required>
                     </div>
-                    <button type="submit" class="btn btn-primary">Wykonaj Przelew</button>
+                    <button type="submit" class="btn btn-primary">Zakończ transfer i zatwierdź ilość</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Start filtracji (jak w operacje_apollo – tylko wybór reaktora docelowego) -->
+<div class="modal fade" id="start-filtration-modal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Start filtracji z <span class="fw-bold" id="start-filtration-reaktor-name"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Zamknij"></button>
+            </div>
+            <div class="modal-body">
+                <form id="start-filtration-form">
+                    <input type="hidden" id="start-filtration-mix-id">
+                    <input type="hidden" id="start-filtration-reaktor-nazwa">
+                    <div class="mb-3">
+                        <label class="form-label">Wybierz reaktor docelowy:</label>
+                        <div id="start-filtration-destinations-container" class="list-group">
+                            <!-- Opcje ładowane dynamicznie przez JavaScript -->
+                        </div>
+                    </div>
+                    <div id="start-filtration-error" class="alert alert-danger d-none"></div>
+                    <button type="submit" class="btn btn-success"><i class="fas fa-play me-1"></i>Rozpocznij filtrację</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Wybór reaktora docelowego dla FILTRACJA_PRZELEW (następny krok po FILTRACJA_PLACEK_KOLO) -->
+<div class="modal fade" id="przelew-dest-modal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Następny etap: FILTRACJA_PRZELEW – wybierz reaktor docelowy</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Zamknij"></button>
+            </div>
+            <div class="modal-body">
+                <form id="przelew-dest-form">
+                    <input type="hidden" id="przelew-dest-id-operacji">
+                    <p class="text-muted small">Źródło: <span id="przelew-dest-zrodlo-name" class="fw-bold"></span></p>
+                    <div class="mb-3">
+                        <label class="form-label">Reaktor docelowy:</label>
+                        <div id="przelew-dest-container" class="list-group">
+                            <!-- Opcje ładowane przez JS -->
+                        </div>
+                    </div>
+                    <div id="przelew-dest-error" class="alert alert-danger d-none"></div>
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-forward me-1"></i>Rozpocznij FILTRACJA_PRZELEW</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Ocena próbki (następny krok po FILTRACJA_KOLO) -->
+<div class="modal fade" id="ocena-probki-modal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Ocena próbki – wynik</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Zamknij"></button>
+            </div>
+            <div class="modal-body">
+                <form id="ocena-probki-form">
+                    <input type="hidden" id="ocena-probki-id-operacji">
+                    <div class="mb-3">
+                        <label class="form-label">Wynik oceny:</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="ocena-wynik" id="ocena-ok" value="OK" checked>
+                            <label class="form-check-label" for="ocena-ok">OK – zatwierdź (możliwość przelewu na magazyn)</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="ocena-wynik" id="ocena-do-ponownej" value="DO_PONOWNEJ_FILTRACJI">
+                            <label class="form-check-label" for="ocena-do-ponownej">Do ponownej filtracji</label>
+                        </div>
+                    </div>
+                    <div class="mb-3 d-none" id="ocena-powod-wrap">
+                        <label class="form-label" for="ocena-powod">Powód (opcjonalnie):</label>
+                        <input type="text" class="form-control" id="ocena-powod" placeholder="np. mętność, zanieczyszczenie">
+                    </div>
+                    <div id="ocena-probki-error" class="alert alert-danger d-none"></div>
+                    <button type="submit" class="btn btn-success"><i class="fas fa-check me-1"></i>Zatwierdź wynik</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal NA_MAGAZYN – wybór beczki czystej (cel przelewu) -->
+<div class="modal fade" id="na-magazyn-modal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Następny etap (NA_MAGAZYN) – wybierz beczkę czystą</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Zamknij"></button>
+            </div>
+            <div class="modal-body">
+                <form id="na-magazyn-form">
+                    <input type="hidden" id="na-magazyn-id-operacji">
+                    <div class="mb-3">
+                        <label class="form-label">Beczka docelowa (magazyn czysty):</label>
+                        <div id="na-magazyn-destinations-container" class="list-group">
+                            <!-- Opcje ładowane przez JS z informacją o zawartości -->
+                        </div>
+                    </div>
+                    <div id="na-magazyn-error" class="alert alert-danger d-none"></div>
+                    <button type="submit" class="btn btn-success"><i class="fas fa-warehouse me-1"></i>Zakończ etap i przelej na magazyn</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal DMUCHANIE – zmiana celu operacji -->
+<div class="modal fade" id="dmuchanie-change-dest-modal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">DMUCHANIE – zmiana celu operacji</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Zamknij"></button>
+            </div>
+            <div class="modal-body">
+                <form id="dmuchanie-change-dest-form">
+                    <input type="hidden" id="dmuchanie-change-dest-id-operacji">
+                    <div class="mb-3">
+                        <label class="form-label">Nowy cel (urządzenie docelowe):</label>
+                        <div id="dmuchanie-change-dest-container" class="list-group">
+                            <!-- Opcje ładowane przez JS -->
+                        </div>
+                    </div>
+                    <div id="dmuchanie-change-dest-error" class="alert alert-danger d-none"></div>
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-route me-1"></i>Ustaw cel i trasę</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal wyboru rodzaju dmuchania (z poziomu NA_MAGAZYN / FILTRACJA_KOLO_DO_PONOWNEJ) -->
+<div class="modal fade" id="wybor-dmuchania-modal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-wind me-2"></i>Wybierz rodzaj dmuchania</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Zamknij"></button>
+            </div>
+            <div class="modal-body">
+                <form id="wybor-dmuchania-form">
+                    <input type="hidden" id="wybor-dmuchania-id-operacji">
+                    <input type="hidden" id="wybor-dmuchania-id-zrodla">
+                    <!-- mode: "continue" (z NA_MAGAZYN) | "convert" (zmiana aktywnego DMUCHANIE) -->
+                    <input type="hidden" id="wybor-dmuchania-mode" value="continue">
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Sprzęt źródłowy:</label>
+                        <div class="alert alert-light py-2 mb-0" id="wybor-dmuchania-zrodlo-info">—</div>
+                    </div>
+
+                    <div class="mb-3 wybor-dmuchania-typ-wrap">
+                        <label class="form-label fw-semibold">Rodzaj dmuchania:</label>
+                        <div class="d-flex flex-column gap-2">
+                            <label class="list-group-item list-group-item-action rounded border d-flex align-items-start gap-2 p-3">
+                                <input class="form-check-input mt-1 flex-shrink-0" type="radio"
+                                    name="wybor-dmuchania-typ" id="dmuchanie-typ-standard"
+                                    value="DMUCHANIE" checked>
+                                <span>
+                                    <strong>DMUCHANIE</strong> – przedmuchanie bez czyszczenia<br>
+                                    <small class="text-muted">Trasa pozostaje ta sama co poprzednia operacja. Nie wpływa na mixy.</small>
+                                </span>
+                            </label>
+                            <label class="list-group-item list-group-item-action rounded border d-flex align-items-start gap-2 p-3">
+                                <input class="form-check-input mt-1 flex-shrink-0" type="radio"
+                                    name="wybor-dmuchania-typ" id="dmuchanie-typ-czyszczenie"
+                                    value="DMUCHANIE_CZYSZCZENIE">
+                                <span>
+                                    <strong>DMUCHANIE_CZYSZCZENIE</strong> – czyszczenie filtra<br>
+                                    <small class="text-muted">Nowa trasa do wybranego reaktora. Oznaczy mix jako wydmuch i doda partię W-P-... (500 kg).</small>
+                                </span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="mb-3" id="wybor-dmuchania-cel-wrap" style="display:none;">
+                        <label class="form-label fw-semibold">Reaktor docelowy (DMUCHANIE_CZYSZCZENIE):</label>
+                        <select class="form-select" id="wybor-dmuchania-cel">
+                            <option value="">-- wybierz reaktor --</option>
+                        </select>
+                        <div class="form-text">Mix w wybranym reaktorze zostanie oznaczony jako wydmuch i otrzyma partię W-P-... (500 kg).</div>
+                    </div>
+
+                    <div id="wybor-dmuchania-error" class="alert alert-danger d-none"></div>
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-wind me-1"></i>Rozpocznij dmuchanie
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal DMUCHANIE_CZYSZCZENIE – start operacji -->
+<div class="modal fade" id="dmuchanie-czyszczenie-modal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-wind me-2 text-warning"></i>DMUCHANIE – czyszczenie filtra</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Zamknij"></button>
+            </div>
+            <div class="modal-body">
+                <form id="dmuchanie-czyszczenie-form">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Sprzęt źródłowy:</label>
+                        <select class="form-select" id="dmuchanie-czyszczenie-zrodlo" required>
+                            <option value="">-- wybierz źródło --</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Sprzęt docelowy:</label>
+                        <select class="form-select" id="dmuchanie-czyszczenie-cel" required>
+                            <option value="">-- wybierz cel --</option>
+                        </select>
+                    </div>
+                    <div class="alert alert-info small mb-3">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Po zakończeniu operacji mix w sprzęcie docelowym zostanie oznaczony jako <strong>wydmuch</strong>
+                        i zostanie do niego dodana nowa partia <strong>W-P-...</strong> (500 kg).
+                    </div>
+                    <div id="dmuchanie-czyszczenie-error" class="alert alert-danger d-none"></div>
+                    <button type="submit" class="btn btn-warning">
+                        <i class="fas fa-wind me-1"></i>Rozpocznij DMUCHANIE_CZYSZCZENIE
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal DMUCHANIE_RUROCIAGU – start operacji -->
+<div class="modal fade" id="dmuchanie-rurociagu-modal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-grip-lines me-2 text-secondary"></i>DMUCHANIE rurociągu</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Zamknij"></button>
+            </div>
+            <div class="modal-body">
+                <form id="dmuchanie-rurociagu-form">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Sprzęt źródłowy:</label>
+                        <select class="form-select" id="dmuchanie-rurociagu-zrodlo" required>
+                            <option value="">-- wybierz źródło --</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Sprzęt docelowy:</label>
+                        <select class="form-select" id="dmuchanie-rurociagu-cel" required>
+                            <option value="">-- wybierz cel --</option>
+                        </select>
+                    </div>
+                    <div class="alert alert-secondary small mb-3">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Operacja zablokuje wybraną trasę rurociągu na czas dmuchania. Nie wpływa na mixy ani partie.
+                    </div>
+                    <div id="dmuchanie-rurociagu-error" class="alert alert-danger d-none"></div>
+                    <button type="submit" class="btn btn-secondary">
+                        <i class="fas fa-grip-lines me-1"></i>Rozpocznij DMUCHANIE rurociągu
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal FILTRACJA_NA_PLACKU – wybór reaktora docelowego -->
+<div class="modal fade" id="filtracja-na-placku-modal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-filter me-2 text-info"></i>Filtracja na placku – <span id="filtracja-na-placku-zrodlo-name" class="fw-bold"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Zamknij"></button>
+            </div>
+            <div class="modal-body">
+                <form id="filtracja-na-placku-form">
+                    <input type="hidden" id="filtracja-na-placku-id-zrodla">
+                    <div class="alert alert-info small mb-3">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Trasa przejdzie przez filtr. Po zakończeniu:
+                        <ul class="mb-0 mt-1">
+                            <li>Składniki <strong>WYDMUCH</strong> zostaną usunięte (20% ich masy wróci do pozostałych składników)</li>
+                            <li><code>is_wydmuch_mix</code> zostanie wyzerowane</li>
+                            <li>Następny etap: <strong>FILTRACJA_KOLO</strong></li>
+                        </ul>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Reaktor docelowy:</label>
+                        <div id="filtracja-na-placku-destinations-container" class="list-group">
+                            <div class="list-group-item text-muted">Ładowanie reaktorów...</div>
+                        </div>
+                    </div>
+                    <div id="filtracja-na-placku-error" class="alert alert-danger d-none"></div>
+                    <button type="submit" class="btn btn-info w-100">
+                        <i class="fas fa-filter me-1"></i>Rozpocznij filtrację na placku
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Dobielanie (ziemia bieląca) -->
+<div class="modal fade" id="dobielanie-modal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Dobielanie – <span id="dobielanie-reaktor-name" class="fw-bold"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Zamknij"></button>
+            </div>
+            <div class="modal-body">
+                <form id="dobielanie-form">
+                    <input type="hidden" id="dobielanie-mix-id">
+                    <div class="mb-3">
+                        <label class="form-label" for="dobielanie-bags">Ilość worków:</label>
+                        <input type="number" class="form-control" id="dobielanie-bags" min="1" value="6" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="dobielanie-weight">Waga worka (kg):</label>
+                        <input type="number" class="form-control" id="dobielanie-weight" min="0.1" step="0.1" value="25" required>
+                    </div>
+                    <div id="dobielanie-error" class="alert alert-danger d-none"></div>
+                    <button type="submit" class="btn btn-success"><i class="fas fa-plus-circle me-1"></i>Zarejestruj dobielanie</button>
                 </form>
             </div>
         </div>

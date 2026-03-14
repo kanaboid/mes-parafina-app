@@ -394,7 +394,7 @@ class Batches(db.Model):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     unique_code: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
     material_type: Mapped[str] = mapped_column(String(50), nullable=False)
-    source_type: Mapped[str] = mapped_column(ENUM('CYS', 'APOLLO'), nullable=False)
+    source_type: Mapped[str] = mapped_column(ENUM('CYS', 'APOLLO', 'WYDMUCH'), nullable=False)
     source_name: Mapped[str] = mapped_column(String(50), nullable=False)
     initial_quantity: Mapped[Optional[decimal.Decimal]] = mapped_column(DECIMAL(10, 2), nullable=False)
     current_quantity: Mapped[Optional[decimal.Decimal]] = mapped_column(DECIMAL(10, 2), nullable=False)
@@ -444,6 +444,17 @@ class MixComponents(db.Model):
     # Relacje
     mix: Mapped['TankMixes'] = relationship(back_populates='components')
     batch: Mapped['Batches'] = relationship() # Prosta relacja jednokierunkowa
+
+
+class MixSourceMixes(db.Model):
+    __tablename__ = 'mix_source_mixes'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    mix_id: Mapped[int] = mapped_column(ForeignKey('tank_mixes.id'), nullable=False, index=True)
+    source_mix_id: Mapped[int] = mapped_column(ForeignKey('tank_mixes.id'), nullable=False, index=True)
+    quantity_from_source: Mapped[decimal.Decimal] = mapped_column(DECIMAL(10, 2), nullable=False)
+
+    mix: Mapped['TankMixes'] = relationship('TankMixes', foreign_keys=[mix_id])
+    source_mix: Mapped['TankMixes'] = relationship('TankMixes', foreign_keys=[source_mix_id])
 
 class AuditTrail(db.Model):
     __tablename__ = 'audit_trail'

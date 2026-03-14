@@ -1,8 +1,8 @@
 # app/batch_management_service.py
 from .extensions import db
-from .models import Batches, Sprzet, TankMixes, MixComponents, AuditTrail, ApolloSesje, ApolloTracking
+from .models import Batches, Sprzet, TankMixes, MixComponents, MixSourceMixes, AuditTrail, ApolloSesje, ApolloTracking
 from datetime import datetime, timezone
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import joinedload
 from decimal import Decimal
 from .apollo_service import ApolloService
@@ -42,35 +42,42 @@ class BatchManagementService:
             db.session.rollback(); raise e
 
     @staticmethod
-    def _generate_mix_code(prefix: str, tank_name: str) -> str:
+    def _generate_mix_code(prefix: str, tank_name: str, exclude_mix_id: int = None) -> str:
         """
         Generyczna, prywatna metoda do tworzenia unikalnego kodu mieszaniny.
         Format: [PREFIX]-[NAZWA_ZBIORNIKA]-[RRMMDD]-[XX]
+        exclude_mix_id: przy aktualizacji istniejącego mixu – wyklucza go z liczenia,
+        żeby wygenerowany kod nie kolidował z kodem tego samego mixu.
         """
         now_warsaw = datetime.now(WARSAW_TZ)
         today_str = now_warsaw.strftime('%y%m%d')
 
         base_prefix = f"{prefix}-{tank_name}-{today_str}"
-        
         query = select(func.count(TankMixes.id)).where(TankMixes.unique_code.like(f"{base_prefix}-%"))
-        daily_count = db.session.execute(query).scalar()
-        
-        return f"{base_prefix}-{daily_count + 1:02d}"
+        if exclude_mix_id is not None:
+            query = query.where(TankMixes.id != exclude_mix_id)
+        result = db.session.execute(query)
+        daily_count = result.scalar() if hasattr(result, 'scalar') else (result.scalars().first() or 0)
+        try:
+            count = int(daily_count) if daily_count is not None else 0
+        except (TypeError, ValueError):
+            count = 0
+        return f"{base_prefix}-{count + 1:02d}"
 
     @staticmethod
-    def _generate_dirty_tank_mix_code(tank_name: str) -> str:
+    def _generate_dirty_tank_mix_code(tank_name: str, exclude_mix_id: int = None) -> str:
         """Generuje kod dla mieszaniny w zbiorniku brudnym (Prefiks 'B-')."""
-        return BatchManagementService._generate_mix_code('B', tank_name)
-        
+        return BatchManagementService._generate_mix_code('B', tank_name, exclude_mix_id)
+
     @staticmethod
-    def _generate_clean_tank_mix_code(tank_name: str) -> str:
+    def _generate_clean_tank_mix_code(tank_name: str, exclude_mix_id: int = None) -> str:
         """Generuje kod dla mieszaniny w zbiorniku czystym (Prefiks 'C-')."""
-        return BatchManagementService._generate_mix_code('C', tank_name)
-    
+        return BatchManagementService._generate_mix_code('C', tank_name, exclude_mix_id)
+
     @staticmethod
-    def generate_reactor_mix_code(reactor_name: str) -> str:
+    def generate_reactor_mix_code(reactor_name: str, exclude_mix_id: int = None) -> str:
         """Generuje kod dla mieszaniny w reaktorze (Prefiks 'P-')."""
-        return BatchManagementService._generate_mix_code('P', reactor_name)
+        return BatchManagementService._generate_mix_code('P', reactor_name, exclude_mix_id)
 
     @staticmethod
     def tank_into_dirty_tank(batch_id, tank_id, operator):
@@ -96,7 +103,7 @@ class BatchManagementService:
                     mix_code = BatchManagementService._generate_dirty_tank_mix_code(tank.nazwa_unikalna)
                 # --- KONIEC ZMIANY ---
 
-                active_mix = TankMixes(unique_code=mix_code, tank_id=tank.id)
+                active_mix = TankMixes(unique_code=mix_code, tank_id=tank.id, process_status='SUROWY')
                 db.session.add(active_mix)
                 db.session.flush()
                 tank.active_mix_id = active_mix.id
@@ -171,6 +178,45 @@ class BatchManagementService:
         return final_result
 
     @staticmethod
+    def normalize_mix_code_if_only_wydmuch(mix_id: int, commit: bool = True) -> dict:
+        """
+        Jeśli mieszanina zawiera wyłącznie surowce typu WYDMUCH, ustawia jej unique_code
+        na kod generowany tak jak przy operacji PRZELEJ (wg typu zbiornika: reaktor → P-,
+        beczka_czysta → C-, pozostałe → B-). Aktualizuje istniejący wiersz mix (nie tworzy nowego).
+        commit=True (domyślnie): zapisuje UPDATE w osobnej transakcji (zalecane po transfer_between_dirty_tanks).
+        Zwraca: {'updated': bool, 'new_code': str|None, 'message': str}
+        """
+        composition = BatchManagementService.get_mix_composition(mix_id)
+        summary = composition.get('summary_by_material') or []
+        if not summary:
+            return {'updated': False, 'new_code': None, 'message': 'Mieszanina nie ma składników o dodatniej ilości.'}
+        material_types = {str(s.get('material_type') or '').strip().upper() for s in summary}
+        if material_types != {'WYDMUCH'}:
+            return {'updated': False, 'new_code': None, 'message': f'Mieszanina zawiera nie tylko WYDMUCH (typy: {material_types}) – brak zmiany kodu.'}
+        mix = db.session.get(TankMixes, mix_id)
+        if not mix:
+            return {'updated': False, 'new_code': None, 'message': 'Mieszanina nie istnieje.'}
+        tank = db.session.get(Sprzet, mix.tank_id)
+        if not tank:
+            return {'updated': False, 'new_code': None, 'message': 'Zbiornik mieszaniny nie istnieje.'}
+        if tank.typ_sprzetu == 'reaktor':
+            new_code = BatchManagementService.generate_reactor_mix_code(tank.nazwa_unikalna, exclude_mix_id=mix_id)
+        elif tank.typ_sprzetu == 'beczka_czysta':
+            new_code = BatchManagementService._generate_clean_tank_mix_code(tank.nazwa_unikalna, exclude_mix_id=mix_id)
+        else:
+            new_code = BatchManagementService._generate_dirty_tank_mix_code(tank.nazwa_unikalna, exclude_mix_id=mix_id)
+        if mix.unique_code == new_code:
+            return {'updated': False, 'new_code': new_code, 'message': 'Kod już w formacie PRZELEJ.'}
+        db.session.execute(
+            update(TankMixes).where(TankMixes.id == mix_id).values(unique_code=new_code)
+        )
+        if commit:
+            db.session.commit()
+        else:
+            db.session.flush()
+        return {'updated': True, 'new_code': new_code, 'message': f'Ustawiono mix_code na {new_code} (tylko WYDMUCH).'}
+
+    @staticmethod
     def transfer_between_dirty_tanks(source_tank_id, destination_tank_id, quantity_to_transfer, operator):
         """Orkiestruje transfer między zbiornikami, obsługując korekty."""
         if source_tank_id == destination_tank_id:
@@ -188,6 +234,11 @@ class BatchManagementService:
             source_mix = db.session.get(TankMixes, source_tank.active_mix_id) if source_tank.active_mix_id else None
             if not source_mix or source_mix.status == 'ARCHIVED':
                 raise ValueError("Zbiornik źródłowy jest pusty.")
+            if dest_tank.typ_sprzetu == 'beczka_czysta' and source_mix.process_status != 'ZATWIERDZONA' and source_mix.process_status != 'W_MAGAZYNIE_CZYSTYM':
+                raise ValueError(
+                    f"Transfer do magazynu czystego dozwolony tylko dla mieszaniny ZATWIERDZONA lub W_MAGAZYNIE_CZYSTYM. "
+                    f"Obecny status: '{source_mix.process_status}'."
+                )
 
             composition = BatchManagementService.get_mix_composition(source_mix.id)
             total_weight_in_system = composition['total_weight']
@@ -224,9 +275,20 @@ class BatchManagementService:
             
             dest_mix = db.session.get(TankMixes, dest_tank.active_mix_id) if dest_tank.active_mix_id else None
             if not dest_mix or dest_mix.status == 'ARCHIVED':
-                mix_code = BatchManagementService._generate_dirty_tank_mix_code(dest_tank.nazwa_unikalna)
-                dest_mix = TankMixes(unique_code=mix_code, tank_id=dest_tank.id)
-                db.session.add(dest_mix); db.session.flush()
+                if dest_tank.typ_sprzetu == 'beczka_czysta':
+                    mix_code = BatchManagementService._generate_clean_tank_mix_code(dest_tank.nazwa_unikalna)
+                    process_status_dest = 'W_MAGAZYNIE_CZYSTYM'
+                elif dest_tank.typ_sprzetu == 'reaktor':
+                    mix_code = BatchManagementService.generate_reactor_mix_code(dest_tank.nazwa_unikalna)
+                    process_status_dest = 'SUROWY'
+                else:
+                    mix_code = BatchManagementService._generate_dirty_tank_mix_code(dest_tank.nazwa_unikalna)
+                    process_status_dest = 'SUROWY'
+                dest_mix = TankMixes(
+                    unique_code=mix_code, tank_id=dest_tank.id, process_status=process_status_dest
+                )
+                db.session.add(dest_mix)
+                db.session.flush()
                 dest_tank.active_mix_id = dest_mix.id
             
             components_in_dest = {c.batch_id: c for c in dest_mix.components}
@@ -237,6 +299,15 @@ class BatchManagementService:
                     else:
                         new_component = MixComponents(mix_id=dest_mix.id, batch_id=detail['batch_id'], quantity_in_mix=detail['quantity'])
                         db.session.add(new_component)
+
+            if dest_tank.typ_sprzetu == 'beczka_czysta':
+                source_entry = MixSourceMixes(
+                    mix_id=dest_mix.id,
+                    source_mix_id=source_mix.id,
+                    quantity_from_source=quantity_to_transfer,
+                )
+                db.session.add(source_entry)
+                dest_mix.process_status = 'W_MAGAZYNIE_CZYSTYM'
             
             db.session.commit()
             return {'was_adjusted': was_adjusted, 'discrepancy': discrepancy, 'transferred_quantity': quantity_to_transfer}
@@ -264,6 +335,94 @@ class BatchManagementService:
             return {'success': True, 'audit_log_id': audit_log.id}
         except Exception as e:
             db.session.rollback(); raise e
+
+    @staticmethod
+    def create_wydmuch_batch(source_batch_code: str, material_type: str = None, quantity_kg: Decimal = Decimal('500.00')) -> dict:
+        """
+        Tworzy nową partię pierwotną wydmuchaną (W-P-...) na podstawie kodu partii źródłowej.
+        Używana przy zakończeniu operacji DMUCHANIE_CZYSZCZENIE.
+        Zwraca: {'batch_id': int, 'unique_code': str}
+        Partia W-P- zawsze ma material_type='WYDMUCH' (parametr material_type jest ignorowany).
+        """
+        base_code = f"W-P-{source_batch_code}"
+        existing_count = db.session.execute(
+            select(func.count(Batches.id)).where(Batches.unique_code.like(f"{base_code}%"))
+        ).scalar()
+
+        unique_code = base_code if existing_count == 0 else f"{base_code}-{existing_count + 1:02d}"
+
+        new_batch = Batches(
+            unique_code=unique_code,
+            material_type='WYDMUCH',
+            source_type='WYDMUCH',
+            source_name=source_batch_code,
+            initial_quantity=quantity_kg,
+            current_quantity=quantity_kg,
+        )
+        db.session.add(new_batch)
+        db.session.flush()
+        return {'batch_id': new_batch.id, 'unique_code': new_batch.unique_code}
+
+    @staticmethod
+    def apply_wydmuch_to_tank(dest_tank_id: int, wydmuch_batch_id: int, source_mix_unique_code: str) -> dict:
+        """
+        Dodaje partię wydmuchaną do zbiornika docelowego i ustawia is_wydmuch_mix=True.
+        - Jeśli zbiornik ma aktywny mix: dodaje partię jako nowy składnik.
+        - Jeśli zbiornik jest pusty: tworzy nowy mix z kodem W-<source_mix_unique_code>.
+        Nie wykonuje commit – commit należy do wywołującego endpointu.
+        Zwraca: {'mix_id': int, 'created_new_mix': bool, 'mix_code': str}
+        """
+        dest_tank = db.session.get(Sprzet, dest_tank_id)
+        wydmuch_batch = db.session.get(Batches, wydmuch_batch_id)
+
+        if not dest_tank:
+            raise ValueError(f"Zbiornik docelowy o ID {dest_tank_id} nie istnieje.")
+        if not wydmuch_batch:
+            raise ValueError(f"Partia wydmuchana o ID {wydmuch_batch_id} nie istnieje.")
+
+        dest_mix = db.session.get(TankMixes, dest_tank.active_mix_id) if dest_tank.active_mix_id else None
+        created_new_mix = False
+
+        if not dest_mix or dest_mix.status == 'ARCHIVED':
+            # Cel pusty – tworzymy nowy mix z prefiksem W-
+            base_mix_code = f"W-{source_mix_unique_code}"
+            existing_mix_count = db.session.execute(
+                select(func.count(TankMixes.id)).where(TankMixes.unique_code.like(f"{base_mix_code}%"))
+            ).scalar()
+            mix_code = base_mix_code if existing_mix_count == 0 else f"{base_mix_code}-{existing_mix_count + 1:02d}"
+
+            dest_mix = TankMixes(
+                unique_code=mix_code,
+                tank_id=dest_tank.id,
+                process_status='SUROWY',
+                is_wydmuch_mix=True,
+            )
+            db.session.add(dest_mix)
+            db.session.flush()
+            dest_tank.active_mix_id = dest_mix.id
+            created_new_mix = True
+        else:
+            dest_mix.is_wydmuch_mix = True
+
+        # Dodaj partię wydmuchaną jako składnik mixa
+        existing_component = next(
+            (c for c in dest_mix.components if c.batch_id == wydmuch_batch_id), None
+        )
+        if existing_component:
+            existing_component.quantity_in_mix += wydmuch_batch.current_quantity
+        else:
+            new_component = MixComponents(
+                mix_id=dest_mix.id,
+                batch_id=wydmuch_batch_id,
+                quantity_in_mix=wydmuch_batch.current_quantity,
+            )
+            db.session.add(new_component)
+
+        return {
+            'mix_id': dest_mix.id,
+            'created_new_mix': created_new_mix,
+            'mix_code': dest_mix.unique_code,
+        }
 
     @staticmethod
     def create_batch_from_apollo_transfer(apollo_id, destination_tank_id, actual_quantity_transferred, operator):
