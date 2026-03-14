@@ -33,7 +33,7 @@
             overflow: hidden; 
             height: 100vh;
             display: flex;
-            flex-direction: column; /* Ustawia sekcje jedna pod drugą (w pionie) */
+            flex-direction: column;
         }
 
         header {
@@ -43,46 +43,47 @@
             padding: 1.5vh 2vw;
             background-color: #000;
             border-bottom: 2px solid var(--border-color);
-            font-size: 1.8vh;
+            font-size: 2vw;
             color: var(--text-muted);
         }
 
         .clock {
             font-weight: bold;
-            font-size: 2.2vh;
+            font-size: 2.5vw;
             color: #fff;
         }
 
         .wrapper {
             display: flex;
-            flex-direction: column; /* Gwarancja pionowego układu sekcji */
+            flex-direction: row; /* ZMIANA: Układ kolumnowy (obok siebie) */
             flex: 1;
             height: 100%;
+            padding: 1vw;
+            gap: 1vw; /* Odstępy między kolumnami */
         }
 
         .section {
-            flex: 1; /* Każda z 3 sekcji zajmie dokładnie 1/3 wysokości ekranu */
+            flex: 1; /* Każda sekcja zajmuje dokładnie 1/3 szerokości */
             display: flex;
             flex-direction: column;
-            margin: 0.5vh 0.5vw;
             background-color: var(--panel-bg);
             border-radius: 8px;
             overflow: hidden;
-            border-left: 8px solid transparent; 
+            border-top: 6px solid transparent; /* ZMIANA: Akcent na górze zamiast z boku */
         }
 
-        .section.reactor { border-left-color: var(--accent-reactor); }
-        .section.dirty { border-left-color: var(--accent-dirty); }
-        .section.clean { border-left-color: var(--accent-clean); }
+        .section.reactor { border-top-color: var(--accent-reactor); }
+        .section.dirty { border-top-color: var(--accent-dirty); }
+        .section.clean { border-top-color: var(--accent-clean); }
 
         .section-title {
-            font-size: 2.8vh;
+            font-size: 2.5vw;
             font-weight: bold;
             text-align: center;
-            padding: 1.2vh;
+            padding: 1.5vh 0;
             background-color: rgba(0, 0, 0, 0.3);
             border-bottom: 1px solid var(--border-color);
-            letter-spacing: 2px;
+            letter-spacing: 1px;
         }
 
         .table-container {
@@ -95,32 +96,36 @@
         table {
             width: 100%;
             border-collapse: collapse;
+            table-layout: fixed; /* Zapobiega rozpychaniu kolumn przez długi tekst */
         }
 
         td {
-            padding: 2.2vh 1.5vw;
-            font-size: 2.6vh; /* Znacznie większa czcionka, bo nie mamy nagłówków */
+            padding: 1.5vh 0.5vw;
+            font-size: 1.8vw; /* Dopasowane do wąskich kolumn w trybie portretowym */
             border-bottom: 1px solid var(--border-color);
+            word-wrap: break-word;
         }
 
         .col-name { 
-            width: 20%; 
+            width: 25%; 
             font-weight: bold; 
             color: #fff;
+            text-align: center;
         }
         
         .col-mix { 
-            width: 55%; 
-            color: #90caf9; /* Jasnoniebieski dla nazwy */
+            width: 45%; 
+            color: #90caf9; 
         }
         
         .col-qty { 
-            width: 25%; 
+            width: 30%; 
             text-align: right; 
             font-family: monospace; 
-            font-size: 3vh; 
+            font-size: 2vw; 
             font-weight: bold;
-            color: #a5d6a7; /* Delikatny zielony dla wag */
+            color: #a5d6a7; 
+            padding-right: 1vw;
         }
 
         .empty-mix {
@@ -169,7 +174,7 @@
     </div>
 
     <script>
-        // 1. Zegar czasu rzeczywistego
+        // Zegar
         function updateClock() {
             const now = new Date();
             document.getElementById('clock').innerText = now.toLocaleTimeString('pl-PL');
@@ -177,21 +182,19 @@
         setInterval(updateClock, 1000);
         updateClock();
 
-        // 2. Połączenie Socket.IO
+        // Socket.IO
         const socket = io();
 
-        // Pierwsze pobranie danych
         fetch('/api/dashboard/main-status')
             .then(response => response.json())
             .then(data => updateTables(data))
             .catch(err => console.error("Błąd pobierania danych:", err));
 
-        // Nasłuchiwanie na aktualizacje
         socket.on('dashboard_update', function(data) {
             updateTables(data);
         });
 
-        // 3. Logika renderowania
+        // Logika
         function updateTables(data) {
             renderTable('table-reactors', data.all_reactors);
             renderTable('table-dirty', data.beczki_brudne);
@@ -203,26 +206,25 @@
             tbody.innerHTML = ''; 
 
             if (!equipmentList || equipmentList.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="3" style="text-align:center;" class="empty-mix">Brak urządzeń w tej strefie</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="3" style="text-align:center;" class="empty-mix">Brak urządzeń w strefie</td></tr>`;
                 return;
             }
 
             equipmentList.forEach(eq => {
                 const tr = document.createElement('tr');
                 
-                // 1 kolumna: Nazwa sprzętu (np. R1, B01b)
+                // Kolumna 1: Nazwa sprzętu
                 const nameCell = `<td class="col-name">${eq.nazwa}</td>`;
                 
-                // 2 kolumna: Nazwa oparta na składzie (np. T-10 + 19) zamiast kodu partii
+                // Kolumna 2: Zawartość oparta na składzie
                 let mixName = '<span class="empty-mix">Pusty</span>';
                 if (eq.partia && eq.partia.sklad && eq.partia.sklad.length > 0) {
-                    // Wyciągamy nazwy surowców ze składu i łączymy plusem
                     mixName = eq.partia.sklad.map(s => s.material_type).join(' + ');
                 }
 
                 const mixCell = `<td class="col-mix">${mixName}</td>`;
 
-                // 3 kolumna: Ilość w tonach (priorytet: odczyt czujnika -> waga logiczna -> puste)
+                // Kolumna 3: Ilość
                 let qtyTons = '-';
                 if (eq.poziom_tony !== null && eq.poziom_tony !== undefined) {
                     qtyTons = eq.poziom_tony.toFixed(2) + ' t';
