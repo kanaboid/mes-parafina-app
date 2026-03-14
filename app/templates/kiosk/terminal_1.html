@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <!-- Wymuszamy odpowiednie skalowanie dla ekranów -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terminal 1 - Zestawienie Zbiorników</title>
+    
+    <!-- Socket.IO -->
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+
+    <style>
+        :root {
+            --bg-color: #121212;
+            --panel-bg: #1e1e1e;
+            --text-main: #e0e0e0;
+            --text-muted: #9e9e9e;
+            --border-color: #333;
+            --accent-reactor: #d84315; /* Czerwony - Reaktory */
+            --accent-dirty: #f9a825;   /* Żółty - Brudne */
+            --accent-clean: #2e7d32;   /* Zielony - Czyste */
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            /* Ukrywamy domyślne paski przewijania całej strony */
+            overflow: hidden; 
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Nagłówek Kiosku */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1vh 2vw;
+            background-color: #000;
+            border-bottom: 2px solid var(--border-color);
+            font-size: 1.5vh;
+        }
+
+        .clock {
+            font-weight: bold;
+            font-size: 2vh;
+            color: #fff;
+        }
+
+        /* Kontener na 3 strefy */
+        .wrapper {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            height: 100%;
+        }
+
+        /* Pojedyncza sekcja (1/3 ekranu pionowego) */
+        .section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            margin: 0.5vh 0.5vw;
+            background-color: var(--panel-bg);
+            border-radius: 8px;
+            overflow: hidden;
+            border-left: 5px solid transparent; /* Rezerwa na akcent */
+        }
+
+        .section.reactor { border-left-color: var(--accent-reactor); }
+        .section.dirty { border-left-color: var(--accent-dirty); }
+        .section.clean { border-left-color: var(--accent-clean); }
+
+        .section-title {
+            font-size: 2.5vh;
+            font-weight: bold;
+            text-align: center;
+            padding: 1vh;
+            background-color: rgba(0, 0, 0, 0.2);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        /* Kontener tabeli z przewijaniem wewnątrz sekcji */
+        .table-container {
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        /* Ukrywamy scrollbary dla estetyki (Chrome/Safari) */
+        .table-container::-webkit-scrollbar { width: 0px; background: transparent; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            position: sticky;
+            top: 0;
+            background-color: #272727;
+            font-size: 1.8vh;
+            color: var(--text-muted);
+            padding: 1.2vh 1vw;
+            text-align: left;
+            z-index: 1;
+        }
+
+        td {
+            padding: 1.5vh 1vw;
+            font-size: 2.2vh; /* Duża czcionka dla czytelności z daleka */
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .col-name { width: 25%; font-weight: bold; }
+        .col-mix { width: 55%; color: #90caf9; }
+        .col-qty { width: 20%; text-align: right; font-family: monospace; font-size: 2.4vh;}
+
+        .empty-mix {
+            color: var(--text-muted);
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div>MES Parafina - Terminal Podglądowy</div>
+        <div class="clock" id="clock">00:00:00</div>
+    </header>
+
+    <div class="wrapper">
+        <!-- SEKCJA REAKTORY -->
+        <div class="section reactor">
+            <div class="section-title">REAKTORY</div>
+            <div class="table-container">
+                <table id="table-reactors">
+                    <thead>
+                        <tr>
+                            <th class="col-name">Sprzęt</th>
+                            <th class="col-mix">Zawartość Mixa</th>
+                            <th class="col-qty">Ilość (t)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Renderowane przez JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- SEKCJA STREFA BRUDNA -->
+        <div class="section dirty">
+            <div class="section-title">STREFA BRUDNA</div>
+            <div class="table-container">
+                <table id="table-dirty">
+                    <thead>
+                        <tr>
+                            <th class="col-name">Sprzęt</th>
+                            <th class="col-mix">Zawartość Mixa</th>
+                            <th class="col-qty">Ilość (t)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Renderowane przez JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- SEKCJA STREFA CZYSTA -->
+        <div class="section clean">
+            <div class="section-title">STREFA CZYSTA</div>
+            <div class="table-container">
+                <table id="table-clean">
+                    <thead>
+                        <tr>
+                            <th class="col-name">Sprzęt</th>
+                            <th class="col-mix">Zawartość Mixa</th>
+                            <th class="col-qty">Ilość (t)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Renderowane przez JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 1. Zegar czasu rzeczywistego
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('clock').innerText = now.toLocaleTimeString('pl-PL');
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // 2. Połączenie Socket.IO
+        const socket = io();
+
+        // Pierwsze pobranie danych po wejściu na stronę
+        fetch('/api/dashboard/main-status')
+            .then(response => response.json())
+            .then(data => updateTables(data))
+            .catch(err => console.error("Błąd pobierania danych początkowych:", err));
+
+        // Nasłuchiwanie na aktualizacje w tle
+        socket.on('dashboard_update', function(data) {
+            console.log("Otrzymano aktualizację z Socket.IO");
+            updateTables(data);
+        });
+
+        // 3. Logika renderowania tabel
+        function updateTables(data) {
+            renderTable('table-reactors', data.all_reactors);
+            renderTable('table-dirty', data.beczki_brudne);
+            renderTable('table-clean', data.beczki_czyste);
+        }
+
+        function renderTable(tableId, equipmentList) {
+            const tbody = document.querySelector(`#${tableId} tbody`);
+            tbody.innerHTML = ''; // Czyszczenie tabeli
+
+            if (!equipmentList || equipmentList.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="3" style="text-align:center;" class="empty-mix">Brak sprzętu w tej strefie</td></tr>`;
+                return;
+            }
+
+            equipmentList.forEach(eq => {
+                const tr = document.createElement('tr');
+                
+                // Nazwa sprzętu
+                const nameCell = `<td class="col-name">${eq.nazwa}</td>`;
+                
+                // Zawartość Mixa (zgodnie z dashboardem to 'kod' w słowniku 'partia')
+                let mixName = '<span class="empty-mix">Pusty</span>';
+                if (eq.partia && eq.partia.kod) {
+                    mixName = eq.partia.kod;
+                }
+
+                const mixCell = `<td class="col-mix">${mixName}</td>`;
+
+                // Ilość w tonach (Priorytet: odczyt poziomu w tonach, potem waga mixa przeliczona na tony)
+                let qtyTons = '-';
+                if (eq.poziom_tony !== null && eq.poziom_tony !== undefined) {
+                    qtyTons = eq.poziom_tony.toFixed(2) + ' t';
+                } else if (eq.partia && eq.partia.waga_kg !== null && eq.partia.waga_kg !== undefined) {
+                    qtyTons = (eq.partia.waga_kg / 1000).toFixed(2) + ' t';
+                } else if (eq.pojemnosc_kg !== null) {
+                    // Fallback jeśli nie ma odczytu, ani wagi mixa, pokazujemy kreskę zamiast zera pojemności
+                    qtyTons = '-'; 
+                }
+
+                const qtyCell = `<td class="col-qty">${qtyTons}</td>`;
+
+                tr.innerHTML = nameCell + mixCell + qtyCell;
+                tbody.appendChild(tr);
+            });
+        }
+    </script>
+</body>
+</html>

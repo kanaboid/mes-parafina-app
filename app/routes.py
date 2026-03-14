@@ -1607,3 +1607,11 @@ def get_predefined_intervals():
         return jsonify(intervals)
     except Exception as e:
         return jsonify({'error': f'Błąd pobierania interwałów: {str(e)}'}), 500
+
+@bp.route('/kiosk/terminal-1')
+def kiosk_terminal_1():
+    """
+    Kiosk Terminal 1: Widok pionowy.
+    Zestawienie zawartości: Reaktory, Strefa Brudna, Strefa Czysta.
+    """
+    return render_template('kiosk/terminal_1.html')
