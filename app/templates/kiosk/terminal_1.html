@@ -55,7 +55,7 @@
 
         .wrapper {
             display: flex;
-            flex-direction: row; /* ZMIANA: Układ kolumnowy (obok siebie) */
+            flex-direction: row; /* Układ kolumnowy (obok siebie) */
             flex: 1;
             height: 100%;
             padding: 1vw;
@@ -69,7 +69,7 @@
             background-color: var(--panel-bg);
             border-radius: 8px;
             overflow: hidden;
-            border-top: 6px solid transparent; /* ZMIANA: Akcent na górze zamiast z boku */
+            border-top: 6px solid transparent; 
         }
 
         .section.reactor { border-top-color: var(--accent-reactor); }
@@ -142,11 +142,11 @@
     </header>
 
     <div class="wrapper">
-        <!-- SEKCJA REAKTORY -->
-        <div class="section reactor">
-            <div class="section-title">REAKTORY</div>
+        <!-- SEKCJA STREFA CZYSTA -->
+        <div class="section clean">
+            <div class="section-title">STREFA CZYSTA</div>
             <div class="table-container">
-                <table id="table-reactors">
+                <table id="table-clean">
                     <tbody><!-- Renderowane przez JS --></tbody>
                 </table>
             </div>
@@ -162,11 +162,11 @@
             </div>
         </div>
 
-        <!-- SEKCJA STREFA CZYSTA -->
-        <div class="section clean">
-            <div class="section-title">STREFA CZYSTA</div>
+        <!-- SEKCJA REAKTORY -->
+        <div class="section reactor">
+            <div class="section-title">REAKTORY</div>
             <div class="table-container">
-                <table id="table-clean">
+                <table id="table-reactors">
                     <tbody><!-- Renderowane przez JS --></tbody>
                 </table>
             </div>
