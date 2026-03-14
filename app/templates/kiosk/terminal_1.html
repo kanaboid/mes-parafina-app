@@ -2,7 +2,6 @@
 <html lang="pl">
 <head>
     <meta charset="UTF-8">
-    <!-- Wymuszamy odpowiednie skalowanie dla ekranów -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Terminal 1 - Zestawienie Zbiorników</title>
     
@@ -14,11 +13,11 @@
             --bg-color: #121212;
             --panel-bg: #1e1e1e;
             --text-main: #e0e0e0;
-            --text-muted: #9e9e9e;
+            --text-muted: #757575;
             --border-color: #333;
-            --accent-reactor: #d84315; /* Czerwony - Reaktory */
-            --accent-dirty: #f9a825;   /* Żółty - Brudne */
-            --accent-clean: #2e7d32;   /* Zielony - Czyste */
+            --accent-reactor: #d84315; 
+            --accent-dirty: #f9a825;   
+            --accent-clean: #2e7d32;   
         }
 
         * {
@@ -31,48 +30,45 @@
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background-color: var(--bg-color);
             color: var(--text-main);
-            /* Ukrywamy domyślne paski przewijania całej strony */
             overflow: hidden; 
             height: 100vh;
             display: flex;
-            flex-direction: column;
+            flex-direction: column; /* Ustawia sekcje jedna pod drugą (w pionie) */
         }
 
-        /* Nagłówek Kiosku */
         header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 1vh 2vw;
+            padding: 1.5vh 2vw;
             background-color: #000;
             border-bottom: 2px solid var(--border-color);
-            font-size: 1.5vh;
+            font-size: 1.8vh;
+            color: var(--text-muted);
         }
 
         .clock {
             font-weight: bold;
-            font-size: 2vh;
+            font-size: 2.2vh;
             color: #fff;
         }
 
-        /* Kontener na 3 strefy */
         .wrapper {
             display: flex;
-            flex-direction: column;
+            flex-direction: column; /* Gwarancja pionowego układu sekcji */
             flex: 1;
             height: 100%;
         }
 
-        /* Pojedyncza sekcja (1/3 ekranu pionowego) */
         .section {
-            flex: 1;
+            flex: 1; /* Każda z 3 sekcji zajmie dokładnie 1/3 wysokości ekranu */
             display: flex;
             flex-direction: column;
             margin: 0.5vh 0.5vw;
             background-color: var(--panel-bg);
             border-radius: 8px;
             overflow: hidden;
-            border-left: 5px solid transparent; /* Rezerwa na akcent */
+            border-left: 8px solid transparent; 
         }
 
         .section.reactor { border-left-color: var(--accent-reactor); }
@@ -80,21 +76,20 @@
         .section.clean { border-left-color: var(--accent-clean); }
 
         .section-title {
-            font-size: 2.5vh;
+            font-size: 2.8vh;
             font-weight: bold;
             text-align: center;
-            padding: 1vh;
-            background-color: rgba(0, 0, 0, 0.2);
+            padding: 1.2vh;
+            background-color: rgba(0, 0, 0, 0.3);
             border-bottom: 1px solid var(--border-color);
+            letter-spacing: 2px;
         }
 
-        /* Kontener tabeli z przewijaniem wewnątrz sekcji */
         .table-container {
             flex: 1;
             overflow-y: auto;
         }
 
-        /* Ukrywamy scrollbary dla estetyki (Chrome/Safari) */
         .table-container::-webkit-scrollbar { width: 0px; background: transparent; }
 
         table {
@@ -102,26 +97,31 @@
             border-collapse: collapse;
         }
 
-        th {
-            position: sticky;
-            top: 0;
-            background-color: #272727;
-            font-size: 1.8vh;
-            color: var(--text-muted);
-            padding: 1.2vh 1vw;
-            text-align: left;
-            z-index: 1;
-        }
-
         td {
-            padding: 1.5vh 1vw;
-            font-size: 2.2vh; /* Duża czcionka dla czytelności z daleka */
+            padding: 2.2vh 1.5vw;
+            font-size: 2.6vh; /* Znacznie większa czcionka, bo nie mamy nagłówków */
             border-bottom: 1px solid var(--border-color);
         }
 
-        .col-name { width: 25%; font-weight: bold; }
-        .col-mix { width: 55%; color: #90caf9; }
-        .col-qty { width: 20%; text-align: right; font-family: monospace; font-size: 2.4vh;}
+        .col-name { 
+            width: 20%; 
+            font-weight: bold; 
+            color: #fff;
+        }
+        
+        .col-mix { 
+            width: 55%; 
+            color: #90caf9; /* Jasnoniebieski dla nazwy */
+        }
+        
+        .col-qty { 
+            width: 25%; 
+            text-align: right; 
+            font-family: monospace; 
+            font-size: 3vh; 
+            font-weight: bold;
+            color: #a5d6a7; /* Delikatny zielony dla wag */
+        }
 
         .empty-mix {
             color: var(--text-muted);
@@ -132,7 +132,7 @@
 <body>
 
     <header>
-        <div>MES Parafina - Terminal Podglądowy</div>
+        <div>MES Parafina - Terminal 1</div>
         <div class="clock" id="clock">00:00:00</div>
     </header>
 
@@ -142,16 +142,7 @@
             <div class="section-title">REAKTORY</div>
             <div class="table-container">
                 <table id="table-reactors">
-                    <thead>
-                        <tr>
-                            <th class="col-name">Sprzęt</th>
-                            <th class="col-mix">Zawartość Mixa</th>
-                            <th class="col-qty">Ilość (t)</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <!-- Renderowane przez JS -->
-                    </tbody>
+                    <tbody><!-- Renderowane przez JS --></tbody>
                 </table>
             </div>
         </div>
@@ -161,16 +152,7 @@
             <div class="section-title">STREFA BRUDNA</div>
             <div class="table-container">
                 <table id="table-dirty">
-                    <thead>
-                        <tr>
-                            <th class="col-name">Sprzęt</th>
-                            <th class="col-mix">Zawartość Mixa</th>
-                            <th class="col-qty">Ilość (t)</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <!-- Renderowane przez JS -->
-                    </tbody>
+                    <tbody><!-- Renderowane przez JS --></tbody>
                 </table>
             </div>
         </div>
@@ -180,16 +162,7 @@
             <div class="section-title">STREFA CZYSTA</div>
             <div class="table-container">
                 <table id="table-clean">
-                    <thead>
-                        <tr>
-                            <th class="col-name">Sprzęt</th>
-                            <th class="col-mix">Zawartość Mixa</th>
-                            <th class="col-qty">Ilość (t)</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <!-- Renderowane przez JS -->
-                    </tbody>
+                    <tbody><!-- Renderowane przez JS --></tbody>
                 </table>
             </div>
         </div>
@@ -207,19 +180,18 @@
         // 2. Połączenie Socket.IO
         const socket = io();
 
-        // Pierwsze pobranie danych po wejściu na stronę
+        // Pierwsze pobranie danych
         fetch('/api/dashboard/main-status')
             .then(response => response.json())
             .then(data => updateTables(data))
-            .catch(err => console.error("Błąd pobierania danych początkowych:", err));
+            .catch(err => console.error("Błąd pobierania danych:", err));
 
-        // Nasłuchiwanie na aktualizacje w tle
+        // Nasłuchiwanie na aktualizacje
         socket.on('dashboard_update', function(data) {
-            console.log("Otrzymano aktualizację z Socket.IO");
             updateTables(data);
         });
 
-        // 3. Logika renderowania tabel
+        // 3. Logika renderowania
         function updateTables(data) {
             renderTable('table-reactors', data.all_reactors);
             renderTable('table-dirty', data.beczki_brudne);
@@ -228,35 +200,35 @@
 
         function renderTable(tableId, equipmentList) {
             const tbody = document.querySelector(`#${tableId} tbody`);
-            tbody.innerHTML = ''; // Czyszczenie tabeli
+            tbody.innerHTML = ''; 
 
             if (!equipmentList || equipmentList.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="3" style="text-align:center;" class="empty-mix">Brak sprzętu w tej strefie</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="3" style="text-align:center;" class="empty-mix">Brak urządzeń w tej strefie</td></tr>`;
                 return;
             }
 
             equipmentList.forEach(eq => {
                 const tr = document.createElement('tr');
                 
-                // Nazwa sprzętu
+                // 1 kolumna: Nazwa sprzętu (np. R1, B01b)
                 const nameCell = `<td class="col-name">${eq.nazwa}</td>`;
                 
-                // Zawartość Mixa (zgodnie z dashboardem to 'kod' w słowniku 'partia')
+                // 2 kolumna: Nazwa oparta na składzie (np. T-10 + 19) zamiast kodu partii
                 let mixName = '<span class="empty-mix">Pusty</span>';
-                if (eq.partia && eq.partia.kod) {
-                    mixName = eq.partia.kod;
+                if (eq.partia && eq.partia.sklad && eq.partia.sklad.length > 0) {
+                    // Wyciągamy nazwy surowców ze składu i łączymy plusem
+                    mixName = eq.partia.sklad.map(s => s.material_type).join(' + ');
                 }
 
                 const mixCell = `<td class="col-mix">${mixName}</td>`;
 
-                // Ilość w tonach (Priorytet: odczyt poziomu w tonach, potem waga mixa przeliczona na tony)
+                // 3 kolumna: Ilość w tonach (priorytet: odczyt czujnika -> waga logiczna -> puste)
                 let qtyTons = '-';
                 if (eq.poziom_tony !== null && eq.poziom_tony !== undefined) {
                     qtyTons = eq.poziom_tony.toFixed(2) + ' t';
                 } else if (eq.partia && eq.partia.waga_kg !== null && eq.partia.waga_kg !== undefined) {
                     qtyTons = (eq.partia.waga_kg / 1000).toFixed(2) + ' t';
                 } else if (eq.pojemnosc_kg !== null) {
-                    // Fallback jeśli nie ma odczytu, ani wagi mixa, pokazujemy kreskę zamiast zera pojemności
                     qtyTons = '-'; 
                 }
 
