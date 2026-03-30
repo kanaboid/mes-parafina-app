@@ -55,15 +55,15 @@
 
         .wrapper {
             display: flex;
-            flex-direction: row; /* Układ kolumnowy (obok siebie) */
+            flex-direction: row; /* Układ kolumnowy */
             flex: 1;
             height: 100%;
             padding: 1vw;
-            gap: 1vw; /* Odstępy między kolumnami */
+            gap: 1vw; 
         }
 
         .section {
-            flex: 1; /* Każda sekcja zajmuje dokładnie 1/3 szerokości */
+            flex: 1; 
             display: flex;
             flex-direction: column;
             background-color: var(--panel-bg);
@@ -96,35 +96,47 @@
         table {
             width: 100%;
             border-collapse: collapse;
-            table-layout: fixed; /* Zapobiega rozpychaniu kolumn przez długi tekst */
+            table-layout: fixed; 
         }
 
         td {
             padding: 1.5vh 0.5vw;
-            font-size: 1.8vw; /* Dopasowane do wąskich kolumn w trybie portretowym */
             border-bottom: 1px solid var(--border-color);
             word-wrap: break-word;
+            vertical-align: middle;
         }
 
+        /* Proporcje i style 4 kolumn (Nazwa, Skład, Księgowa(t), Czujnik(t)) */
         .col-name { 
-            width: 25%; 
+            width: 18%; 
+            font-size: 2vw;
             font-weight: bold; 
             color: #fff;
             text-align: center;
         }
         
         .col-mix { 
-            width: 45%; 
+            width: 37%; 
+            font-size: 1.8vw;
             color: #90caf9; 
         }
         
-        .col-qty { 
-            width: 30%; 
+        .col-logical-qty { 
+            width: 22.5%; 
             text-align: right; 
             font-family: monospace; 
             font-size: 2vw; 
             font-weight: bold;
-            color: #a5d6a7; 
+            color: #a5d6a7; /* Zielonkawy - Stan księgowy */
+        }
+
+        .col-sensor-qty {
+            width: 22.5%;
+            text-align: right;
+            font-family: monospace;
+            font-size: 2vw;
+            font-weight: bold;
+            color: #ffb74d; /* Pomarańczowy - Czujnik */
             padding-right: 1vw;
         }
 
@@ -206,7 +218,7 @@
             tbody.innerHTML = ''; 
 
             if (!equipmentList || equipmentList.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="3" style="text-align:center;" class="empty-mix">Brak urządzeń w strefie</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;" class="empty-mix">Brak urządzeń w strefie</td></tr>`;
                 return;
             }
 
@@ -221,22 +233,24 @@
                 if (eq.partia && eq.partia.sklad && eq.partia.sklad.length > 0) {
                     mixName = eq.partia.sklad.map(s => s.material_type).join(' + ');
                 }
-
                 const mixCell = `<td class="col-mix">${mixName}</td>`;
 
-                // Kolumna 3: Ilość
-                let qtyTons = '-';
-                if (eq.poziom_tony !== null && eq.poziom_tony !== undefined) {
-                    qtyTons = eq.poziom_tony.toFixed(2) + ' t';
-                } else if (eq.partia && eq.partia.waga_kg !== null && eq.partia.waga_kg !== undefined) {
-                    qtyTons = (eq.partia.waga_kg / 1000).toFixed(2) + ' t';
-                } else if (eq.pojemnosc_kg !== null) {
-                    qtyTons = '-'; 
+                // Kolumna 3: Ilość księgowa (zielona, wyliczona z systemu)
+                let logicalTons = '<span class="empty-mix">-</span>';
+                if (eq.partia && eq.partia.waga_kg !== null && eq.partia.waga_kg !== undefined) {
+                    logicalTons = (eq.partia.waga_kg / 1000).toFixed(2) + ' t';
                 }
+                const logicalCell = `<td class="col-logical-qty">${logicalTons}</td>`;
 
-                const qtyCell = `<td class="col-qty">${qtyTons}</td>`;
+                // Kolumna 4: Ilość z czujnika (pomarańczowa, wyliczona z fizycznego pomiaru za pomocą krzywej kalibracji)
+                let sensorTons = '<span class="empty-mix">-</span>';
+                if (eq.poziom_tony !== null && eq.poziom_tony !== undefined) {
+                    sensorTons = eq.poziom_tony.toFixed(2) + ' t';
+                }
+                const sensorCell = `<td class="col-sensor-qty">${sensorTons}</td>`;
 
-                tr.innerHTML = nameCell + mixCell + qtyCell;
+                // Złączenie wiersza
+                tr.innerHTML = nameCell + mixCell + logicalCell + sensorCell;
                 tbody.appendChild(tr);
             });
         }
