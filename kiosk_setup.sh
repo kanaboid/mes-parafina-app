@@ -22,7 +22,7 @@ sudo ufw allow 3389/tcp
 sudo ufw allow 5000/tcp
 sudo ufw --force enable
 
-echo "4. Ubijanie wygaszaczy ekranu..."
+echo "4. Ubijanie wygaszaczy ekranu i powiadomień..."
 sudo apt purge xscreensaver mintupdate mintwelcome xfce4-notifyd -y
 xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/blank-on-ac --create -t int -s 0
 xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/dpms-on-ac-off --create -t int -s 0
@@ -54,24 +54,24 @@ sleep 5
 source "$CONFIG_FILE"
 MONITOR=$(xrandr | grep " connected" | head -n 1 | awk '{print $1}')
 
-# Ustawienie rotacji na podstawie pliku konfiguracyjnego
+# Uruchomienie ukrywania kursora (w tle) ZANIM wejdziemy w nieskończoną pętlę
+unclutter -idle 0.1 -root &
+
+# Ustawienie rotacji na podstawie pliku konfiguracyjnego i wymuszenie zapisu profilu
 xrandr --output "$MONITOR" --rotate $ROTATION
-autorandr --save ekran-roteacja
+autorandr --save ekran-rotacja --force
+
 while true; do
     source "$CONFIG_FILE"
     timeout 4h google-chrome --kiosk --incognito --no-first-run --disable-infobars --disable-features=Translate --disable-save-password-bubble --noerrdialogs --password-store=basic "$URL"
     sleep 2
 done
-
-sleep 5
-unclutter -idle 0.1 -root &
 EOL
 chmod +x /home/$USER_NAME/chrome-watchdog.sh
 
 echo "8. Dodawanie Watchdoga do Autostartu XFCE..."
 mkdir -p ~/.config/autostart
-cat > ~/.config/autostart/kiosk.desktop << EOL
-[Desktop Entry]
+cat > ~/.config/autostart/kiosk.desktop << EOL[Desktop Entry]
 Type=Application
 Name=Chrome Watchdog
 Exec=/home/$USER_NAME/chrome-watchdog.sh
@@ -213,12 +213,11 @@ Restart=always
 WantedBy=multi-user.target
 EOL
 
-echo "12. Ukrywanie panelu XFCE..."
+echo "12. Ukrywanie panelu XFCE i opcji ekranu..."
 sudo chmod -x /usr/bin/xfce4-panel
 sudo chmod -x /usr/bin/xfce4-display-settings
 
-
-echo "13. Rejestrowanie i uruchamianie usługi..."
+echo "13. Rejestrowanie i uruchamianie usług..."
 sudo systemctl daemon-reload
 sudo systemctl enable kiosk-admin.service
 sudo systemctl start kiosk-admin.service
