@@ -238,14 +238,14 @@
                 // Kolumna 3: Ilość księgowa (zielona, wyliczona z systemu)
                 let logicalTons = '<span class="empty-mix">-</span>';
                 if (eq.partia && eq.partia.waga_kg !== null && eq.partia.waga_kg !== undefined) {
-                    logicalTons = (eq.partia.waga_kg / 1000).toFixed(2) + ' t';
+                    logicalTons = (eq.partia.waga_kg / 1000).toFixed(1) + ' t';
                 }
                 const logicalCell = `<td class="col-logical-qty">${logicalTons}</td>`;
 
                 // Kolumna 4: Ilość z czujnika (pomarańczowa, wyliczona z fizycznego pomiaru za pomocą krzywej kalibracji)
                 let sensorTons = '<span class="empty-mix">-</span>';
                 if (eq.poziom_tony !== null && eq.poziom_tony !== undefined) {
-                    sensorTons = eq.poziom_tony.toFixed(2) + ' t';
+                    sensorTons = eq.poziom_tony.toFixed(1) + ' t';
                 }
                 const sensorCell = `<td class="col-sensor-qty">${sensorTons}</td>`;
 
