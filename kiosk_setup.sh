@@ -6,7 +6,7 @@
 USER_NAME=$USER
 
 echo "1. Aktualizacja i instalacja pakietów..."
-sudo apt update && sudo apt install openssh-server xrdp xfce4 xfce4-goodies python3-flask unclutter -y
+sudo apt update && sudo apt install openssh-server xrdp xfce4 xfce4-goodies python3-flask unclutter autorandr -y
 wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
 sudo apt install ./google-chrome-stable_current_amd64.deb -y
 rm google-chrome-stable_current_amd64.deb
@@ -56,7 +56,7 @@ MONITOR=$(xrandr | grep " connected" | head -n 1 | awk '{print $1}')
 
 # Ustawienie rotacji na podstawie pliku konfiguracyjnego
 xrandr --output "$MONITOR" --rotate $ROTATION
-
+autorandr --save ekran-roteacja
 while true; do
     source "$CONFIG_FILE"
     timeout 4h google-chrome --kiosk --incognito --no-first-run --disable-infobars --disable-features=Translate --disable-save-password-bubble --noerrdialogs --password-store=basic "$URL"
@@ -215,11 +215,14 @@ EOL
 
 echo "12. Ukrywanie panelu XFCE..."
 sudo chmod -x /usr/bin/xfce4-panel
+sudo chmod -x /usr/bin/xfce4-display-settings
+
 
 echo "13. Rejestrowanie i uruchamianie usługi..."
 sudo systemctl daemon-reload
 sudo systemctl enable kiosk-admin.service
 sudo systemctl start kiosk-admin.service
+sudo systemctl enable --now autorandr.service
 
 echo "=========================================================="
 echo "Gotowe! Kompletna instalacja zakończona sukcesem."
