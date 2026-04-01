@@ -55,7 +55,7 @@
 
         .wrapper {
             display: flex;
-            flex-direction: row; /* Układ kolumnowy */
+            flex-direction: row; 
             flex: 1;
             height: 100%;
             padding: 1vw;
@@ -106,7 +106,6 @@
             vertical-align: middle;
         }
 
-        /* Proporcje i style 4 kolumn (Nazwa, Skład, Księgowa(t), Czujnik(t)) */
         .col-name { 
             width: 18%; 
             font-size: 2vw;
@@ -119,6 +118,7 @@
             width: 37%; 
             font-size: 1.8vw;
             color: #90caf9; 
+            line-height: 1.2;
         }
         
         .col-logical-qty { 
@@ -127,7 +127,7 @@
             font-family: monospace; 
             font-size: 2vw; 
             font-weight: bold;
-            color: #a5d6a7; /* Zielonkawy - Stan księgowy */
+            color: #a5d6a7; 
         }
 
         .col-sensor-qty {
@@ -136,13 +136,28 @@
             font-family: monospace;
             font-size: 2vw;
             font-weight: bold;
-            color: #ffb74d; /* Pomarańczowy - Czujnik */
+            color: #ffb74d; 
             padding-right: 1vw;
         }
 
         .empty-mix {
             color: var(--text-muted);
             font-style: italic;
+        }
+
+        /* --- Nowe style dla metadanych reaktora --- */
+        .whiteboard {
+            color: #fff;
+            font-weight: bold;
+            margin-left: 0.3vw;
+        }
+
+        .mix-meta {
+            font-size: 1.1vw; /* Mniejsza czcionka dla statusu */
+            color: #ffcc80; /* Delikatny pomarańcz/żółty dla odróżnienia */
+            font-family: monospace;
+            margin-top: 0.5vh;
+            display: block; /* Wymusza nową linię */
         }
     </style>
 </head>
@@ -228,28 +243,62 @@
                 // Kolumna 1: Nazwa sprzętu
                 const nameCell = `<td class="col-name">${eq.nazwa}</td>`;
                 
-                // Kolumna 2: Zawartość oparta na składzie
-                let mixName = '<span class="empty-mix">Pusty</span>';
-                if (eq.partia && eq.partia.sklad && eq.partia.sklad.length > 0) {
-                    mixName = eq.partia.sklad.map(s => s.material_type).join(' + ');
-                }
-                const mixCell = `<td class="col-mix">${mixName}</td>`;
+                // Kolumna 2: Zawartość oparta na składzie + ewentualnie dane z reaktora
+                let mixNameHTML = '<span class="empty-mix">Pusty</span>';
+                
+                if (eq.partia) {
+                    // Sklejanie nazwy składu
+                    let mainName = "Brak składu";
+                    if (eq.partia.sklad && eq.partia.sklad.length > 0) {
+                        mainName = eq.partia.sklad.map(s => s.material_type).join(' + ');
+                    } else if (eq.partia.kod) {
+                        mainName = eq.partia.kod; // Fallback
+                    }
+                    
+                    mixNameHTML = mainName;
 
-                // Kolumna 3: Ilość księgowa (zielona, wyliczona z systemu)
+                    // --- Specyficzne dla Reaktorów ---
+                    if (tableId === 'table-reactors') {
+                        // 1. Identyfikator z tablicy
+                        if (eq.partia.whiteboard_id) {
+                            mixNameHTML += `<span class="whiteboard">(${eq.partia.whiteboard_id})</span>`;
+                        }
+                        
+                        // 2. Metadane: Status procesu i liczniki w nowej linii
+                        let metaItems =[];
+                        
+                        if (eq.partia.process_status) {
+                            metaItems.push(eq.partia.process_status);
+                        }
+                        if (eq.partia.filtration_cycles_count != null) {
+                            metaItems.push(`${eq.partia.filtration_cycles_count}x`);
+                        }
+                        if (eq.partia.bleaching_earth_bags_total != null) {
+                            metaItems.push(`${eq.partia.bleaching_earth_bags_total}W`);
+                        }
+                        
+                        if (metaItems.length > 0) {
+                            mixNameHTML += `<div class="mix-meta">${metaItems.join(' &bull; ')}</div>`;
+                        }
+                    }
+                }
+
+                const mixCell = `<td class="col-mix">${mixNameHTML}</td>`;
+
+                // Kolumna 3: Ilość księgowa
                 let logicalTons = '<span class="empty-mix">-</span>';
                 if (eq.partia && eq.partia.waga_kg !== null && eq.partia.waga_kg !== undefined) {
                     logicalTons = (eq.partia.waga_kg / 1000).toFixed(1) + ' t';
                 }
                 const logicalCell = `<td class="col-logical-qty">${logicalTons}</td>`;
 
-                // Kolumna 4: Ilość z czujnika (pomarańczowa, wyliczona z fizycznego pomiaru za pomocą krzywej kalibracji)
+                // Kolumna 4: Ilość z czujnika
                 let sensorTons = '<span class="empty-mix">-</span>';
                 if (eq.poziom_tony !== null && eq.poziom_tony !== undefined) {
                     sensorTons = eq.poziom_tony.toFixed(1) + ' t';
                 }
                 const sensorCell = `<td class="col-sensor-qty">${sensorTons}</td>`;
 
-                // Złączenie wiersza
                 tr.innerHTML = nameCell + mixCell + logicalCell + sensorCell;
                 tbody.appendChild(tr);
             });

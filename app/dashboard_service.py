@@ -78,7 +78,10 @@ class DashboardService:
                     "kod": mix.unique_code,
                     "waga_kg": float(waga_kg),
                     "sklad": sklad_dla_api,
-                    "process_status": mix.process_status
+                    "process_status": mix.process_status,
+                    "filtration_cycles_count": mix.filtration_cycles_count,
+                    "bleaching_earth_bags_total": mix.bleaching_earth_bags_total,
+                    "whiteboard_id": mix.whiteboard_id
                 }
             
             if sprzet.typ_sprzetu == 'reaktor':
