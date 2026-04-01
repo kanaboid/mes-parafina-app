@@ -140,6 +140,14 @@
             padding-right: 1vw;
         }
 
+        /* Reaktory: bez kolumny czujnika — szersze kolumny składu i ilości księgowej */
+        #table-reactors .col-mix {
+            width: 45%;
+        }
+        #table-reactors .col-logical-qty {
+            width: 37%;
+        }
+
         .empty-mix {
             color: var(--text-muted);
             font-style: italic;
@@ -233,7 +241,8 @@
             tbody.innerHTML = ''; 
 
             if (!equipmentList || equipmentList.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;" class="empty-mix">Brak urządzeń w strefie</td></tr>`;
+                const emptyCols = tableId === 'table-reactors' ? 3 : 4;
+                tbody.innerHTML = `<tr><td colspan="${emptyCols}" style="text-align:center;" class="empty-mix">Brak urządzeń w strefie</td></tr>`;
                 return;
             }
 
@@ -299,7 +308,10 @@
                 }
                 const sensorCell = `<td class="col-sensor-qty">${sensorTons}</td>`;
 
-                tr.innerHTML = nameCell + mixCell + logicalCell + sensorCell;
+                const isReactorTable = tableId === 'table-reactors';
+                tr.innerHTML = isReactorTable
+                    ? nameCell + mixCell + logicalCell
+                    : nameCell + mixCell + logicalCell + sensorCell;
                 tbody.appendChild(tr);
             });
         }
