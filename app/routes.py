@@ -1611,7 +1611,15 @@ def get_predefined_intervals():
 @bp.route('/kiosk/terminal-1')
 def kiosk_terminal_1():
     """
-    Kiosk Terminal 1: Widok pionowy.
-    Zestawienie zawartości: Reaktory, Strefa Brudna, Strefa Czysta.
+    Kiosk Terminal 1: układ poziomy (3 kolumny).
+    Zestawienie zawartości: Strefa Czysta, Strefa Brudna, Reaktory.
     """
     return render_template('kiosk/terminal_1.html')
+
+
+@bp.route('/kiosk/terminal-2')
+def kiosk_terminal_2():
+    """
+    Kiosk Terminal 2: pełny ekran — tylko aktywne operacje (odczyt z dashboardu), timery czasu trwania.
+    """
+    return render_template('kiosk/terminal_2.html')

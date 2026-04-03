@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terminal 2 — Aktywne operacje</title>
+
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+
+    <style>
+        :root {
+            --bg-color: #0d1117;
+            --panel-bg: #161b22;
+            --text-main: #e6edf3;
+            --text-muted: #8b949e;
+            --border-color: #30363d;
+            --accent-ops: #58a6ff;
+            --accent-ops-dim: rgba(88, 166, 255, 0.22);
+            --timer-bg: #0d1117;
+            --pulse: #3fb950;
+            --badge-src-bg: #21262d;
+            --badge-dst-bg: #238636;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+            padding: clamp(0.5rem, 1.5vmin, 0.85rem) clamp(0.65rem, 2.2vmin, 1.1rem);
+            background-color: #010409;
+            border-bottom: 1px solid var(--border-color);
+            font-size: clamp(0.85rem, 2.5vmin, 1.15rem);
+            color: var(--text-muted);
+        }
+
+        .clock {
+            font-weight: bold;
+            font-size: clamp(1rem, 3.2vmin, 1.45rem);
+            color: #fff;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .wrapper {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            padding: clamp(0.45rem, 1.2vmin, 0.75rem);
+        }
+
+        .operations-panel {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            background-color: var(--panel-bg);
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid var(--accent-ops-dim);
+            box-shadow: 0 0 0 1px rgba(88, 166, 255, 0.08);
+        }
+
+        .panel-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            padding: clamp(0.5rem, 1.5vmin, 0.75rem) clamp(0.6rem, 1.8vmin, 1rem);
+            background: rgba(0, 0, 0, 0.35);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .panel-title {
+            font-size: clamp(0.95rem, 2.8vmin, 1.25rem);
+            font-weight: 700;
+            color: var(--accent-ops);
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+
+        .panel-count {
+            font-size: clamp(0.75rem, 2vmin, 0.95rem);
+            color: var(--text-muted);
+            font-variant-numeric: tabular-nums;
+        }
+
+        .panel-count strong {
+            color: var(--text-main);
+            font-weight: 700;
+        }
+
+        #operations-log {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            padding: clamp(0.5rem, 1.4vmin, 0.85rem);
+            display: flex;
+            flex-direction: column;
+            gap: clamp(0.55rem, 1.6vmin, 0.85rem);
+        }
+
+        #operations-log::-webkit-scrollbar { width: 8px; }
+        #operations-log::-webkit-scrollbar-thumb {
+            background: rgba(88, 166, 255, 0.35);
+            border-radius: 4px;
+        }
+
+        .operations-empty {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            color: var(--text-muted);
+            text-align: center;
+            padding: 2rem 1rem;
+        }
+
+        .operations-empty-icon {
+            width: clamp(3rem, 12vmin, 4.5rem);
+            height: clamp(3rem, 12vmin, 4.5rem);
+            border-radius: 50%;
+            border: 2px dashed var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: clamp(1.25rem, 4vmin, 1.75rem);
+            opacity: 0.6;
+        }
+
+        .operations-empty p {
+            font-size: clamp(0.9rem, 2.6vmin, 1.1rem);
+            max-width: 22rem;
+            line-height: 1.45;
+        }
+
+        .operation-card {
+            background: linear-gradient(145deg, rgba(22, 27, 34, 0.95), rgba(13, 17, 23, 0.98));
+            border-radius: 10px;
+            padding: clamp(0.65rem, 2vmin, 1rem);
+            border: 1px solid var(--border-color);
+            border-left: 5px solid var(--accent-ops);
+            position: relative;
+        }
+
+        .operation-card-top {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 0.65rem;
+            margin-bottom: 0.55rem;
+        }
+
+        .operation-ids {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .badge-type {
+            display: inline-block;
+            padding: 0.2em 0.55em;
+            border-radius: 5px;
+            background: #21262d;
+            color: #c9d1d9;
+            font-family: ui-monospace, 'Cascadia Code', monospace;
+            font-size: clamp(0.62rem, 1.7vmin, 0.78rem);
+            max-width: 100%;
+            word-break: break-word;
+        }
+
+        .badge-id {
+            font-size: clamp(0.6rem, 1.6vmin, 0.75rem);
+            color: var(--text-muted);
+            font-variant-numeric: tabular-nums;
+        }
+
+        .live-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            font-size: clamp(0.62rem, 1.7vmin, 0.78rem);
+            font-weight: 600;
+            color: var(--pulse);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            flex-shrink: 0;
+        }
+
+        .live-dot {
+            width: 0.55rem;
+            height: 0.55rem;
+            border-radius: 50%;
+            background: var(--pulse);
+            box-shadow: 0 0 0 0 rgba(63, 185, 80, 0.5);
+            animation: pulse-dot 1.8s ease-out infinite;
+        }
+
+        @keyframes pulse-dot {
+            0% { box-shadow: 0 0 0 0 rgba(63, 185, 80, 0.45); }
+            70% { box-shadow: 0 0 0 10px rgba(63, 185, 80, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(63, 185, 80, 0); }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .live-dot { animation: none; }
+        }
+
+        .timer-block {
+            background: var(--timer-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: clamp(0.5rem, 1.5vmin, 0.75rem) clamp(0.55rem, 1.6vmin, 0.85rem);
+            margin-bottom: 0.55rem;
+        }
+
+        .timer-label {
+            font-size: clamp(0.62rem, 1.8vmin, 0.78rem);
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 0.2rem;
+        }
+
+        .timer-elapsed {
+            font-family: ui-monospace, 'Cascadia Code', 'Consolas', monospace;
+            font-size: clamp(1.35rem, 5vmin, 2.15rem);
+            font-weight: 700;
+            color: #79c0ff;
+            font-variant-numeric: tabular-nums;
+            line-height: 1.1;
+        }
+
+        .timer-started {
+            font-size: clamp(0.65rem, 1.85vmin, 0.82rem);
+            color: var(--text-muted);
+            margin-top: 0.35rem;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .operation-desc {
+            font-size: clamp(0.78rem, 2.3vmin, 1.05rem);
+            font-weight: 600;
+            color: #e6edf3;
+            line-height: 1.35;
+            margin-bottom: 0.5rem;
+        }
+
+        .operation-meta {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: clamp(0.68rem, 2vmin, 0.88rem);
+        }
+
+        .badge-src {
+            padding: 0.2em 0.55em;
+            border-radius: 5px;
+            background: var(--badge-src-bg);
+            color: #e6edf3;
+            border: 1px solid var(--border-color);
+        }
+
+        .badge-dst {
+            padding: 0.2em 0.55em;
+            border-radius: 5px;
+            background: rgba(35, 134, 54, 0.25);
+            color: #7ee787;
+            border: 1px solid var(--badge-dst-bg);
+        }
+
+        .arrow-route {
+            color: var(--text-muted);
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div>MES Parafina — Terminal 2</div>
+        <div class="clock" id="clock">00:00:00</div>
+    </header>
+
+    <div class="wrapper">
+        <section class="operations-panel" aria-label="Aktywne operacje">
+            <div class="panel-head">
+                <h1 class="panel-title">Aktywne operacje</h1>
+                <p class="panel-count" id="operations-count" aria-live="polite">Ładowanie…</p>
+            </div>
+            <div id="operations-log"></div>
+        </section>
+    </div>
+
+    <script>
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('clock').innerText = now.toLocaleTimeString('pl-PL');
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        const socket = io();
+
+        fetch('/api/dashboard/main-status')
+            .then(function(response) { return response.json(); })
+            .then(function(data) { applyOperations(data.active_operations); })
+            .catch(function(err) { console.error('Błąd pobierania danych:', err); });
+
+        socket.on('dashboard_update', function(data) {
+            applyOperations(data.active_operations);
+        });
+
+        function applyOperations(operations) {
+            renderOperationsLog(operations);
+            updateOperationTimers();
+        }
+
+        function formatElapsed(ms) {
+            if (ms < 0) {
+                ms = 0;
+            }
+            var totalSec = Math.floor(ms / 1000);
+            var h = Math.floor(totalSec / 3600);
+            var m = Math.floor((totalSec % 3600) / 60);
+            var s = totalSec % 60;
+            function z(n) {
+                return n < 10 ? '0' + n : String(n);
+            }
+            return z(h) + ':' + z(m) + ':' + z(s);
+        }
+
+        function updateOperationTimers() {
+            var cards = document.querySelectorAll('.operation-card[data-start-iso]');
+            var now = Date.now();
+            for (var i = 0; i < cards.length; i++) {
+                var card = cards[i];
+                var iso = card.getAttribute('data-start-iso');
+                var el = card.querySelector('.timer-elapsed');
+                if (!el || !iso) {
+                    continue;
+                }
+                var start = Date.parse(iso);
+                if (Number.isNaN(start)) {
+                    el.textContent = '—:—:—';
+                    continue;
+                }
+                el.textContent = formatElapsed(now - start);
+            }
+        }
+
+        setInterval(updateOperationTimers, 1000);
+
+        function renderOperationsLog(operations) {
+            var container = document.getElementById('operations-log');
+            var countEl = document.getElementById('operations-count');
+            container.innerHTML = '';
+
+            var list = operations && operations.length ? operations : [];
+
+            if (list.length === 0) {
+                countEl.innerHTML = 'Aktywnych: <strong>0</strong>';
+                var empty = document.createElement('div');
+                empty.className = 'operations-empty';
+                empty.setAttribute('role', 'status');
+                empty.innerHTML =
+                    '<div class="operations-empty-icon" aria-hidden="true">○</div>' +
+                    '<p>Brak aktywnych operacji. Nowe pojawią się tutaj automatycznie.</p>';
+                container.appendChild(empty);
+                return;
+            }
+
+            countEl.innerHTML = 'Aktywnych: <strong>' + list.length + '</strong>';
+
+            for (var j = 0; j < list.length; j++) {
+                container.appendChild(buildOperationCard(list[j]));
+            }
+            updateOperationTimers();
+        }
+
+        function buildOperationCard(op) {
+            var card = document.createElement('article');
+            card.className = 'operation-card';
+
+            var startRaw = op.czas_rozpoczecia;
+            var hasValidStart = startRaw && startRaw !== 'N/A' && !Number.isNaN(Date.parse(startRaw));
+            if (hasValidStart) {
+                card.setAttribute('data-start-iso', startRaw);
+            }
+
+            var top = document.createElement('div');
+            top.className = 'operation-card-top';
+
+            var ids = document.createElement('div');
+            ids.className = 'operation-ids';
+
+            var typ = (op.typ_operacji || '').toString().trim();
+            if (typ) {
+                var typeBadge = document.createElement('span');
+                typeBadge.className = 'badge-type';
+                typeBadge.textContent = typ;
+                ids.appendChild(typeBadge);
+            }
+
+            if (op.id != null) {
+                var idSpan = document.createElement('span');
+                idSpan.className = 'badge-id';
+                idSpan.textContent = 'ID ' + op.id;
+                ids.appendChild(idSpan);
+            }
+
+            var live = document.createElement('div');
+            live.className = 'live-indicator';
+            live.innerHTML = '<span class="live-dot" aria-hidden="true"></span><span>w toku</span>';
+
+            top.appendChild(ids);
+            top.appendChild(live);
+
+            var timerBlock = document.createElement('div');
+            timerBlock.className = 'timer-block';
+
+            var timerLabel = document.createElement('div');
+            timerLabel.className = 'timer-label';
+            timerLabel.textContent = 'Czas trwania';
+
+            var timerElapsed = document.createElement('div');
+            timerElapsed.className = 'timer-elapsed';
+            timerElapsed.setAttribute('aria-live', 'off');
+            timerElapsed.textContent = hasValidStart ? '00:00:00' : '—:—:—';
+
+            var timerStarted = document.createElement('div');
+            timerStarted.className = 'timer-started';
+            if (hasValidStart) {
+                var d = new Date(startRaw);
+                timerStarted.textContent = 'Rozpoczęto: ' + d.toLocaleString('pl-PL', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+            } else {
+                timerStarted.textContent = 'Brak znacznika czasu rozpoczęcia';
+            }
+
+            timerBlock.appendChild(timerLabel);
+            timerBlock.appendChild(timerElapsed);
+            timerBlock.appendChild(timerStarted);
+
+            var desc = document.createElement('div');
+            desc.className = 'operation-desc';
+            desc.textContent = op.opis || 'Transfer';
+
+            var meta = document.createElement('div');
+            meta.className = 'operation-meta';
+
+            var src = document.createElement('span');
+            src.className = 'badge-src';
+            src.textContent = op.zrodlo || '—';
+
+            var arrow = document.createElement('span');
+            arrow.className = 'arrow-route';
+            arrow.textContent = '\u2192';
+            arrow.setAttribute('aria-hidden', 'true');
+
+            var dst = document.createElement('span');
+            dst.className = 'badge-dst';
+            dst.textContent = op.cel || '—';
+
+            meta.appendChild(src);
+            meta.appendChild(arrow);
+            meta.appendChild(dst);
+
+            card.appendChild(top);
+            card.appendChild(timerBlock);
+            card.appendChild(desc);
+            card.appendChild(meta);
+
+            return card;
+        }
+    </script>
+</body>
+</html>
