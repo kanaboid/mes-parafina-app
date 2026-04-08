@@ -55,11 +55,11 @@ def _apply_wydmuch_components_cleanup(mix):
 def _apply_filtracja_na_placku_finish(mix):
     """
     Wykonuje logikę zakończenia FILTRACJA_NA_PLACKU / FILTRACJA_PLACEK_* na tank_mix:
-    - filtration_cycles_count += 1
     - is_wydmuch_mix = False
     - Usuwa składniki material_type='WYDMUCH', dodaje 20% ich masy proporcjonalnie do pozostałych.
+
+    Licznik filtration_cycles_count zwiększaj osobno tylko przy operacji FILTRACJA_NA_PLACKU.
     """
-    mix.filtration_cycles_count = (mix.filtration_cycles_count or 0) + 1
     mix.is_wydmuch_mix = False
     _apply_wydmuch_components_cleanup(mix)
 
@@ -821,9 +821,10 @@ def zakoncz_operacje():
                     mix.process_status = next_status
                     if operacja.typ_operacji == 'FILTRACJA_WYDMUCH':
                         mix.is_wydmuch_mix = False
-                        mix.filtration_cycles_count = (mix.filtration_cycles_count or 0) + 1
                     if operacja.typ_operacji in ('FILTRACJA_NA_PLACKU', 'FILTRACJA_PLACEK_KOLO', 'FILTRACJA_PLACEK_PRZELEW'):
                         _apply_filtracja_na_placku_finish(mix)
+                    if operacja.typ_operacji == 'FILTRACJA_NA_PLACKU':
+                        mix.filtration_cycles_count = (mix.filtration_cycles_count or 0) + 1
                 # Jeśli cel ≠ źródło – przenieś mieszaninę do reaktora docelowego (tylko gdy nie przerwano przelewu)
                 if (
                     next_status != 'FILTRACJA_PRZELEW_PRZERWANE'
@@ -1068,13 +1069,12 @@ def continue_to_przelew():
         if not mix:
             return jsonify({"status": "error", "message": "Nie znaleziono mieszaniny dla tej operacji."}), 404
 
-        # Dla FILTRACJA_PLACEK_KOLO: najpierw zakończ etap (filtration_cycles_count, is_wydmuch_mix, usunięcie WYDMUCH, 20% do pozostałych)
+        # Dla FILTRACJA_PLACEK_KOLO: najpierw zakończ etap (is_wydmuch_mix, usunięcie WYDMUCH, 20% do pozostałych)
         if operacja.typ_operacji == 'FILTRACJA_PLACEK_KOLO':
             _apply_filtracja_na_placku_finish(mix)
-        # Dla FILTRACJA_WYDMUCH: tylko usunięcie WYDMUCH + 20% do pozostałych, potem filtration_cycles_count i is_wydmuch_mix
+        # Dla FILTRACJA_WYDMUCH: tylko usunięcie WYDMUCH + 20% do pozostałych, potem is_wydmuch_mix
         if operacja.typ_operacji == 'FILTRACJA_WYDMUCH':
             _apply_wydmuch_components_cleanup(mix)
-            mix.filtration_cycles_count = (mix.filtration_cycles_count or 0) + 1
             mix.is_wydmuch_mix = False
 
         id_zrodla = operacja.id_sprzetu_zrodlowego or mix.tank_id
@@ -1234,9 +1234,11 @@ def continue_to_kolo():
         if not mix:
             return jsonify({"status": "error", "message": "Nie znaleziono mieszaniny dla tej operacji."}), 404
 
-        # Dla FILTRACJA_NA_PLACKU i FILTRACJA_PLACEK_PRZELEW: najpierw zakończ etap (filtration_cycles_count, is_wydmuch_mix, usunięcie WYDMUCH, 20% do pozostałych)
+        # Dla FILTRACJA_NA_PLACKU i FILTRACJA_PLACEK_PRZELEW: najpierw zakończ etap (is_wydmuch_mix, usunięcie WYDMUCH, 20% do pozostałych)
         if operacja.typ_operacji in ('FILTRACJA_NA_PLACKU', 'FILTRACJA_PLACEK_PRZELEW'):
             _apply_filtracja_na_placku_finish(mix)
+        if operacja.typ_operacji == 'FILTRACJA_NA_PLACKU':
+            mix.filtration_cycles_count = (mix.filtration_cycles_count or 0) + 1
 
         # 1. Zakończ bieżącą operację: zamknij zawory, ustaw next_status, przenieś mix jeśli cel≠źródło
         operacja.status_operacji = 'zakonczona'
