@@ -218,7 +218,14 @@ class BatchManagementService:
 
     @staticmethod
     def transfer_between_dirty_tanks(source_tank_id, destination_tank_id, quantity_to_transfer, operator):
-        """Orkiestruje transfer między zbiornikami, obsługując korekty."""
+        """
+        Orkiestruje transfer między zbiornikami, obsługując korekty.
+
+        Gdy źródłem jest reaktor: zamiast dzielić składniki, przenoszony jest ten sam rekord
+        mieszaniny (tylko ``tank_id`` oraz wskaźniki ``active_mix_id`` na sprzęcie).
+        Zachowuje m.in. ``process_status``, ``filtration_cycles_count``, ``bleaching_earth_bags_total``.
+        Wymaga pustego celu (brak aktywnej mieszaniny) oraz ilości zgodnej z masą mieszaniny (tolerancja).
+        """
         if source_tank_id == destination_tank_id:
             raise ValueError("Zbiornik źródłowy i docelowy nie mogą być takie same.")
         if quantity_to_transfer < 0:
@@ -239,6 +246,35 @@ class BatchManagementService:
                     f"Transfer do magazynu czystego dozwolony tylko dla mieszaniny ZATWIERDZONA lub W_MAGAZYNIE_CZYSTYM. "
                     f"Obecny status: '{source_mix.process_status}'."
                 )
+
+            # Reaktor → cel: cała mieszanina jako jeden rekord (bez dzielenia składników)
+            if source_tank.typ_sprzetu == 'reaktor':
+                dest_mix_existing = (
+                    db.session.get(TankMixes, dest_tank.active_mix_id) if dest_tank.active_mix_id else None
+                )
+                if dest_mix_existing and dest_mix_existing.status != 'ARCHIVED':
+                    raise ValueError(
+                        "Zbiornik docelowy ma już aktywną mieszaninę. Opróżnij cel przed transferem z reaktora."
+                    )
+                composition = BatchManagementService.get_mix_composition(source_mix.id)
+                total_weight_in_system = composition['total_weight']
+                if total_weight_in_system <= Decimal('0.01'):
+                    raise ValueError("Mieszanina w reaktorze jest pusta (brak masy do przeniesienia).")
+                tolerance = Decimal('0.05')
+                if quantity_to_transfer + tolerance < total_weight_in_system:
+                    raise ValueError(
+                        f"Transfer z reaktora obejmuje całą mieszaninę (~{total_weight_in_system} kg). "
+                        f"Podana ilość ({quantity_to_transfer} kg) jest wyraźnie mniejsza niż masa w zbiorniku."
+                    )
+                source_mix.tank_id = dest_tank.id
+                source_tank.active_mix_id = None
+                dest_tank.active_mix_id = source_mix.id
+                db.session.commit()
+                return {
+                    'was_adjusted': False,
+                    'discrepancy': quantity_to_transfer - total_weight_in_system,
+                    'transferred_quantity': total_weight_in_system,
+                }
 
             composition = BatchManagementService.get_mix_composition(source_mix.id)
             total_weight_in_system = composition['total_weight']
