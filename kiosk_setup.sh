@@ -71,7 +71,8 @@ chmod +x /home/$USER_NAME/chrome-watchdog.sh
 
 echo "8. Dodawanie Watchdoga do Autostartu XFCE..."
 mkdir -p ~/.config/autostart
-cat > ~/.config/autostart/kiosk.desktop << EOL[Desktop Entry]
+cat > ~/.config/autostart/kiosk.desktop << EOL
+[Desktop Entry]
 Type=Application
 Name=Chrome Watchdog
 Exec=/home/$USER_NAME/chrome-watchdog.sh
@@ -102,8 +103,11 @@ HTML_TEMPLATE = """
         h2 { text-align: center; color: #0056b3; }
         label { font-weight: bold; display: block; margin-top: 15px; margin-bottom: 5px; }
         input[type="text"], select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
-        button { margin-top: 25px; width: 100%; padding: 12px; background-color: #0056b3; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; font-weight: bold; }
-        button:hover { background-color: #004494; }
+        .btn { margin-top: 15px; width: 100%; padding: 12px; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 15px; font-weight: bold; }
+        .btn-gui { background-color: #28a745; }
+        .btn-gui:hover { background-color: #218838; }
+        .btn-reboot { background-color: #dc3545; }
+        .btn-reboot:hover { background-color: #c82333; }
     </style>
 </head>
 <body>
@@ -121,7 +125,8 @@ HTML_TEMPLATE = """
                 <option value="inverted" {% if rot == 'inverted' %}selected{% endif %}>Odwrócony (Do góry nogami)</option>
             </select>
             
-            <button type="submit">Zapisz ustawienia i zrestartuj</button>
+            <button type="submit" name="action" value="restart_gui" class="btn btn-gui">Zapisz i zrestartuj GUI (Szybki restart)</button>
+            <button type="submit" name="action" value="reboot" class="btn btn-reboot">Zapisz i zrestartuj cały system (Pełny restart)</button>
         </form>
     </div>
 </body>
@@ -133,8 +138,8 @@ SUCCESS_TEMPLATE = """
 <html lang="pl">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="refresh" content="30; url=/">
-    <title>Restartowanie...</title>
+    <meta http-equiv="refresh" content="{{ refresh_time }}; url=/">
+    <title>Wykonywanie...</title>
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f9; color: #333; padding: 50px; text-align: center; }
         .box { max-width: 500px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
@@ -147,9 +152,9 @@ SUCCESS_TEMPLATE = """
 <body>
     <div class="box">
         <h2>Zapisano pomyślnie!</h2>
-        <p>Trwa restartowanie terminala...</p>
+        <p>{{ msg }}</p>
         <div class="loader"></div>
-        <p>Strona odświeży się automatycznie za około 30 sekund.</p>
+        <p>Strona odświeży się automatycznie za około {{ refresh_time }} sekund.</p>
     </div>
 </body>
 </html>
@@ -169,32 +174,47 @@ def delayed_reboot():
     time.sleep(2)
     os.system("sudo /usr/sbin/reboot")
 
+def delayed_lightdm():
+    time.sleep(2)
+    # Ubija obecną sesję X i startuje ją na nowo - jest to jednoznaczne z odpaleniem kiosku od zera
+    os.system("sudo /bin/systemctl restart lightdm || sudo /usr/bin/systemctl restart lightdm")
+
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
         new_url = request.form['url']
         new_rot = request.form['rotation']
+        action = request.form.get('action')
         
         with open(CONFIG_FILE, 'w') as f:
             f.write(f"ROTATION={new_rot}\n")
             f.write(f"URL={new_url}\n")
             
-        return redirect(url_for('success'))
+        return redirect(url_for('success', action_type=action))
 
     config = read_config()
     return render_template_string(HTML_TEMPLATE, url=config.get('URL', ''), rot=config.get('ROTATION', 'normal'))
 
-@app.route('/success')
-def success():
-    threading.Thread(target=delayed_reboot).start()
-    return render_template_string(SUCCESS_TEMPLATE)
+@app.route('/success/<action_type>')
+def success(action_type):
+    if action_type == 'restart_gui':
+        threading.Thread(target=delayed_lightdm).start()
+        msg = "Trwa szybki restart środowiska graficznego..."
+        refresh_time = 15
+    else:
+        threading.Thread(target=delayed_reboot).start()
+        msg = "Trwa pełny restart całego terminala..."
+        refresh_time = 30
+        
+    return render_template_string(SUCCESS_TEMPLATE, msg=msg, refresh_time=refresh_time)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
 EOL
 
 echo "10. Nadawanie uprawnień do restartowania systemu..."
-echo "$USER_NAME ALL=(ALL) NOPASSWD: /usr/sbin/reboot" | sudo tee /etc/sudoers.d/kiosk_reboot
+# Zezwalamy na pełny reboot oraz na restartowanie usługi lightdm bez hasła
+echo "$USER_NAME ALL=(ALL) NOPASSWD: /usr/sbin/reboot, /usr/bin/systemctl restart lightdm, /bin/systemctl restart lightdm" | sudo tee /etc/sudoers.d/kiosk_reboot
 sudo chmod 0440 /etc/sudoers.d/kiosk_reboot
 
 echo "11. Tworzenie usługi systemowej (Systemd) dla Panelu Webowego..."
@@ -227,7 +247,7 @@ echo "=========================================================="
 echo "Gotowe! Kompletna instalacja zakończona sukcesem."
 echo "Po restarcie zarządzanie Kioskiem będzie dostępne pod adresem:"
 echo "http://$(hostname -I | awk '{print $1}'):5000"
-echo "System zrestartuje się za 5 sekund..."
+echo "System zrestartuje się za 15 sekund..."
 echo "=========================================================="
-sleep 5
+sleep 15
 sudo reboot
