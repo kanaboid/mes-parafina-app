@@ -167,7 +167,64 @@
             align-items: flex-start;
             justify-content: space-between;
             gap: 0.65rem;
-            margin-bottom: 0.55rem;
+            margin-bottom: clamp(0.5rem, 1.5vmin, 0.75rem);
+        }
+
+        .operation-card-body {
+            display: flex;
+            flex-direction: row;
+            align-items: stretch;
+            gap: clamp(0.65rem, 2vmin, 1.15rem);
+            min-width: 0;
+        }
+
+        .operation-card-left {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .operation-card-route {
+            flex: 0 0 auto;
+            width: min(46%, 14rem);
+            min-width: min(42vw, 12.5rem);
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            justify-content: center;
+            gap: clamp(0.35rem, 1.2vmin, 0.55rem);
+            padding: clamp(0.35rem, 1vmin, 0.5rem) 0 clamp(0.35rem, 1vmin, 0.5rem) clamp(0.35rem, 1vmin, 0.65rem);
+            border-left: 1px solid var(--border-color);
+        }
+
+        .route-row {
+            display: flex;
+            flex-direction: row;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: flex-end;
+            gap: clamp(0.35rem, 1.2vmin, 0.55rem);
+            width: 100%;
+            text-align: right;
+        }
+
+        @media (max-width: 520px) {
+            .operation-card-body {
+                flex-direction: column;
+            }
+            .operation-card-route {
+                width: 100%;
+                min-width: 0;
+                align-items: stretch;
+                border-left: none;
+                border-top: 1px solid var(--border-color);
+                padding: clamp(0.5rem, 1.5vmin, 0.75rem) 0 0;
+            }
+            .route-row {
+                justify-content: flex-start;
+                text-align: left;
+            }
         }
 
         .operation-ids {
@@ -231,7 +288,7 @@
             border: 1px solid var(--border-color);
             border-radius: 8px;
             padding: clamp(0.5rem, 1.5vmin, 0.75rem) clamp(0.55rem, 1.6vmin, 0.85rem);
-            margin-bottom: 0.55rem;
+            margin-bottom: clamp(0.45rem, 1.4vmin, 0.65rem);
         }
 
         .timer-label {
@@ -259,39 +316,49 @@
         }
 
         .operation-desc {
-            font-size: clamp(0.78rem, 2.3vmin, 1.05rem);
-            font-weight: 600;
+            font-size: clamp(1.05rem, 3.6vmin, 1.75rem);
+            font-weight: 700;
             color: #e6edf3;
-            line-height: 1.35;
-            margin-bottom: 0.5rem;
+            line-height: 1.3;
+            word-break: break-word;
         }
 
-        .operation-meta {
-            display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            gap: 0.4rem;
-            font-size: clamp(0.68rem, 2vmin, 0.88rem);
-        }
-
-        .badge-src {
-            padding: 0.2em 0.55em;
-            border-radius: 5px;
+        .badge-src-lg {
+            display: inline-block;
+            padding: clamp(0.28em, 1vmin, 0.45em) clamp(0.45em, 1.6vmin, 0.7em);
+            border-radius: 8px;
             background: var(--badge-src-bg);
             color: #e6edf3;
             border: 1px solid var(--border-color);
+            font-size: clamp(1rem, 3.8vmin, 1.9rem);
+            font-weight: 700;
+            line-height: 1.25;
+            max-width: 100%;
+            word-break: break-word;
+            text-align: right;
         }
 
-        .badge-dst {
-            padding: 0.2em 0.55em;
-            border-radius: 5px;
-            background: rgba(35, 134, 54, 0.25);
+        .badge-dst-lg {
+            display: inline-block;
+            padding: clamp(0.28em, 1vmin, 0.45em) clamp(0.45em, 1.6vmin, 0.7em);
+            border-radius: 8px;
+            background: rgba(35, 134, 54, 0.28);
             color: #7ee787;
-            border: 1px solid var(--badge-dst-bg);
+            border: 2px solid var(--badge-dst-bg);
+            font-size: clamp(1rem, 3.8vmin, 1.9rem);
+            font-weight: 700;
+            line-height: 1.25;
+            max-width: 100%;
+            word-break: break-word;
+            text-align: right;
         }
 
-        .arrow-route {
-            color: var(--text-muted);
+        .arrow-route-lg {
+            color: var(--accent-ops);
+            font-size: clamp(1.35rem, 4.5vmin, 2.25rem);
+            font-weight: 700;
+            line-height: 1;
+            flex-shrink: 0;
         }
     </style>
 </head>
@@ -472,30 +539,43 @@
             desc.className = 'operation-desc';
             desc.textContent = op.opis || 'Transfer';
 
-            var meta = document.createElement('div');
-            meta.className = 'operation-meta';
+            var leftCol = document.createElement('div');
+            leftCol.className = 'operation-card-left';
+            leftCol.appendChild(timerBlock);
+            leftCol.appendChild(desc);
+
+            var routeCol = document.createElement('div');
+            routeCol.className = 'operation-card-route';
+            routeCol.setAttribute('aria-label', 'Trasa: źródło do celu');
+
+            var routeRow = document.createElement('div');
+            routeRow.className = 'route-row';
 
             var src = document.createElement('span');
-            src.className = 'badge-src';
+            src.className = 'badge-src-lg';
             src.textContent = op.zrodlo || '—';
 
             var arrow = document.createElement('span');
-            arrow.className = 'arrow-route';
+            arrow.className = 'arrow-route-lg';
             arrow.textContent = '\u2192';
             arrow.setAttribute('aria-hidden', 'true');
 
             var dst = document.createElement('span');
-            dst.className = 'badge-dst';
+            dst.className = 'badge-dst-lg';
             dst.textContent = op.cel || '—';
 
-            meta.appendChild(src);
-            meta.appendChild(arrow);
-            meta.appendChild(dst);
+            routeRow.appendChild(src);
+            routeRow.appendChild(arrow);
+            routeRow.appendChild(dst);
+            routeCol.appendChild(routeRow);
+
+            var body = document.createElement('div');
+            body.className = 'operation-card-body';
+            body.appendChild(leftCol);
+            body.appendChild(routeCol);
 
             card.appendChild(top);
-            card.appendChild(timerBlock);
-            card.appendChild(desc);
-            card.appendChild(meta);
+            card.appendChild(body);
 
             return card;
         }
