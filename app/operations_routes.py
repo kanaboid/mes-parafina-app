@@ -3,6 +3,7 @@ from flask import Blueprint, jsonify, request, current_app
 from datetime import datetime as dt
 from datetime import timezone
 import mysql.connector
+import json
 from .db import get_db_connection
 from .pathfinder_service import PathFinder
 from .apollo_service import ApolloService
@@ -17,6 +18,25 @@ from app.sockets import broadcast_apollo_update, broadcast_dashboard_update
 
 # Utworzenie nowego Blueprintu dla operacji
 bp = Blueprint('operations', __name__, url_prefix='/api/operations')
+
+
+def _write_debug_log(run_id, hypothesis_id, location, message, data):
+    # #region agent log
+    try:
+        payload = {
+            "sessionId": "3b8088",
+            "runId": run_id,
+            "hypothesisId": hypothesis_id,
+            "location": location,
+            "message": message,
+            "data": data,
+            "timestamp": int(dt.now(timezone.utc).timestamp() * 1000),
+        }
+        with open("/home/oczyszczalnia/Documents/mes-parafina-app/.cursor/debug-3b8088.log", "a", encoding="utf-8") as debug_file:
+            debug_file.write(json.dumps(payload, ensure_ascii=True, default=str) + "\n")
+    except Exception:
+        pass
+    # #endregion
 
 def get_pathfinder():
     """Pobiera instancję serwisu PathFinder z kontekstu aplikacji."""
@@ -115,9 +135,23 @@ def start_apollo_transfer():
     conn = None
     read_cursor = None
     write_cursor = None
+    run_id = f"apollo-start-{int(dt.now(timezone.utc).timestamp() * 1000)}"
     try:
         conn = get_db_connection()
         read_cursor = conn.cursor(dictionary=True)
+        read_cursor.execute("SELECT CONNECTION_ID() AS connection_id")
+        connection_id = read_cursor.fetchone()['connection_id']
+        _write_debug_log(
+            run_id,
+            "H0",
+            "app/operations_routes.py:start_apollo_transfer:conn-opened",
+            "Apollo transfer start request opened DB connection",
+            {
+                "connectionId": connection_id,
+                "id_zrodla": id_zrodla,
+                "id_celu": id_celu,
+            },
+        )
 
         read_cursor.execute("SELECT id, nazwa_unikalna, typ_sprzetu, stan_sprzetu FROM sprzet WHERE id IN (%s, %s)", (id_zrodla, id_celu))
         sprzety = {s['id']: s for s in read_cursor.fetchall()}
@@ -155,6 +189,17 @@ def start_apollo_transfer():
         sql_konflikt = f"SELECT s.nazwa_segmentu FROM log_uzyte_segmenty lus JOIN operacje_log ol ON lus.id_operacji_log = ol.id JOIN segmenty s ON lus.id_segmentu = s.id WHERE ol.status_operacji = 'aktywna' AND s.nazwa_segmentu IN ({placeholders_konflikt})"
         read_cursor.execute(sql_konflikt, trasa_segmentow_nazwy)
         konflikty = read_cursor.fetchall()
+        _write_debug_log(
+            run_id,
+            "H1",
+            "app/operations_routes.py:start_apollo_transfer:route-checked",
+            "Checked route conflicts before writes",
+            {
+                "connectionId": connection_id,
+                "segments": trasa_segmentow_nazwy,
+                "conflictCount": len(konflikty),
+            },
+        )
 
         if konflikty:
             nazwy_zajetych = [k['nazwa_segmentu'] for k in konflikty]
@@ -173,6 +218,17 @@ def start_apollo_transfer():
         if zawory_do_otwarcia:
             placeholders_zawory = ', '.join(['%s'] * len(zawory_do_otwarcia))
             sql_zawory = f"UPDATE zawory SET stan = 'OTWARTY' WHERE nazwa_zaworu IN ({placeholders_zawory})"
+            _write_debug_log(
+                run_id,
+                "H2",
+                "app/operations_routes.py:start_apollo_transfer:before-valves-update",
+                "About to update valves for Apollo transfer",
+                {
+                    "connectionId": connection_id,
+                    "valves": sorted(zawory_do_otwarcia),
+                    "segments": trasa_segmentow_nazwy,
+                },
+            )
             write_cursor.execute(sql_zawory, list(zawory_do_otwarcia))
 
         typ_operacji = 'ROZTANKOWANIE_APOLLO'
@@ -189,17 +245,61 @@ def start_apollo_transfer():
 
         sql_blokada = "INSERT INTO log_uzyte_segmenty (id_operacji_log, id_segmentu) VALUES (%s, %s)"
         dane_do_blokady = [(operacja_id, id_seg) for id_seg in id_segmentow]
+        _write_debug_log(
+            run_id,
+            "H3",
+            "app/operations_routes.py:start_apollo_transfer:before-segment-lock-insert",
+            "About to insert occupied segments for Apollo transfer",
+            {
+                "connectionId": connection_id,
+                "operationId": operacja_id,
+                "segmentIds": id_segmentow,
+            },
+        )
         write_cursor.executemany(sql_blokada, dane_do_blokady)
         
+        _write_debug_log(
+            run_id,
+            "H4",
+            "app/operations_routes.py:start_apollo_transfer:before-equipment-update",
+            "About to update equipment states for Apollo transfer",
+            {
+                "connectionId": connection_id,
+                "sourceEquipmentId": id_zrodla,
+                "destinationEquipmentId": id_celu,
+            },
+        )
         write_cursor.execute("UPDATE sprzet SET stan_sprzetu = 'W transferze' WHERE id = %s", (id_zrodla,))
         write_cursor.execute("UPDATE sprzet SET stan_sprzetu = 'W transferze' WHERE id = %s", (id_celu,))
         
         conn.commit()
+        _write_debug_log(
+            run_id,
+            "H0",
+            "app/operations_routes.py:start_apollo_transfer:commit",
+            "Apollo transfer transaction committed",
+            {
+                "connectionId": connection_id,
+                "operationId": operacja_id,
+            },
+        )
         broadcast_apollo_update()
 
         return jsonify({'message': 'Transfer rozpoczęty pomyślnie.','id_operacji': operacja_id}), 201
 
     except mysql.connector.Error as err:
+        _write_debug_log(
+            run_id,
+            "H5",
+            "app/operations_routes.py:start_apollo_transfer:mysql-error",
+            "Apollo transfer MySQL error",
+            {
+                "connectionId": locals().get("connection_id"),
+                "errorCode": getattr(err, "errno", None),
+                "sqlState": getattr(err, "sqlstate", None),
+                "message": str(err),
+            },
+        )
         import traceback; traceback.print_exc()
         if conn and conn.is_connected(): conn.rollback()
         return jsonify({'message': f'Błąd bazy danych: {str(err)}'}), 500
@@ -218,10 +318,23 @@ def end_apollo_transfer():
     Loguje transfer w Apollo, tworzy partię pierwotną i tankuje ją do celu.
     """
     data = request.get_json()
+    run_id = f"apollo-end-{int(dt.now(timezone.utc).timestamp() * 1000)}"
     try:
         id_operacji = int(data['id_operacji'])
         waga_kg = Decimal(data['waga_kg'])
         operator = data.get('operator', 'SYSTEM')
+        connection_id = db.session.execute(db.text("SELECT CONNECTION_ID()")).scalar_one()
+        _write_debug_log(
+            run_id,
+            "E0",
+            "app/operations_routes.py:end_apollo_transfer:conn-opened",
+            "Apollo transfer end request using SQLAlchemy session",
+            {
+                "connectionId": connection_id,
+                "id_operacji": id_operacji,
+                "waga_kg": str(waga_kg),
+            },
+        )
 
         operacja = db.session.get(OperacjeLog, id_operacji)
         if not operacja or operacja.status_operacji != 'aktywna':
@@ -251,11 +364,43 @@ def end_apollo_transfer():
         normalize_result = None
         dest_tank = db.session.get(Sprzet, id_celu)
         if dest_tank and dest_tank.active_mix_id:
+            _write_debug_log(
+                run_id,
+                "E1",
+                "app/operations_routes.py:end_apollo_transfer:before-normalize",
+                "About to normalize destination mix code before Apollo transfer end",
+                {
+                    "connectionId": connection_id,
+                    "destinationTankId": id_celu,
+                    "activeMixId": dest_tank.active_mix_id,
+                },
+            )
             normalize_result = BatchManagementService.normalize_mix_code_if_only_wydmuch(
                 dest_tank.active_mix_id, commit=True
             )
+            _write_debug_log(
+                run_id,
+                "E1",
+                "app/operations_routes.py:end_apollo_transfer:after-normalize",
+                "Finished destination mix normalization before Apollo transfer end",
+                {
+                    "connectionId": connection_id,
+                    "normalizeResult": normalize_result,
+                },
+            )
 
         # 2a. Stwórz wirtualną partię pierwotną dla tego transferu
+        _write_debug_log(
+            run_id,
+            "E2",
+            "app/operations_routes.py:end_apollo_transfer:before-create-batch",
+            "About to create raw material batch for Apollo transfer end",
+            {
+                "connectionId": connection_id,
+                "materialType": sesja.typ_surowca,
+                "sourceEquipmentId": id_apollo,
+            },
+        )
         batch_result = BatchManagementService.create_raw_material_batch(
             material_type=sesja.typ_surowca,
             source_type='APOLLO',
@@ -264,13 +409,45 @@ def end_apollo_transfer():
             operator=operator
         )
         nowy_batch_id = batch_result['batch_id']
+        _write_debug_log(
+            run_id,
+            "E2",
+            "app/operations_routes.py:end_apollo_transfer:after-create-batch",
+            "Created raw material batch for Apollo transfer end",
+            {
+                "connectionId": connection_id,
+                "batchResult": batch_result,
+            },
+        )
         
         # 2b. Zatankuj tę nową partię do zbiornika docelowego.
         #    Ta metoda zajmie się całą logiką tworzenia/aktualizacji mieszaniny.
+        _write_debug_log(
+            run_id,
+            "E3",
+            "app/operations_routes.py:end_apollo_transfer:before-tank-into-destination",
+            "About to tank created batch into destination tank",
+            {
+                "connectionId": connection_id,
+                "batchId": nowy_batch_id,
+                "destinationTankId": id_celu,
+            },
+        )
         BatchManagementService.tank_into_dirty_tank(
             batch_id=nowy_batch_id,
             tank_id=id_celu,
             operator=operator
+        )
+        _write_debug_log(
+            run_id,
+            "E3",
+            "app/operations_routes.py:end_apollo_transfer:after-tank-into-destination",
+            "Finished tanking created batch into destination tank",
+            {
+                "connectionId": connection_id,
+                "batchId": nowy_batch_id,
+                "destinationTankId": id_celu,
+            },
         )
 
         # --- KROK 3: Zakończenie logistyki operacji ---
@@ -286,6 +463,17 @@ def end_apollo_transfer():
         
         zawory_do_zamkniecia_nazwy = [seg.zawory.nazwa_zaworu for seg in operacja.segmenty if seg.zawory]
         if zawory_do_zamkniecia_nazwy:
+            _write_debug_log(
+                run_id,
+                "E4",
+                "app/operations_routes.py:end_apollo_transfer:before-close-valves",
+                "About to close valves during Apollo transfer end",
+                {
+                    "connectionId": connection_id,
+                    "valves": sorted(zawory_do_zamkniecia_nazwy),
+                    "operationId": operacja.id,
+                },
+            )
             stmt = db.update(Zawory).where(
                 Zawory.nazwa_zaworu.in_(zawory_do_zamkniecia_nazwy)
             ).values(stan='ZAMKNIETY')
@@ -295,6 +483,18 @@ def end_apollo_transfer():
             operacja.sprzet_zrodlowy.stan_sprzetu = 'Gotowy'
         if operacja.sprzet_docelowy:
             operacja.sprzet_docelowy.stan_sprzetu = 'Zatankowany'
+        _write_debug_log(
+            run_id,
+            "E5",
+            "app/operations_routes.py:end_apollo_transfer:before-final-commit",
+            "About to commit final Apollo transfer end updates",
+            {
+                "connectionId": connection_id,
+                "sourceEquipmentId": id_apollo,
+                "destinationEquipmentId": id_celu,
+                "operationId": operacja.id,
+            },
+        )
         
         # Zamiast ręcznie zarządzać PartiąSurowca, pozwalamy, aby BatchManagementService to robił.
         # Usuwamy starą logikę:
@@ -303,6 +503,17 @@ def end_apollo_transfer():
         #     partia_w_apollo.waga_aktualna_kg -= waga_kg
         
         db.session.commit()
+        _write_debug_log(
+            run_id,
+            "E0",
+            "app/operations_routes.py:end_apollo_transfer:commit",
+            "Apollo transfer end transaction committed",
+            {
+                "connectionId": connection_id,
+                "operationId": operacja.id,
+                "batchId": nowy_batch_id,
+            },
+        )
         broadcast_apollo_update()
         payload = {
             'success': True,
@@ -316,6 +527,17 @@ def end_apollo_transfer():
         db.session.rollback()
         return jsonify({'error': str(e)}), 400
     except Exception as e:
+        _write_debug_log(
+            run_id,
+            "E9",
+            "app/operations_routes.py:end_apollo_transfer:error",
+            "Apollo transfer end raised exception",
+            {
+                "connectionId": locals().get("connection_id"),
+                "errorType": type(e).__name__,
+                "message": str(e),
+            },
+        )
         db.session.rollback()
         import traceback
         traceback.print_exc()
