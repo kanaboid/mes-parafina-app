@@ -7,7 +7,18 @@ from unittest.mock import patch, MagicMock
 # Importy z aplikacji
 from app import create_app, db
 from app.config import TestConfig
-from app.models import Sprzet, PartieApollo, PortySprzetu, Segmenty, Zawory, OperacjeLog
+from app.models import (
+    ApolloSesje,
+    Batches,
+    MixComponents,
+    OperacjeLog,
+    PartieApollo,
+    PortySprzetu,
+    Segmenty,
+    Sprzet,
+    TankMixes,
+    Zawory,
+)
 from sqlalchemy import text, select
 
 class TestOperationsRoutes(unittest.TestCase):
@@ -194,6 +205,89 @@ class TestOperationsRoutes(unittest.TestCase):
         
         cel_po = db.session.get(Sprzet, 2)
         self.assertEqual(cel_po.stan_sprzetu, 'Zatankowany')
+
+    def test_05_apollo_transfer_end_normalizes_wydmuch_only_destination_mix(self):
+        """
+        Sprawdza, czy POST /apollo-transfer/end normalizuje kod mieszaniny
+        docelowej, gdy przed transferem zawiera ona wyłącznie partie WYDMUCH.
+        """
+        apollo = Sprzet(id=10, nazwa_unikalna='AP01', typ_sprzetu='apollo', stan_sprzetu='W transferze')
+        cel = Sprzet(id=11, nazwa_unikalna='R02', typ_sprzetu='reaktor', stan_sprzetu='W transferze')
+        db.session.add_all([apollo, cel])
+        db.session.commit()
+
+        wydmuch_batch = Batches(
+            unique_code='W-P-SRC-01',
+            material_type='WYDMUCH',
+            source_type='WYDMUCH',
+            source_name='SRC-01',
+            initial_quantity=Decimal('50.00'),
+            current_quantity=Decimal('50.00'),
+        )
+        db.session.add(wydmuch_batch)
+        db.session.flush()
+
+        dest_mix = TankMixes(
+            unique_code='W-R02',
+            tank_id=cel.id,
+            process_status='SUROWY',
+            is_wydmuch_mix=True,
+        )
+        db.session.add(dest_mix)
+        db.session.flush()
+
+        dest_component = MixComponents(
+            mix_id=dest_mix.id,
+            batch_id=wydmuch_batch.id,
+            quantity_in_mix=Decimal('50.00'),
+        )
+        cel.active_mix_id = dest_mix.id
+        db.session.add(dest_component)
+
+        sesja = ApolloSesje(
+            id=1,
+            id_sprzetu=apollo.id,
+            typ_surowca='19',
+            status_sesji='aktywna',
+            czas_rozpoczecia=datetime.now(timezone.utc),
+        )
+        operacja = OperacjeLog(
+            id=501,
+            typ_operacji='TRANSFER_APOLLO',
+            status_operacji='aktywna',
+            id_sprzetu_zrodlowego=apollo.id,
+            id_sprzetu_docelowego=cel.id,
+            czas_rozpoczecia=datetime.now(timezone.utc),
+        )
+        db.session.add_all([sesja, operacja])
+        db.session.commit()
+
+        response = self.client.post(
+            '/api/operations/apollo-transfer/end',
+            data=json.dumps({'id_operacji': 501, 'waga_kg': '25.00', 'operator': 'TEST_USER'}),
+            content_type='application/json'
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertTrue(payload['success'])
+        self.assertIn('normalize_mix_code', payload)
+        self.assertTrue(payload['normalize_mix_code']['updated'])
+        self.assertTrue(payload['normalize_mix_code']['new_code'].startswith('P-'))
+
+        db.session.refresh(dest_mix)
+        self.assertEqual(dest_mix.unique_code, payload['normalize_mix_code']['new_code'])
+        self.assertEqual(len(dest_mix.components), 2)
+        self.assertEqual({component.batch.material_type for component in dest_mix.components}, {'WYDMUCH', '19'})
+
+        nowa_partia_apollo = db.session.execute(
+            select(Batches).where(Batches.source_type == 'APOLLO')
+        ).scalar_one()
+        self.assertEqual(nowa_partia_apollo.current_quantity, Decimal('0.00'))
+
+        operacja_po = db.session.get(OperacjeLog, 501)
+        self.assertEqual(operacja_po.status_operacji, 'zakonczona')
+        self.assertEqual(operacja_po.id_apollo_sesji, sesja.id)
 
 if __name__ == '__main__':
     unittest.main()

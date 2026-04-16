@@ -246,6 +246,15 @@ def end_apollo_transfer():
         # --- KROK 2: Stworzenie partii pierwotnej i zatankowanie jej do celu ---
         apollo_sprzet = db.session.get(Sprzet, id_apollo)
         
+        # Jeśli cel ma mix złożony wyłącznie z WYDMUCH, najpierw
+        # normalizujemy jego kod do konwencji PRZELEJ przed dodaniem nowej partii.
+        normalize_result = None
+        dest_tank = db.session.get(Sprzet, id_celu)
+        if dest_tank and dest_tank.active_mix_id:
+            normalize_result = BatchManagementService.normalize_mix_code_if_only_wydmuch(
+                dest_tank.active_mix_id, commit=True
+            )
+
         # 2a. Stwórz wirtualną partię pierwotną dla tego transferu
         batch_result = BatchManagementService.create_raw_material_batch(
             material_type=sesja.typ_surowca,
@@ -295,7 +304,13 @@ def end_apollo_transfer():
         
         db.session.commit()
         broadcast_apollo_update()
-        return jsonify({'success': True, 'message': f'Operacja {id_operacji} zakończona. Utworzono i zatankowano partię.'})
+        payload = {
+            'success': True,
+            'message': f'Operacja {id_operacji} zakończona. Utworzono i zatankowano partię.'
+        }
+        if normalize_result:
+            payload['normalize_mix_code'] = normalize_result
+        return jsonify(payload)
 
     except (ValueError, KeyError) as e:
         db.session.rollback()
