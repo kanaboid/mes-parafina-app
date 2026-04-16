@@ -4,6 +4,7 @@ from datetime import datetime as dt
 from datetime import timezone
 import mysql.connector
 import json
+from urllib import request as urllib_request
 from .db import get_db_connection
 from .pathfinder_service import PathFinder
 from .apollo_service import ApolloService
@@ -32,8 +33,17 @@ def _write_debug_log(run_id, hypothesis_id, location, message, data):
             "data": data,
             "timestamp": int(dt.now(timezone.utc).timestamp() * 1000),
         }
-        with open("/home/oczyszczalnia/Documents/mes-parafina-app/.cursor/debug-3b8088.log", "a", encoding="utf-8") as debug_file:
-            debug_file.write(json.dumps(payload, ensure_ascii=True, default=str) + "\n")
+        request_body = json.dumps(payload, ensure_ascii=True, default=str).encode("utf-8")
+        http_request = urllib_request.Request(
+            "http://127.0.0.1:7883/ingest/d987acc0-96ea-4300-b8b4-551d53fe6e75",
+            data=request_body,
+            headers={
+                "Content-Type": "application/json",
+                "X-Debug-Session-Id": "3b8088",
+            },
+            method="POST",
+        )
+        urllib_request.urlopen(http_request, timeout=2).read()
     except Exception:
         pass
     # #endregion
