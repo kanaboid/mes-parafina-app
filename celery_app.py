@@ -41,7 +41,16 @@ def make_celery(app):
     beat_db_uri = app.config.get('CELERY_BEAT_DBURI')
     print(f"--- [CELERY_APP DEBUG] Jawne ustawianie 'beat_dburi' na: {beat_db_uri}")
     celery.conf.update({
-        'beat_dburi': beat_db_uri
+        'beat_dburi': beat_db_uri,
+        # Gdy worker nie nadąża lub był wyłączony, taski starsze niż TTL
+        # są porzucane zamiast zalegać w Redisie i powodować backlog.
+        'task_default_expires': 120,
+        # Nie przechowujemy wyników tasków w Redisie – nikt ich nie odczytuje
+        # (taski mają efekty uboczne: DB + Socket.IO), a wpisy 'celery-task-meta-*'
+        # niepotrzebnie puchną do dziesiątek tysięcy kluczy.
+        'task_ignore_result': True,
+        # Krótszy TTL jako zabezpieczenie, gdyby gdzieś lokalnie włączono result backend.
+        'result_expires': 3600,
     })
 
     class ContextTask(celery.Task):
