@@ -120,7 +120,15 @@ class SensorService:
         print(f"\n--- SCHEDULER: Uruchamiam read_sensors o {current_time} ---")
 
         try:
-            aktywny_sprzet_q = select(Sprzet).where(Sprzet.stan_sprzetu != 'Wyłączony')
+            # ORDER BY Sprzet.id zapewnia deterministyczną kolejność nabywania
+            # blokad wierszy `sprzet` - tę samą, którą stosuje endpoint
+            # `/apollo-transfer/end`. Dzięki temu celery i żądania HTTP nie
+            # tworzą cyklu w grafie locków InnoDB → brak deadlocka (errno 1213).
+            aktywny_sprzet_q = (
+                select(Sprzet)
+                .where(Sprzet.stan_sprzetu != 'Wyłączony')
+                .order_by(Sprzet.id)
+            )
             equipment_list = db.session.execute(aktywny_sprzet_q).scalars().all()
             
             pomiarowe_do_dodania = []

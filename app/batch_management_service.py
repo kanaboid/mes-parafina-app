@@ -28,7 +28,15 @@ class BatchManagementService:
         return f"{base_prefix}-{daily_count + 1:02d}"
 
     @staticmethod
-    def create_raw_material_batch(material_type, source_type, source_name, quantity, operator):
+    def create_raw_material_batch(material_type, source_type, source_name, quantity, operator, commit: bool = True):
+        """
+        Tworzy nową Partię Pierwotną.
+
+        :param commit: Gdy True (domyślnie) wykonuje pełen commit transakcji i
+            sam obsługuje rollback błędów (zachowanie wsteczne).
+            Gdy False, jedynie flush'uje zmiany (żeby uzyskać `new_batch.id`),
+            a zarządzanie transakcją oraz rollback pozostaje po stronie wywołującego.
+        """
         try:
             unique_code = BatchManagementService._generate_unique_code(material_type, source_name)
             new_batch = Batches(
@@ -36,10 +44,17 @@ class BatchManagementService:
                 source_name=source_name, initial_quantity=quantity, current_quantity=quantity
             )
             db.session.add(new_batch)
-            db.session.commit()
+            if commit:
+                db.session.commit()
+            else:
+                # Flush zapewnia, że kolumna new_batch.id zostanie wypełniona
+                # przed zwróceniem wyniku, ale NIE kończy transakcji.
+                db.session.flush()
             return {'batch_id': new_batch.id, 'unique_code': new_batch.unique_code}
         except Exception as e:
-            db.session.rollback(); raise e
+            if commit:
+                db.session.rollback()
+            raise e
 
     @staticmethod
     def _generate_mix_code(prefix: str, tank_name: str, exclude_mix_id: int = None) -> str:
@@ -80,10 +95,15 @@ class BatchManagementService:
         return BatchManagementService._generate_mix_code('P', reactor_name, exclude_mix_id)
 
     @staticmethod
-    def tank_into_dirty_tank(batch_id, tank_id, operator):
+    def tank_into_dirty_tank(batch_id, tank_id, operator, commit: bool = True):
         """
         Tankuje partię do zbiornika. Inteligentnie dobiera prefiks kodu mieszaniny
         ('P-' dla reaktorów, 'B-' dla pozostałych) na podstawie typu sprzętu.
+
+        :param commit: Gdy True (domyślnie) wykonuje pełen commit transakcji i
+            sam obsługuje rollback błędów (zachowanie wsteczne).
+            Gdy False, jedynie flush'uje zmiany - zarządzanie transakcją oraz
+            rollback pozostają po stronie wywołującego.
         """
         try:
             tank = db.session.get(Sprzet, tank_id)
@@ -120,10 +140,14 @@ class BatchManagementService:
                 db.session.add(new_component)
             
             batch.current_quantity = 0
-            db.session.commit()
+            if commit:
+                db.session.commit()
+            else:
+                db.session.flush()
             return {'mix_id': active_mix.id}
         except Exception as e:
-            db.session.rollback()
+            if commit:
+                db.session.rollback()
             raise e
 
     @staticmethod

@@ -4,6 +4,7 @@ from datetime import datetime as dt
 from datetime import timezone
 import mysql.connector
 import json
+import time
 from urllib import request as urllib_request
 from .db import get_db_connection
 from .pathfinder_service import PathFinder
@@ -12,6 +13,7 @@ import traceback
 from decimal import Decimal
 from .batch_management_service import BatchManagementService
 
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import joinedload
 from .extensions import db
 from .models import Sprzet, PortySprzetu, Segmenty, Zawory, OperacjeLog, t_log_uzyte_segmenty, ApolloSesje, ApolloTracking, PartieApollo, TankMixes, Batches, MixComponents
@@ -47,6 +49,27 @@ def _write_debug_log(run_id, hypothesis_id, location, message, data):
     except Exception:
         pass
     # #endregion
+
+
+def _is_deadlock_error(exc: BaseException) -> bool:
+    """
+    Wykrywa błąd deadlocka MySQL (kod SQLSTATE 40001 / errno 1213),
+    niezależnie czy przyszedł jako SQLAlchemy OperationalError opakowujący
+    natywny wyjątek mysql.connector, czy bezpośrednio z mysql.connector.
+    """
+    candidates = [exc]
+    original = getattr(exc, 'orig', None)
+    if original is not None:
+        candidates.append(original)
+    for candidate in candidates:
+        errno = getattr(candidate, 'errno', None)
+        if errno == 1213:
+            return True
+        text = str(candidate)
+        if 'Deadlock' in text or '1213' in text or '40001' in text:
+            return True
+    return False
+
 
 def get_pathfinder():
     """Pobiera instancję serwisu PathFinder z kontekstu aplikacji."""
@@ -326,232 +349,283 @@ def end_apollo_transfer():
     """
     Kończy operację transferu z Apollo (WERSJA ORM z pełną integracją BatchService).
     Loguje transfer w Apollo, tworzy partię pierwotną i tankuje ją do celu.
+
+    Transakcja jest atomowa - wszystkie zapisy (tracking Apollo, batch, mix,
+    stany sprzętu, zawory, log operacji) lądują w jednym `db.session.commit()`
+    na końcu. Na wypadek konfliktu blokad z równoległymi zapisami (np. celery
+    `read_sensors_task`) handler jest opakowany w pętlę retry dla MySQL 1213
+    (Deadlock found when trying to get lock).
     """
     data = request.get_json()
     run_id = f"apollo-end-{int(dt.now(timezone.utc).timestamp() * 1000)}"
-    try:
-        id_operacji = int(data['id_operacji'])
-        waga_kg = Decimal(data['waga_kg'])
-        operator = data.get('operator', 'SYSTEM')
-        connection_id = db.session.execute(db.text("SELECT CONNECTION_ID()")).scalar_one()
-        _write_debug_log(
-            run_id,
-            "E0",
-            "app/operations_routes.py:end_apollo_transfer:conn-opened",
-            "Apollo transfer end request using SQLAlchemy session",
-            {
-                "connectionId": connection_id,
-                "id_operacji": id_operacji,
-                "waga_kg": str(waga_kg),
-            },
-        )
 
-        operacja = db.session.get(OperacjeLog, id_operacji)
-        if not operacja or operacja.status_operacji != 'aktywna':
-            raise ValueError('Nie znaleziono aktywnej operacji o podanym ID.')
+    # Parametry retry dla deadlocków MySQL (errno 1213).
+    max_attempts = 3
+    base_delay = 0.05
+    last_deadlock_error = None
 
-        id_apollo = operacja.id_sprzetu_zrodlowego
-        id_celu = operacja.id_sprzetu_docelowego
-        
-        sesja = db.session.execute(
-            db.select(ApolloSesje).filter_by(id_sprzetu=id_apollo, status_sesji='aktywna')
-        ).scalar_one_or_none()
-        if not sesja:
-            raise ValueError('Nie znaleziono aktywnej sesji dla danego Apollo.')
-
-        # --- KROK 1: Aktualizacja stanu Apollo ---
-        tracking_transfer = ApolloTracking(
-            id_sesji=sesja.id, typ_zdarzenia='TRANSFER_WYJSCIOWY', waga_kg=waga_kg,
-            czas_zdarzenia=dt.now(timezone.utc), id_operacji_log=operacja.id, operator=operator
-        )
-        db.session.add(tracking_transfer)
-
-        # --- KROK 2: Stworzenie partii pierwotnej i zatankowanie jej do celu ---
-        apollo_sprzet = db.session.get(Sprzet, id_apollo)
-        
-        # Jeśli cel ma mix złożony wyłącznie z WYDMUCH, najpierw
-        # normalizujemy jego kod do konwencji PRZELEJ przed dodaniem nowej partii.
-        normalize_result = None
-        dest_tank = db.session.get(Sprzet, id_celu)
-        if dest_tank and dest_tank.active_mix_id:
+    for attempt in range(max_attempts):
+        try:
+            id_operacji = int(data['id_operacji'])
+            waga_kg = Decimal(data['waga_kg'])
+            operator = data.get('operator', 'SYSTEM')
+            connection_id = db.session.execute(db.text("SELECT CONNECTION_ID()")).scalar_one()
             _write_debug_log(
                 run_id,
-                "E1",
-                "app/operations_routes.py:end_apollo_transfer:before-normalize",
-                "About to normalize destination mix code before Apollo transfer end",
+                "E0",
+                "app/operations_routes.py:end_apollo_transfer:conn-opened",
+                "Apollo transfer end request using SQLAlchemy session",
                 {
                     "connectionId": connection_id,
+                    "id_operacji": id_operacji,
+                    "waga_kg": str(waga_kg),
+                    "attempt": attempt + 1,
+                },
+            )
+
+            operacja = db.session.get(OperacjeLog, id_operacji)
+            if not operacja or operacja.status_operacji != 'aktywna':
+                raise ValueError('Nie znaleziono aktywnej operacji o podanym ID.')
+
+            id_apollo = operacja.id_sprzetu_zrodlowego
+            id_celu = operacja.id_sprzetu_docelowego
+
+            sesja = db.session.execute(
+                db.select(ApolloSesje).filter_by(id_sprzetu=id_apollo, status_sesji='aktywna')
+            ).scalar_one_or_none()
+            if not sesja:
+                raise ValueError('Nie znaleziono aktywnej sesji dla danego Apollo.')
+
+            # --- BLOKADA WIERSZY sprzet W DETERMINISTYCZNEJ KOLEJNOŚCI (po ID rosnąco) ---
+            # Zapobiega deadlockom z równolegle działającym celery read_sensors_task,
+            # który również aktualizuje tabelę sprzet. Oba miejsca muszą zdobywać
+            # blokady wierszy w tej samej kolejności (rosnąco po `id`).
+            src_dest_ids = sorted({id_apollo, id_celu})
+            db.session.execute(
+                db.select(Sprzet)
+                .where(Sprzet.id.in_(src_dest_ids))
+                .order_by(Sprzet.id)
+                .with_for_update()
+            ).scalars().all()
+
+            # --- KROK 1: Aktualizacja stanu Apollo ---
+            tracking_transfer = ApolloTracking(
+                id_sesji=sesja.id, typ_zdarzenia='TRANSFER_WYJSCIOWY', waga_kg=waga_kg,
+                czas_zdarzenia=dt.now(timezone.utc), id_operacji_log=operacja.id, operator=operator
+            )
+            db.session.add(tracking_transfer)
+
+            # --- KROK 2: Stworzenie partii pierwotnej i zatankowanie jej do celu ---
+            apollo_sprzet = db.session.get(Sprzet, id_apollo)
+
+            # Jeśli cel ma mix złożony wyłącznie z WYDMUCH, najpierw
+            # normalizujemy jego kod do konwencji PRZELEJ przed dodaniem nowej partii.
+            normalize_result = None
+            dest_tank = db.session.get(Sprzet, id_celu)
+            if dest_tank and dest_tank.active_mix_id:
+                _write_debug_log(
+                    run_id,
+                    "E1",
+                    "app/operations_routes.py:end_apollo_transfer:before-normalize",
+                    "About to normalize destination mix code before Apollo transfer end",
+                    {
+                        "connectionId": connection_id,
+                        "destinationTankId": id_celu,
+                        "activeMixId": dest_tank.active_mix_id,
+                    },
+                )
+                normalize_result = BatchManagementService.normalize_mix_code_if_only_wydmuch(
+                    dest_tank.active_mix_id, commit=False
+                )
+                _write_debug_log(
+                    run_id,
+                    "E1",
+                    "app/operations_routes.py:end_apollo_transfer:after-normalize",
+                    "Finished destination mix normalization before Apollo transfer end",
+                    {
+                        "connectionId": connection_id,
+                        "normalizeResult": normalize_result,
+                    },
+                )
+
+            # 2a. Stwórz wirtualną partię pierwotną dla tego transferu
+            _write_debug_log(
+                run_id,
+                "E2",
+                "app/operations_routes.py:end_apollo_transfer:before-create-batch",
+                "About to create raw material batch for Apollo transfer end",
+                {
+                    "connectionId": connection_id,
+                    "materialType": sesja.typ_surowca,
+                    "sourceEquipmentId": id_apollo,
+                },
+            )
+            batch_result = BatchManagementService.create_raw_material_batch(
+                material_type=sesja.typ_surowca,
+                source_type='APOLLO',
+                source_name=apollo_sprzet.nazwa_unikalna,
+                quantity=waga_kg,
+                operator=operator,
+                commit=False
+            )
+            nowy_batch_id = batch_result['batch_id']
+            _write_debug_log(
+                run_id,
+                "E2",
+                "app/operations_routes.py:end_apollo_transfer:after-create-batch",
+                "Created raw material batch for Apollo transfer end",
+                {
+                    "connectionId": connection_id,
+                    "batchResult": batch_result,
+                },
+            )
+
+            # 2b. Zatankuj tę nową partię do zbiornika docelowego.
+            #    Ta metoda zajmie się całą logiką tworzenia/aktualizacji mieszaniny.
+            _write_debug_log(
+                run_id,
+                "E3",
+                "app/operations_routes.py:end_apollo_transfer:before-tank-into-destination",
+                "About to tank created batch into destination tank",
+                {
+                    "connectionId": connection_id,
+                    "batchId": nowy_batch_id,
                     "destinationTankId": id_celu,
-                    "activeMixId": dest_tank.active_mix_id,
                 },
             )
-            normalize_result = BatchManagementService.normalize_mix_code_if_only_wydmuch(
-                dest_tank.active_mix_id, commit=True
+            BatchManagementService.tank_into_dirty_tank(
+                batch_id=nowy_batch_id,
+                tank_id=id_celu,
+                operator=operator,
+                commit=False
             )
             _write_debug_log(
                 run_id,
-                "E1",
-                "app/operations_routes.py:end_apollo_transfer:after-normalize",
-                "Finished destination mix normalization before Apollo transfer end",
+                "E3",
+                "app/operations_routes.py:end_apollo_transfer:after-tank-into-destination",
+                "Finished tanking created batch into destination tank",
                 {
                     "connectionId": connection_id,
-                    "normalizeResult": normalize_result,
+                    "batchId": nowy_batch_id,
+                    "destinationTankId": id_celu,
                 },
             )
 
-        # 2a. Stwórz wirtualną partię pierwotną dla tego transferu
-        _write_debug_log(
-            run_id,
-            "E2",
-            "app/operations_routes.py:end_apollo_transfer:before-create-batch",
-            "About to create raw material batch for Apollo transfer end",
-            {
-                "connectionId": connection_id,
-                "materialType": sesja.typ_surowca,
-                "sourceEquipmentId": id_apollo,
-            },
-        )
-        batch_result = BatchManagementService.create_raw_material_batch(
-            material_type=sesja.typ_surowca,
-            source_type='APOLLO',
-            source_name=apollo_sprzet.nazwa_unikalna,
-            quantity=waga_kg,
-            operator=operator
-        )
-        nowy_batch_id = batch_result['batch_id']
-        _write_debug_log(
-            run_id,
-            "E2",
-            "app/operations_routes.py:end_apollo_transfer:after-create-batch",
-            "Created raw material batch for Apollo transfer end",
-            {
-                "connectionId": connection_id,
-                "batchResult": batch_result,
-            },
-        )
-        
-        # 2b. Zatankuj tę nową partię do zbiornika docelowego.
-        #    Ta metoda zajmie się całą logiką tworzenia/aktualizacji mieszaniny.
-        _write_debug_log(
-            run_id,
-            "E3",
-            "app/operations_routes.py:end_apollo_transfer:before-tank-into-destination",
-            "About to tank created batch into destination tank",
-            {
-                "connectionId": connection_id,
-                "batchId": nowy_batch_id,
-                "destinationTankId": id_celu,
-            },
-        )
-        BatchManagementService.tank_into_dirty_tank(
-            batch_id=nowy_batch_id,
-            tank_id=id_celu,
-            operator=operator
-        )
-        _write_debug_log(
-            run_id,
-            "E3",
-            "app/operations_routes.py:end_apollo_transfer:after-tank-into-destination",
-            "Finished tanking created batch into destination tank",
-            {
-                "connectionId": connection_id,
-                "batchId": nowy_batch_id,
-                "destinationTankId": id_celu,
-            },
-        )
+            # --- KROK 3: Zakończenie logistyki operacji ---
+            operacja.status_operacji = 'zakonczona'
+            operacja.czas_zakonczenia = dt.now(timezone.utc)
+            operacja.ilosc_kg = waga_kg
+            operacja.zmodyfikowane_przez = operator
+            operacja.id_apollo_sesji = sesja.id
 
-        # --- KROK 3: Zakończenie logistyki operacji ---
-        operacja.status_operacji = 'zakonczona'
-        operacja.czas_zakonczenia = dt.now(timezone.utc)
-        operacja.ilosc_kg = waga_kg
-        operacja.zmodyfikowane_przez = operator
-        operacja.id_apollo_sesji = sesja.id
-        
-        # Przypisz ID nowo utworzonej partii do logu operacji
-        # (Możemy to zrobić, choć Batches nie ma bezpośredniej relacji z OperacjeLog)
-        operacja.opis = f"Transfer z {apollo_sprzet.nazwa_unikalna} do zbiornika ID {id_celu}. Utworzono partię pierwotną ID: {nowy_batch_id}."
-        
-        zawory_do_zamkniecia_nazwy = [seg.zawory.nazwa_zaworu for seg in operacja.segmenty if seg.zawory]
-        if zawory_do_zamkniecia_nazwy:
+            # Przypisz ID nowo utworzonej partii do logu operacji
+            # (Możemy to zrobić, choć Batches nie ma bezpośredniej relacji z OperacjeLog)
+            operacja.opis = f"Transfer z {apollo_sprzet.nazwa_unikalna} do zbiornika ID {id_celu}. Utworzono partię pierwotną ID: {nowy_batch_id}."
+
+            zawory_do_zamkniecia_nazwy = [seg.zawory.nazwa_zaworu for seg in operacja.segmenty if seg.zawory]
+            if zawory_do_zamkniecia_nazwy:
+                _write_debug_log(
+                    run_id,
+                    "E4",
+                    "app/operations_routes.py:end_apollo_transfer:before-close-valves",
+                    "About to close valves during Apollo transfer end",
+                    {
+                        "connectionId": connection_id,
+                        "valves": sorted(zawory_do_zamkniecia_nazwy),
+                        "operationId": operacja.id,
+                    },
+                )
+                stmt = db.update(Zawory).where(
+                    Zawory.nazwa_zaworu.in_(zawory_do_zamkniecia_nazwy)
+                ).values(stan='ZAMKNIETY')
+                db.session.execute(stmt)
+
+            if operacja.sprzet_zrodlowy:
+                operacja.sprzet_zrodlowy.stan_sprzetu = 'Gotowy'
+            if operacja.sprzet_docelowy:
+                operacja.sprzet_docelowy.stan_sprzetu = 'Zatankowany'
             _write_debug_log(
                 run_id,
-                "E4",
-                "app/operations_routes.py:end_apollo_transfer:before-close-valves",
-                "About to close valves during Apollo transfer end",
+                "E5",
+                "app/operations_routes.py:end_apollo_transfer:before-final-commit",
+                "About to commit final Apollo transfer end updates",
                 {
                     "connectionId": connection_id,
-                    "valves": sorted(zawory_do_zamkniecia_nazwy),
+                    "sourceEquipmentId": id_apollo,
+                    "destinationEquipmentId": id_celu,
                     "operationId": operacja.id,
                 },
             )
-            stmt = db.update(Zawory).where(
-                Zawory.nazwa_zaworu.in_(zawory_do_zamkniecia_nazwy)
-            ).values(stan='ZAMKNIETY')
-            db.session.execute(stmt)
 
-        if operacja.sprzet_zrodlowy:
-            operacja.sprzet_zrodlowy.stan_sprzetu = 'Gotowy'
-        if operacja.sprzet_docelowy:
-            operacja.sprzet_docelowy.stan_sprzetu = 'Zatankowany'
-        _write_debug_log(
-            run_id,
-            "E5",
-            "app/operations_routes.py:end_apollo_transfer:before-final-commit",
-            "About to commit final Apollo transfer end updates",
-            {
-                "connectionId": connection_id,
-                "sourceEquipmentId": id_apollo,
-                "destinationEquipmentId": id_celu,
-                "operationId": operacja.id,
-            },
-        )
-        
-        # Zamiast ręcznie zarządzać PartiąSurowca, pozwalamy, aby BatchManagementService to robił.
-        # Usuwamy starą logikę:
-        # partia_w_apollo = db.session.execute(...).scalar_one_or_none()
-        # if partia_w_apollo:
-        #     partia_w_apollo.waga_aktualna_kg -= waga_kg
-        
-        db.session.commit()
-        _write_debug_log(
-            run_id,
-            "E0",
-            "app/operations_routes.py:end_apollo_transfer:commit",
-            "Apollo transfer end transaction committed",
-            {
-                "connectionId": connection_id,
-                "operationId": operacja.id,
-                "batchId": nowy_batch_id,
-            },
-        )
-        broadcast_apollo_update()
-        payload = {
-            'success': True,
-            'message': f'Operacja {id_operacji} zakończona. Utworzono i zatankowano partię.'
-        }
-        if normalize_result:
-            payload['normalize_mix_code'] = normalize_result
-        return jsonify(payload)
+            # Zamiast ręcznie zarządzać PartiąSurowca, pozwalamy, aby BatchManagementService to robił.
+            # Usuwamy starą logikę:
+            # partia_w_apollo = db.session.execute(...).scalar_one_or_none()
+            # if partia_w_apollo:
+            #     partia_w_apollo.waga_aktualna_kg -= waga_kg
 
-    except (ValueError, KeyError) as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 400
-    except Exception as e:
-        _write_debug_log(
-            run_id,
-            "E9",
-            "app/operations_routes.py:end_apollo_transfer:error",
-            "Apollo transfer end raised exception",
-            {
-                "connectionId": locals().get("connection_id"),
-                "errorType": type(e).__name__,
-                "message": str(e),
-            },
-        )
-        db.session.rollback()
-        import traceback
-        traceback.print_exc()
-        return jsonify({'error': f'Błąd serwera: {str(e)}'}), 500
+            db.session.commit()
+            _write_debug_log(
+                run_id,
+                "E0",
+                "app/operations_routes.py:end_apollo_transfer:commit",
+                "Apollo transfer end transaction committed",
+                {
+                    "connectionId": connection_id,
+                    "operationId": operacja.id,
+                    "batchId": nowy_batch_id,
+                },
+            )
+            broadcast_apollo_update()
+            payload = {
+                'success': True,
+                'message': f'Operacja {id_operacji} zakończona. Utworzono i zatankowano partię.'
+            }
+            if normalize_result:
+                payload['normalize_mix_code'] = normalize_result
+            return jsonify(payload)
+
+        except (ValueError, KeyError) as e:
+            db.session.rollback()
+            return jsonify({'error': str(e)}), 400
+        except Exception as e:
+            db.session.rollback()
+            if _is_deadlock_error(e) and attempt < max_attempts - 1:
+                last_deadlock_error = e
+                _write_debug_log(
+                    run_id,
+                    "E8",
+                    "app/operations_routes.py:end_apollo_transfer:deadlock-retry",
+                    "Deadlock detected, retrying Apollo transfer end",
+                    {
+                        "attempt": attempt + 1,
+                        "maxAttempts": max_attempts,
+                        "errorType": type(e).__name__,
+                        "message": str(e),
+                    },
+                )
+                # Exponential backoff: 50ms, 100ms, 200ms, ...
+                time.sleep(base_delay * (2 ** attempt))
+                continue
+            _write_debug_log(
+                run_id,
+                "E9",
+                "app/operations_routes.py:end_apollo_transfer:error",
+                "Apollo transfer end raised exception",
+                {
+                    "connectionId": locals().get("connection_id"),
+                    "errorType": type(e).__name__,
+                    "message": str(e),
+                    "attempt": attempt + 1,
+                },
+            )
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': f'Błąd serwera: {str(e)}'}), 500
+
+    # Wyczerpaliśmy limit prób retry dla deadlocka.
+    return jsonify({
+        'error': f'Błąd serwera (deadlock po {max_attempts} próbach): {last_deadlock_error}'
+    }), 500
 
 @bp.route('/apollo-transfer/anuluj', methods=['POST'])
 def anuluj_apollo_transfer():
