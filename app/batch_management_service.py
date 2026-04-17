@@ -245,10 +245,21 @@ class BatchManagementService:
         """
         Orkiestruje transfer między zbiornikami, obsługując korekty.
 
-        Gdy źródłem jest reaktor: zamiast dzielić składniki, przenoszony jest ten sam rekord
-        mieszaniny (tylko ``tank_id`` oraz wskaźniki ``active_mix_id`` na sprzęcie).
-        Zachowuje m.in. ``process_status``, ``filtration_cycles_count``, ``bleaching_earth_bags_total``.
-        Wymaga pustego celu (brak aktywnej mieszaniny) oraz ilości zgodnej z masą mieszaniny (tolerancja).
+        Gdy źródłem jest reaktor:
+        - jeśli cel jest PUSTY (brak aktywnej mieszaniny lub ARCHIVED) idzie
+          FAST PATH: przenoszony jest ten sam rekord mieszaniny (zmienia się
+          tylko ``tank_id`` oraz wskaźniki ``active_mix_id`` na sprzęcie).
+          Zachowuje m.in. ``unique_code``, ``process_status``,
+          ``filtration_cycles_count``, ``bleaching_earth_bags_total``.
+        - jeśli cel MA aktywną mieszaninę idzie MERGE PATH (ogólna logika
+          poniżej): składniki sumują się po ``batch_id`` w istniejącym
+          dest_mixie, source_mix zostaje zarchiwizowany, a w
+          ``MixSourceMixes`` powstaje wpis łączący źródło z celem. W tym
+          trybie kod i metadane dest_mixa są zachowane; specyficzne dla
+          reaktora pola (np. ``filtration_cycles_count``) nie są propagowane
+          do dest_mixa - to akceptowalne dla magazynu czystego.
+        W obu trybach wymagana jest ilość zgodna z masą mieszaniny w
+        reaktorze (tolerancja 0.05 kg) - transfer reaktora obejmuje całość.
         """
         if source_tank_id == destination_tank_id:
             raise ValueError("Zbiornik źródłowy i docelowy nie mogą być takie same.")
@@ -271,15 +282,16 @@ class BatchManagementService:
                     f"Obecny status: '{source_mix.process_status}'."
                 )
 
-            # Reaktor → cel: cała mieszanina jako jeden rekord (bez dzielenia składników)
+            # Reaktor → cel: walidacja masy (transfer obejmuje CAŁĄ mieszaninę).
+            # Dla pustego celu idziemy FAST PATH (przenosimy cały rekord mix,
+            # zachowując tożsamość). Dla niepustego celu idziemy MERGE PATH –
+            # spadamy do ogólnej logiki poniżej, która potrafi dolać komponenty
+            # do istniejącego dest_mixa po batch_id i dopisać MixSourceMixes.
             if source_tank.typ_sprzetu == 'reaktor':
                 dest_mix_existing = (
                     db.session.get(TankMixes, dest_tank.active_mix_id) if dest_tank.active_mix_id else None
                 )
-                if dest_mix_existing and dest_mix_existing.status != 'ARCHIVED':
-                    raise ValueError(
-                        "Zbiornik docelowy ma już aktywną mieszaninę. Opróżnij cel przed transferem z reaktora."
-                    )
+
                 composition = BatchManagementService.get_mix_composition(source_mix.id)
                 total_weight_in_system = composition['total_weight']
                 if total_weight_in_system <= Decimal('0.01'):
@@ -290,15 +302,30 @@ class BatchManagementService:
                         f"Transfer z reaktora obejmuje całą mieszaninę (~{total_weight_in_system} kg). "
                         f"Podana ilość ({quantity_to_transfer} kg) jest wyraźnie mniejsza niż masa w zbiorniku."
                     )
-                source_mix.tank_id = dest_tank.id
-                source_tank.active_mix_id = None
-                dest_tank.active_mix_id = source_mix.id
-                db.session.commit()
-                return {
-                    'was_adjusted': False,
-                    'discrepancy': quantity_to_transfer - total_weight_in_system,
-                    'transferred_quantity': total_weight_in_system,
-                }
+
+                dest_is_empty = (
+                    dest_mix_existing is None
+                    or dest_mix_existing.status == 'ARCHIVED'
+                )
+                if dest_is_empty:
+                    # FAST PATH: przeniesienie całego rekordu mix (zachowuje unique_code,
+                    # process_status, filtration_cycles_count, bleaching_earth_bags_total).
+                    source_mix.tank_id = dest_tank.id
+                    source_tank.active_mix_id = None
+                    dest_tank.active_mix_id = source_mix.id
+                    db.session.commit()
+                    return {
+                        'was_adjusted': False,
+                        'discrepancy': quantity_to_transfer - total_weight_in_system,
+                        'transferred_quantity': total_weight_in_system,
+                    }
+                # MERGE PATH: cel ma aktywną mieszaninę – fallthrough do ogólnej logiki poniżej.
+                # Ogólna logika poprawnie:
+                # 1) odejmuje proporcjonalnie z source_mix.components,
+                # 2) archiwizuje source_mix gdy suma wag spadnie do ~0,
+                # 3) dolewa komponenty do dest_mix po batch_id,
+                # 4) ustawia dest_mix.process_status = 'W_MAGAZYNIE_CZYSTYM' (dla beczki czystej),
+                # 5) zapisuje ślad w MixSourceMixes.
 
             composition = BatchManagementService.get_mix_composition(source_mix.id)
             total_weight_in_system = composition['total_weight']
