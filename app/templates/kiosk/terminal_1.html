@@ -167,6 +167,22 @@
             margin-top: 0.5vh;
             display: block; /* Wymusza nową linię */
         }
+
+        /* Odczyt cm pod wartością z czujnika (jak dashboard) */
+        .sensor-sub {
+            font-size: 1.4vw;
+            font-weight: normal;
+            color: var(--text-muted);
+            display: block;
+            margin-top: 0.3vh;
+        }
+
+        .sensor-warn {
+            font-size: 1.4vw;
+            font-weight: normal;
+            color: #ffcc80;
+            display: block;
+        }
     </style>
 </head>
 <body>
@@ -236,6 +252,34 @@
             renderTable('table-clean', data.beczki_czyste);
         }
 
+        /** Konwersja odczyt_mm → cm (jak dashboard.js: odczyt_mm / 10, 0 miejsc po przecinku). */
+        function formatCm(odczyt_mm) {
+            return Math.round(odczyt_mm / 10) + ' cm';
+        }
+
+        /** Kolumna czujnika dla beczek — ta sama logika co levelProgressBar w dashboard.js. */
+        function renderSensorCell(eq) {
+            const hasTons = eq.poziom_tony !== null && eq.poziom_tony !== undefined;
+            const hasMm = eq.odczyt_mm !== null && eq.odczyt_mm !== undefined;
+
+            if (!hasMm && !hasTons) {
+                return '<span class="empty-mix">-</span>';
+            }
+
+            if (hasMm) {
+                const cmLine = `<span class="sensor-sub">${formatCm(eq.odczyt_mm)}</span>`;
+                if (hasTons) {
+                    return eq.poziom_tony.toFixed(1) + ' t' + cmLine;
+                }
+                if (eq.ma_kalibracje === false) {
+                    return '<span class="sensor-warn">Brak kal.</span>' + cmLine;
+                }
+                return `<span class="sensor-sub">(${formatCm(eq.odczyt_mm)})</span>`;
+            }
+
+            return eq.poziom_tony.toFixed(1) + ' t';
+        }
+
         function renderTable(tableId, equipmentList) {
             const tbody = document.querySelector(`#${tableId} tbody`);
             tbody.innerHTML = ''; 
@@ -301,12 +345,8 @@
                 }
                 const logicalCell = `<td class="col-logical-qty">${logicalTons}</td>`;
 
-                // Kolumna 4: Ilość z czujnika
-                let sensorTons = '<span class="empty-mix">-</span>';
-                if (eq.poziom_tony !== null && eq.poziom_tony !== undefined) {
-                    sensorTons = eq.poziom_tony.toFixed(1) + ' t';
-                }
-                const sensorCell = `<td class="col-sensor-qty">${sensorTons}</td>`;
+                // Kolumna 4: Ilość z czujnika (t + odczyt cm, jak dashboard)
+                const sensorCell = `<td class="col-sensor-qty">${renderSensorCell(eq)}</td>`;
 
                 const isReactorTable = tableId === 'table-reactors';
                 tr.innerHTML = isReactorTable
