@@ -39,6 +39,9 @@
                         <a class="nav-link" href="/operacje-cysterny">Operacje cysterny</a>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('api.operacje_zbiorniki') }}">Operacje zbiorniki</a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link" href="/earth-pallets/">
                             <i class="fas fa-pallet me-1"></i>Palety Ziemi
                         </a>
@@ -84,7 +87,7 @@
         </div>
     </nav>
 
-    <main class="container mt-4">
+    <main class="{% block main_class %}container mt-4{% endblock %}">
         {% block content %}{% endblock %}
     </main>
 

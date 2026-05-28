@@ -1,0 +1,317 @@
+{% extends "base.html" %}
+
+{% block title %}Operacje zbiorniki{% endblock %}
+
+{% block main_class %}container-fluid oz-main{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/operacje_zbiorniki.css') }}">
+{% endblock %}
+
+{% block content %}
+<div id="oz-viewport">
+    <header class="oz-header">
+        <h1><i class="fas fa-industry me-2"></i>Operacje zbiorniki</h1>
+        <span class="badge bg-secondary" id="oz-last-updated">Ładowanie...</span>
+    </header>
+
+    <div class="oz-body">
+        <section class="oz-left" aria-label="Zbiorniki">
+            <ul class="nav nav-tabs oz-tabs" id="oz-tank-tabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="tab-reaktory-btn" data-bs-toggle="tab"
+                        data-bs-target="#tab-reaktory" type="button" role="tab"
+                        aria-controls="tab-reaktory" aria-selected="true">Reaktory</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="tab-brudne-btn" data-bs-toggle="tab"
+                        data-bs-target="#tab-brudne" type="button" role="tab"
+                        aria-controls="tab-brudne" aria-selected="false">Beczki brudne</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="tab-czyste-btn" data-bs-toggle="tab"
+                        data-bs-target="#tab-czyste" type="button" role="tab"
+                        aria-controls="tab-czyste" aria-selected="false">Beczki czyste</button>
+                </li>
+            </ul>
+            <div class="tab-content oz-tab-content" id="oz-tanks-root">
+                <div class="tab-pane fade show active" id="tab-reaktory" role="tabpanel" aria-labelledby="tab-reaktory-btn">
+                    <div id="grid-reaktory" class="oz-tank-grid">
+                        <p class="text-muted small mb-0">Ładowanie reaktorów...</p>
+                    </div>
+                </div>
+                <div class="tab-pane fade" id="tab-brudne" role="tabpanel" aria-labelledby="tab-brudne-btn">
+                    <div id="grid-beczki-brudne" class="oz-tank-grid">
+                        <p class="text-muted small mb-0">Ładowanie...</p>
+                    </div>
+                </div>
+                <div class="tab-pane fade" id="tab-czyste" role="tabpanel" aria-labelledby="tab-czyste-btn">
+                    <div id="grid-beczki-czyste" class="oz-tank-grid">
+                        <p class="text-muted small mb-0">Ładowanie...</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <aside class="oz-right" aria-label="Log aktywnych operacji">
+            <div class="oz-ops-head">
+                <h2>Log aktywnych operacji</h2>
+                <div class="d-flex flex-wrap gap-1">
+                    <button type="button" class="btn btn-warning btn-sm" id="open-dmuchanie-czyszczenie-btn"
+                        title="Uruchom DMUCHANIE_CZYSZCZENIE">
+                        <i class="fas fa-wind me-1"></i>Czyszczenie
+                    </button>
+                    <button type="button" class="btn btn-secondary btn-sm" id="open-dmuchanie-rurociagu-btn"
+                        title="Uruchom dmuchanie rurociągu">
+                        <i class="fas fa-grip-lines me-1"></i>Rurociąg
+                    </button>
+                </div>
+            </div>
+            <div id="active-operations-log" class="list-group list-group-flush oz-ops-list">
+                <div class="list-group-item">
+                    <p class="text-muted mb-0">Ładowanie logu operacji...</p>
+                </div>
+            </div>
+        </aside>
+    </div>
+</div>
+
+<!-- Modale operacji (podzbiór z dashboard) -->
+<div class="modal fade" id="transfer-tank-to-tank-modal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Przelej z <span class="fw-bold" id="transfer-source-name"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Zamknij"></button>
+            </div>
+            <div class="modal-body">
+                <form id="transfer-tank-to-tank-form">
+                    <input type="hidden" id="transfer-source-id">
+                    <div class="mb-3">
+                        <label for="transfer-destination-id" class="form-label">Zbiornik docelowy:</label>
+                        <select id="transfer-destination-id" class="form-select" required></select>
+                    </div>
+                    <p class="text-muted small mb-0">Ilość przelana (kg) podajesz przy zakończeniu w logu operacji.</p>
+                    <button type="submit" class="btn btn-primary mt-3">Rozpocznij przelew (zablokuj trasę)</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="finish-transfer-tank-to-tank-modal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Zakończ transfer – podaj ilość przelaną</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Zamknij"></button>
+            </div>
+            <div class="modal-body">
+                <form id="finish-transfer-tank-to-tank-form">
+                    <input type="hidden" id="finish-transfer-id-operacji">
+                    <div class="mb-3">
+                        <label for="finish-transfer-quantity" class="form-label">Ilość przelana (kg):</label>
+                        <input type="number" id="finish-transfer-quantity" class="form-control" step="0.01" min="0.01" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Zakończ transfer i zatwierdź ilość</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="przelew-dest-modal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">FILTRACJA_PRZELEW – wybierz reaktor docelowy</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Zamknij"></button>
+            </div>
+            <div class="modal-body">
+                <form id="przelew-dest-form">
+                    <input type="hidden" id="przelew-dest-id-operacji">
+                    <p class="text-muted small">Źródło: <span id="przelew-dest-zrodlo-name" class="fw-bold"></span></p>
+                    <div class="mb-3">
+                        <label class="form-label">Reaktor docelowy:</label>
+                        <div id="przelew-dest-container" class="list-group"></div>
+                    </div>
+                    <div id="przelew-dest-error" class="alert alert-danger d-none"></div>
+                    <button type="submit" class="btn btn-primary">Rozpocznij FILTRACJA_PRZELEW</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="ocena-probki-modal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Ocena próbki – wynik</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Zamknij"></button>
+            </div>
+            <div class="modal-body">
+                <form id="ocena-probki-form">
+                    <input type="hidden" id="ocena-probki-id-operacji">
+                    <div class="mb-3">
+                        <label class="form-label">Wynik oceny:</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="ocena-wynik" id="ocena-ok" value="OK" checked>
+                            <label class="form-check-label" for="ocena-ok">OK – zatwierdź</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="ocena-wynik" id="ocena-do-ponownej" value="DO_PONOWNEJ_FILTRACJI">
+                            <label class="form-check-label" for="ocena-do-ponownej">Do ponownej filtracji</label>
+                        </div>
+                    </div>
+                    <div class="mb-3 d-none" id="ocena-powod-wrap">
+                        <label class="form-label" for="ocena-powod">Powód (opcjonalnie):</label>
+                        <input type="text" class="form-control" id="ocena-powod">
+                    </div>
+                    <div id="ocena-probki-error" class="alert alert-danger d-none"></div>
+                    <button type="submit" class="btn btn-success">Zatwierdź wynik</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="na-magazyn-modal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">NA_MAGAZYN – wybierz beczkę czystą</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Zamknij"></button>
+            </div>
+            <div class="modal-body">
+                <form id="na-magazyn-form">
+                    <input type="hidden" id="na-magazyn-id-operacji">
+                    <div class="mb-3">
+                        <label class="form-label">Beczka docelowa:</label>
+                        <div id="na-magazyn-destinations-container" class="list-group"></div>
+                    </div>
+                    <div id="na-magazyn-error" class="alert alert-danger d-none"></div>
+                    <button type="submit" class="btn btn-success">Zakończ etap i przelej na magazyn</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="dmuchanie-change-dest-modal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">DMUCHANIE – zmiana celu</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Zamknij"></button>
+            </div>
+            <div class="modal-body">
+                <form id="dmuchanie-change-dest-form">
+                    <input type="hidden" id="dmuchanie-change-dest-id-operacji">
+                    <div class="mb-3">
+                        <label class="form-label">Nowy cel:</label>
+                        <div id="dmuchanie-change-dest-container" class="list-group"></div>
+                    </div>
+                    <div id="dmuchanie-change-dest-error" class="alert alert-danger d-none"></div>
+                    <button type="submit" class="btn btn-primary">Ustaw cel i trasę</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="wybor-dmuchania-modal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Wybierz rodzaj dmuchania</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Zamknij"></button>
+            </div>
+            <div class="modal-body">
+                <form id="wybor-dmuchania-form">
+                    <input type="hidden" id="wybor-dmuchania-id-operacji">
+                    <input type="hidden" id="wybor-dmuchania-id-zrodla">
+                    <input type="hidden" id="wybor-dmuchania-mode" value="continue">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Sprzęt źródłowy:</label>
+                        <div class="alert alert-light py-2 mb-0" id="wybor-dmuchania-zrodlo-info">—</div>
+                    </div>
+                    <div class="mb-3 wybor-dmuchania-typ-wrap">
+                        <label class="form-label fw-semibold">Rodzaj:</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="wybor-dmuchania-typ" id="dmuchanie-typ-standard" value="DMUCHANIE" checked>
+                            <label class="form-check-label" for="dmuchanie-typ-standard">DMUCHANIE (standard)</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="wybor-dmuchania-typ" id="dmuchanie-typ-czyszczenie" value="DMUCHANIE_CZYSZCZENIE">
+                            <label class="form-check-label" for="dmuchanie-typ-czyszczenie">DMUCHANIE_CZYSZCZENIE</label>
+                        </div>
+                    </div>
+                    <div class="mb-3" id="wybor-dmuchania-cel-wrap" style="display:none;">
+                        <label class="form-label" for="wybor-dmuchania-cel">Reaktor docelowy:</label>
+                        <select class="form-select" id="wybor-dmuchania-cel">
+                            <option value="">-- wybierz reaktor --</option>
+                        </select>
+                    </div>
+                    <div id="wybor-dmuchania-error" class="alert alert-danger d-none"></div>
+                    <button type="submit" class="btn btn-primary w-100">Rozpocznij dmuchanie</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="dmuchanie-czyszczenie-modal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">DMUCHANIE – czyszczenie filtra</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Zamknij"></button>
+            </div>
+            <div class="modal-body">
+                <form id="dmuchanie-czyszczenie-form">
+                    <div class="mb-3">
+                        <label class="form-label" for="dmuchanie-czyszczenie-zrodlo">Źródło:</label>
+                        <select class="form-select" id="dmuchanie-czyszczenie-zrodlo" required></select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="dmuchanie-czyszczenie-cel">Cel:</label>
+                        <select class="form-select" id="dmuchanie-czyszczenie-cel" required></select>
+                    </div>
+                    <div id="dmuchanie-czyszczenie-error" class="alert alert-danger d-none"></div>
+                    <button type="submit" class="btn btn-warning">Rozpocznij DMUCHANIE_CZYSZCZENIE</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="dmuchanie-rurociagu-modal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">DMUCHANIE rurociągu</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Zamknij"></button>
+            </div>
+            <div class="modal-body">
+                <form id="dmuchanie-rurociagu-form">
+                    <div class="mb-3">
+                        <label class="form-label" for="dmuchanie-rurociagu-zrodlo">Źródło:</label>
+                        <select class="form-select" id="dmuchanie-rurociagu-zrodlo" required></select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="dmuchanie-rurociagu-cel">Cel:</label>
+                        <select class="form-select" id="dmuchanie-rurociagu-cel" required></select>
+                    </div>
+                    <div id="dmuchanie-rurociagu-error" class="alert alert-danger d-none"></div>
+                    <button type="submit" class="btn btn-secondary">Rozpocznij DMUCHANIE rurociągu</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/operacje_zbiorniki.js') }}"></script>
+{% endblock %}

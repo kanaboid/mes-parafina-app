@@ -95,6 +95,11 @@ def operacje_cysterny():
     """Strona do zarządzania operacjami roztankowania cystern."""
     return render_template('operacje_cysterny.html')
 
+@bp.route('/operacje-zbiorniki')
+def operacje_zbiorniki():
+    """Kompaktowy widok operacji na zbiornikach (reaktory + beczki)."""
+    return render_template('operacje_zbiorniki.html')
+
 @bp.route('/beczki')
 def beczki():
     """Strona do zarządzania operacjami roztankowania cystern."""

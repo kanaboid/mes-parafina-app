@@ -1,0 +1,263 @@
+/* Operacje zbiorniki – kompaktowy widok 1920×900 */
+
+.oz-main {
+    overflow: hidden;
+    padding: 0.35rem 0.5rem !important;
+    max-width: 100%;
+}
+
+#oz-viewport {
+    display: flex;
+    flex-direction: column;
+    height: min(900px, calc(100vh - 56px));
+    max-height: 900px;
+    overflow: hidden;
+}
+
+.oz-header {
+    flex-shrink: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.25rem 0.5rem 0.35rem;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.oz-header h1 {
+    font-size: clamp(1rem, 1.4vw, 1.35rem);
+    margin: 0;
+}
+
+.oz-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    gap: 0.5rem;
+}
+
+.oz-left {
+    flex: 0 0 67%;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    background: #fff;
+    overflow: hidden;
+}
+
+.oz-right {
+    flex: 0 0 calc(33% - 0.5rem);
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    background: #fff;
+    overflow: hidden;
+}
+
+.oz-tabs {
+    flex-shrink: 0;
+    padding: 0.25rem 0.5rem 0;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.oz-tabs .nav-link {
+    font-size: clamp(0.7rem, 0.85vw, 0.8rem);
+    padding: 0.25rem 0.6rem;
+}
+
+.oz-tab-content {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.oz-tab-content .tab-pane {
+    height: 100%;
+    overflow: auto;
+    padding: 0.35rem;
+}
+
+.oz-tank-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 5px;
+    align-content: start;
+}
+
+.oz-tank-card {
+    border: 1px solid #ced4da;
+    border-radius: 5px;
+    padding: 0.3rem 0.35rem;
+    font-size: clamp(0.62rem, 0.72vw, 0.72rem);
+    line-height: 1.25;
+    background: #fafafa;
+    display: flex;
+    flex-direction: column;
+    min-height: 118px;
+}
+
+.oz-tank-card.oz-empty {
+    background: #f8f9fa;
+    border-color: #adb5bd;
+}
+
+.oz-tank-card.oz-dirty {
+    border-left: 3px solid #dc3545;
+}
+
+.oz-tank-card.oz-clean {
+    border-left: 3px solid #198754;
+}
+
+.oz-tank-card.oz-reactor {
+    border-left: 3px solid #d84315;
+}
+
+.oz-tank-card.oz-transfer {
+    box-shadow: 0 0 0 2px rgba(255, 193, 7, 0.5);
+}
+
+.oz-tank-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 2px;
+    margin-bottom: 0.15rem;
+}
+
+.oz-tank-name {
+    font-weight: 700;
+    font-size: clamp(0.72rem, 0.85vw, 0.82rem);
+}
+
+.oz-tank-status {
+    font-size: 0.62rem;
+    color: #6c757d;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 55%;
+    text-align: right;
+}
+
+.oz-tank-material {
+    font-weight: 600;
+    color: #856404;
+    background: #f5deb3;
+    border-radius: 3px;
+    padding: 0.1rem 0.2rem;
+    text-align: center;
+    margin-bottom: 0.15rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.oz-tank-process {
+    margin-bottom: 0.15rem;
+}
+
+.oz-tank-process .badge {
+    font-size: 0.58rem;
+    font-weight: 500;
+    max-width: 100%;
+    white-space: normal;
+    text-align: left;
+}
+
+.oz-tank-weight {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.1rem;
+}
+
+.oz-tank-weight strong {
+    color: #0d6efd;
+}
+
+.oz-tank-progress {
+    height: 5px;
+    margin-bottom: 0.15rem;
+}
+
+.oz-tank-level {
+    font-size: 0.6rem;
+    color: #6c757d;
+    margin-bottom: 0.2rem;
+}
+
+.oz-tank-actions {
+    margin-top: auto;
+    display: flex;
+    gap: 2px;
+    flex-wrap: wrap;
+}
+
+.oz-tank-actions .btn {
+    font-size: 0.58rem;
+    padding: 0.1rem 0.25rem;
+    line-height: 1.2;
+}
+
+.oz-ops-head {
+    flex-shrink: 0;
+    padding: 0.35rem 0.5rem;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.oz-ops-head h2 {
+    font-size: clamp(0.85rem, 1vw, 0.95rem);
+    margin: 0 0 0.35rem;
+}
+
+.oz-ops-head .btn {
+    font-size: 0.65rem;
+    padding: 0.15rem 0.35rem;
+}
+
+.oz-ops-list {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.oz-ops-list .list-group-item {
+    padding: 0.4rem 0.5rem;
+    font-size: 0.72rem;
+}
+
+.oz-ops-list .list-group-item h6 {
+    font-size: 0.75rem;
+    margin-bottom: 0.15rem;
+}
+
+.oz-ops-list .btn {
+    font-size: 0.62rem;
+    padding: 0.12rem 0.3rem;
+}
+
+.oz-ops-list .d-flex.gap-1 {
+    flex-wrap: wrap;
+}
+
+@media (max-width: 1200px) {
+    .oz-body {
+        flex-direction: column;
+    }
+    .oz-left,
+    .oz-right {
+        flex: 1 1 auto;
+    }
+    #oz-viewport {
+        height: auto;
+        max-height: none;
+        overflow: visible;
+    }
+    .oz-main {
+        overflow: visible;
+    }
+}

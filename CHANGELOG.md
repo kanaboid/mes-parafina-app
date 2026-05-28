@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- Podstrona **Operacje zbiorniki** (`/operacje-zbiorniki`): kompaktowy widok 67/33 (reaktory i beczki w zakładkach | log aktywnych operacji), bez scrolla strony w układzie ~1920×900, operacje podstawowe (przelewy, kontynuacja/zakończenie etapów, dmuchanie).
 - System zmian statusów TankMix po operacjach:
   - Endpoint `POST /api/workflow/mix/<id>/start-filtration` – dedykowany flow filtracji oparty o TankMixes
   - Pathfinder wywoływany na początku startu filtracji (sprawdzenie tras i konfliktów)
