@@ -21,7 +21,10 @@ document.addEventListener('DOMContentLoaded', () => {
         dmuchanieChangeDest: new bootstrap.Modal(document.getElementById('dmuchanie-change-dest-modal')),
         wyborDmuchania: new bootstrap.Modal(document.getElementById('wybor-dmuchania-modal')),
         dmuchanieCzyszczenie: new bootstrap.Modal(document.getElementById('dmuchanie-czyszczenie-modal')),
-        dmuchanieRurociagu: new bootstrap.Modal(document.getElementById('dmuchanie-rurociagu-modal'))
+        dmuchanieRurociagu: new bootstrap.Modal(document.getElementById('dmuchanie-rurociagu-modal')),
+        startFiltration: new bootstrap.Modal(document.getElementById('start-filtration-modal')),
+        filtracjaNaPlacku: new bootstrap.Modal(document.getElementById('filtracja-na-placku-modal')),
+        dobielanie: new bootstrap.Modal(document.getElementById('dobielanie-modal'))
     };
 
     const forms = {
@@ -33,7 +36,10 @@ document.addEventListener('DOMContentLoaded', () => {
         dmuchanieChangeDest: document.getElementById('dmuchanie-change-dest-form'),
         wyborDmuchania: document.getElementById('wybor-dmuchania-form'),
         dmuchanieCzyszczenie: document.getElementById('dmuchanie-czyszczenie-form'),
-        dmuchanieRurociagu: document.getElementById('dmuchanie-rurociagu-form')
+        dmuchanieRurociagu: document.getElementById('dmuchanie-rurociagu-form'),
+        startFiltration: document.getElementById('start-filtration-form'),
+        filtracjaNaPlacku: document.getElementById('filtracja-na-placku-form'),
+        dobielanie: document.getElementById('dobielanie-form')
     };
 
     function formatValue(value, unit = '', decimalPlaces = 1) {
@@ -101,6 +107,83 @@ document.addEventListener('DOMContentLoaded', () => {
         return `<div class="oz-tank-level"><i class="fas fa-ruler-vertical me-1"></i>${formatValue(item.odczyt_mm / 10, ' cm', 0)}</div>`;
     }
 
+    /** Menu operacji reaktora (logika jak w dashboard.js). */
+    function buildReactorOpsDropdownHtml(r) {
+        const esc = (s) => (s || '').replace(/"/g, '&quot;');
+        const id = r.id;
+        const nazwa = esc(r.nazwa);
+        const waga = r.partia ? r.partia.waga_kg : '0';
+        const mixId = r.partia ? r.partia.id : '';
+        const items = [];
+
+        const isOnlyWydmuch = r.partia && r.partia.sklad && r.partia.sklad.length > 0 &&
+            r.partia.sklad.every(item => (item.material_type || '').toUpperCase() === 'WYDMUCH');
+
+        const canDobielanie = r.partia && !isOnlyWydmuch &&
+            ['SUROWY', 'PODGRZEWANY', 'DO_PONOWNEJ_FILTRACJI', 'FILTRACJA_PRZELEW_PRZERWANE'].includes(r.partia.process_status);
+        if (canDobielanie) {
+            items.push(`
+                <li><button type="button" class="dropdown-item action-btn" data-action="open-dobielanie-modal"
+                    data-sprzet-id="${id}" data-sprzet-nazwa="${nazwa}" data-mix-id="${mixId}">
+                    <i class="fas fa-cube me-1"></i>Dobielanie
+                </button></li>`);
+        }
+
+        if (r.partia && !isOnlyWydmuch) {
+            const ps = r.partia.process_status;
+            if (ps === 'DOBIELONY_OCZEKUJE') {
+                items.push(`
+                    <li><button type="button" class="dropdown-item action-btn" data-action="open-start-filtration-modal"
+                        data-sprzet-id="${id}" data-sprzet-nazwa="${nazwa}" data-mix-id="${mixId}">
+                        <i class="fas fa-filter me-1"></i>Start filtracji
+                    </button></li>`);
+            } else if (ps === 'FILTRACJA_KOLO' || ps === 'OCZEKUJE_NA_OCENE') {
+                items.push(`
+                    <li><button type="button" class="dropdown-item action-btn" data-action="open-start-filtration-modal"
+                        data-sprzet-id="${id}" data-sprzet-nazwa="${nazwa}" data-mix-id="${mixId}">
+                        <i class="fas fa-filter me-1"></i>Start filtracji (koło)
+                    </button></li>`);
+            }
+
+            const AKTYWNA_FILTRACJA = [
+                'DOBIELONY_OCZEKUJE',
+                'FILTRACJA_PLACEK_KOLO', 'FILTRACJA_PLACEK_PRZELEW',
+                'FILTRACJA_PRZELEW', 'FILTRACJA_WYDMUCH', 'FILTRACJA_NA_PLACKU'
+            ];
+            if (!AKTYWNA_FILTRACJA.includes(ps)) {
+                items.push(`
+                    <li><button type="button" class="dropdown-item action-btn" data-action="open-filtracja-na-placku-modal"
+                        data-sprzet-id="${id}" data-sprzet-nazwa="${nazwa}" data-mix-id="${mixId}">
+                        <i class="fas fa-filter me-1"></i>Filtracja na placku
+                    </button></li>`);
+            }
+        }
+
+        if (r.partia && r.partia.process_status === 'ZATWIERDZONA') {
+            items.push(`
+                <li><button type="button" class="dropdown-item action-btn" data-action="open-transfer-modal"
+                    data-sprzet-id="${id}" data-sprzet-nazwa="${nazwa}" data-partia-waga="${waga}">
+                    <i class="fas fa-warehouse me-1"></i>Na magazyn (przelew)
+                </button></li>`);
+        }
+
+        const menuBody = items.length > 0
+            ? items.join('')
+            : '<li><span class="dropdown-item-text text-muted small">Brak operacji dla tego statusu</span></li>';
+
+        return `
+            <div class="dropdown oz-reactor-ops">
+                <button type="button" class="btn btn-outline-primary btn-sm dropdown-toggle w-100"
+                    data-bs-toggle="dropdown" data-bs-auto-close="true" aria-expanded="false"
+                    id="oz-ops-dd-${id}">
+                    <i class="fas fa-bolt me-1"></i>Operacje
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end oz-reactor-ops-menu" aria-labelledby="oz-ops-dd-${id}">
+                    ${menuBody}
+                </ul>
+            </div>`;
+    }
+
     function renderCompactTanks(container, items, options = {}) {
         if (!container) return;
         container.innerHTML = '';
@@ -154,6 +237,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const levelHtml = buildLevelHtml(item);
             const wagaAttr = item.partia ? item.partia.waga_kg : '0';
+            const escNazwa = (item.nazwa || '').replace(/"/g, '&quot;');
+
+            let actionsHtml = `
+                <button type="button" class="btn btn-info action-btn"
+                    data-action="open-transfer-modal"
+                    data-sprzet-id="${item.id}"
+                    data-sprzet-nazwa="${escNazwa}"
+                    data-partia-waga="${wagaAttr}">
+                    <i class="fas fa-exchange-alt"></i> Przelej
+                </button>
+                <a class="btn btn-outline-secondary"
+                    href="/sprzet/${item.id}/details"
+                    title="Szczegóły zbiornika">
+                    <i class="fas fa-info-circle"></i>
+                </a>`;
+
+            if (variant === 'reactor') {
+                actionsHtml += buildReactorOpsDropdownHtml(item);
+            }
 
             container.insertAdjacentHTML('beforeend', `
                 <article class="${cardClass}" id="oz-tank-${item.id}">
@@ -167,18 +269,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     ${progressHtml}
                     ${levelHtml}
                     <div class="oz-tank-actions">
-                        <button type="button" class="btn btn-info action-btn"
-                            data-action="open-transfer-modal"
-                            data-sprzet-id="${item.id}"
-                            data-sprzet-nazwa="${item.nazwa}"
-                            data-partia-waga="${wagaAttr}">
-                            <i class="fas fa-exchange-alt"></i> Przelej
-                        </button>
-                        <a class="btn btn-outline-secondary action-btn"
-                            href="/sprzet/${item.id}/details"
-                            title="Szczegóły zbiornika">
-                            <i class="fas fa-info-circle"></i>
-                        </a>
+                        ${actionsHtml}
                     </div>
                 </article>
             `);
@@ -375,13 +466,103 @@ document.addEventListener('DOMContentLoaded', () => {
     const socket = io();
     socket.on('dashboard_update', (data) => updateUI(data));
 
+    async function handleOpenStartFiltrationModal(mixId, reaktorNazwa, idReaktoraZrodlowego) {
+        document.getElementById('start-filtration-mix-id').value = mixId;
+        document.getElementById('start-filtration-reaktor-name').textContent = reaktorNazwa;
+        document.getElementById('start-filtration-reaktor-nazwa').value = reaktorNazwa;
+        const container = document.getElementById('start-filtration-destinations-container');
+        container.innerHTML = '<div class="list-group-item text-muted">Ładowanie celów...</div>';
+        document.getElementById('start-filtration-error').classList.add('d-none');
+        modals.startFiltration.show();
+
+        if (!idReaktoraZrodlowego) {
+            container.innerHTML = '<p class="text-danger mb-0 p-2">Brak reaktora źródłowego.</p>';
+            return;
+        }
+        try {
+            const response = await fetch(`/api/operations/start-filtration-destinations?id_reaktora_zrodlowego=${idReaktoraZrodlowego}`);
+            if (!response.ok) {
+                const err = await response.json().catch(() => ({}));
+                throw new Error(err.message || 'Błąd ładowania listy celów');
+            }
+            const data = await response.json();
+            const destinations = data.destinations || [];
+            container.innerHTML = '';
+            if (destinations.length === 0) {
+                container.innerHTML = '<p class="text-muted mb-0 p-2">Brak celów z możliwą trasą.</p>';
+                return;
+            }
+            destinations.forEach((dest, index) => {
+                const radioId = `start-filtration-dest-${dest.id}`;
+                const title = dest.is_same_reactor ? `${dest.nazwa_unikalna} (koło)` : dest.nazwa_unikalna;
+                container.insertAdjacentHTML('beforeend', `
+                    <label class="list-group-item list-group-item-action" for="${radioId}">
+                        <input class="form-check-input me-2" type="radio" name="start-filtration-destination"
+                            value="${dest.id}" id="${radioId}" data-nazwa="${dest.nazwa_unikalna}" ${index === 0 ? 'checked' : ''}>
+                        ${title}
+                    </label>`);
+            });
+        } catch (error) {
+            container.innerHTML = `<p class="text-danger mb-0 p-2">${error.message}</p>`;
+        }
+    }
+
+    function handleReactorTankAction(btn) {
+        const action = btn.dataset.action;
+        const sprzetId = btn.dataset.sprzetId;
+        const sprzetNazwa = btn.dataset.sprzetNazwa;
+
+        if (action === 'open-transfer-modal') {
+            handleOpenTransferModal(sprzetId, sprzetNazwa);
+        } else if (action === 'open-dobielanie-modal') {
+            document.getElementById('dobielanie-mix-id').value = btn.dataset.mixId || '';
+            document.getElementById('dobielanie-reaktor-name').textContent = sprzetNazwa || '—';
+            document.getElementById('dobielanie-bags').value = 6;
+            document.getElementById('dobielanie-weight').value = 25;
+            document.getElementById('dobielanie-error').classList.add('d-none');
+            modals.dobielanie.show();
+        } else if (action === 'open-start-filtration-modal') {
+            handleOpenStartFiltrationModal(btn.dataset.mixId, sprzetNazwa, sprzetId);
+        } else if (action === 'open-filtracja-na-placku-modal') {
+            document.getElementById('filtracja-na-placku-id-zrodla').value = sprzetId;
+            document.getElementById('filtracja-na-placku-zrodlo-name').textContent = sprzetNazwa || '—';
+            document.getElementById('filtracja-na-placku-error').classList.add('d-none');
+            const destContainer = document.getElementById('filtracja-na-placku-destinations-container');
+            destContainer.innerHTML = '<div class="list-group-item text-muted">Ładowanie...</div>';
+            modals.filtracjaNaPlacku.show();
+            fetch(`/api/operations/filtracja-na-placku-destinations?id_sprzetu_zrodlowego=${sprzetId}`)
+                .then(res => res.ok ? res.json() : Promise.reject(new Error('Błąd ładowania')))
+                .then(data => {
+                    const destinations = data.destinations || [];
+                    destContainer.innerHTML = '';
+                    if (destinations.length === 0) {
+                        destContainer.innerHTML = '<p class="text-muted mb-0 p-2">Brak pustych reaktorów z trasą.</p>';
+                        return;
+                    }
+                    destinations.forEach((destItem, index) => {
+                        const radioId = `fnp-dest-${destItem.id}`;
+                        destContainer.insertAdjacentHTML('beforeend', `
+                            <label class="list-group-item list-group-item-action" for="${radioId}">
+                                <input class="form-check-input me-2" type="radio" name="fnp-destination"
+                                    value="${destItem.id}" id="${radioId}" ${index === 0 ? 'checked' : ''}>
+                                ${destItem.nazwa_unikalna || destItem.id}
+                            </label>`);
+                    });
+                })
+                .catch(() => {
+                    destContainer.innerHTML = '<p class="text-danger mb-0 p-2">Nie udało się załadować celów.</p>';
+                });
+        }
+    }
+
     // Kliknięcia na kafelkach zbiorników
     if (tanksRoot) {
         tanksRoot.addEventListener('click', (e) => {
-            const btn = e.target.closest('.action-btn[data-action="open-transfer-modal"]');
-            if (!btn) return;
+            const btn = e.target.closest('.action-btn');
+            if (!btn || !btn.dataset.action) return;
             e.preventDefault();
-            handleOpenTransferModal(btn.dataset.sprzetId, btn.dataset.sprzetNazwa);
+            e.stopPropagation();
+            handleReactorTankAction(btn);
         });
     }
 
@@ -1068,6 +1249,111 @@ document.addEventListener('DOMContentLoaded', () => {
             errorDiv.classList.remove('d-none');
         }
     });
+
+    if (forms.startFiltration) {
+        forms.startFiltration.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const mixId = document.getElementById('start-filtration-mix-id').value;
+            const reaktorNazwa = document.getElementById('start-filtration-reaktor-nazwa').value.trim();
+            const selectedRadio = document.querySelector('input[name="start-filtration-destination"]:checked');
+            const errorDiv = document.getElementById('start-filtration-error');
+            if (!selectedRadio) {
+                errorDiv.textContent = 'Wybierz reaktor docelowy.';
+                errorDiv.classList.remove('d-none');
+                return;
+            }
+            errorDiv.classList.add('d-none');
+            const celNazwa = selectedRadio.getAttribute('data-nazwa');
+            const payload = {
+                start: `${reaktorNazwa}_OUT`,
+                cel: `${celNazwa}_IN`
+            };
+            try {
+                const response = await fetch(`/api/workflow/mix/${mixId}/start-filtration`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error || result.message || 'Błąd serwera');
+                showToast('Filtracja została uruchomiona.', 'success');
+                modals.startFiltration.hide();
+                initialLoad();
+            } catch (error) {
+                errorDiv.textContent = error.message;
+                errorDiv.classList.remove('d-none');
+            }
+        });
+    }
+
+    if (forms.filtracjaNaPlacku) {
+        forms.filtracjaNaPlacku.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const idZrodla = document.getElementById('filtracja-na-placku-id-zrodla').value;
+            const selected = document.querySelector('input[name="fnp-destination"]:checked');
+            const errorDiv = document.getElementById('filtracja-na-placku-error');
+            if (!idZrodla || !selected) {
+                errorDiv.textContent = 'Wybierz reaktor docelowy.';
+                errorDiv.classList.remove('d-none');
+                return;
+            }
+            errorDiv.classList.add('d-none');
+            try {
+                const response = await fetch('/api/operations/start-filtracja-na-placku', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        id_sprzetu_zrodlowego: parseInt(idZrodla, 10),
+                        id_sprzetu_docelowego: parseInt(selected.value, 10),
+                        operator: 'GUI'
+                    })
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.message || result.error);
+                showToast(result.message || 'Filtracja na placku rozpoczęta.', 'success');
+                modals.filtracjaNaPlacku.hide();
+                initialLoad();
+            } catch (error) {
+                errorDiv.textContent = error.message;
+                errorDiv.classList.remove('d-none');
+            }
+        });
+    }
+
+    if (forms.dobielanie) {
+        forms.dobielanie.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const mixId = document.getElementById('dobielanie-mix-id').value;
+            const bags = parseInt(document.getElementById('dobielanie-bags').value, 10);
+            const weight = parseFloat(document.getElementById('dobielanie-weight').value);
+            const errorDiv = document.getElementById('dobielanie-error');
+            if (!mixId || bags < 1 || !weight || weight <= 0) {
+                errorDiv.textContent = 'Wprowadź poprawną ilość worków i wagę.';
+                errorDiv.classList.remove('d-none');
+                return;
+            }
+            errorDiv.classList.add('d-none');
+            try {
+                const response = await fetch(`/api/workflow/mix/${mixId}/add-bleach`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        bags_count: bags,
+                        bag_weight: weight,
+                        operator: 'GUI'
+                    })
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error || result.message);
+                showToast(result.message || 'Dobielanie zarejestrowane.', 'success');
+                modals.dobielanie.hide();
+                initialLoad();
+            } catch (error) {
+                errorDiv.textContent = error.message;
+                errorDiv.classList.remove('d-none');
+            }
+        });
+    }
 
     initialLoad();
 });

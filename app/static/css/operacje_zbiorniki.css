@@ -221,6 +221,34 @@
     line-height: 1.2;
 }
 
+.oz-reactor-ops {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.oz-reactor-ops .dropdown-toggle {
+    font-size: 0.58rem;
+    padding: 0.1rem 0.3rem;
+    width: 100%;
+}
+
+.oz-reactor-ops-menu {
+    font-size: 0.72rem;
+    min-width: 11rem;
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.oz-reactor-ops-menu .dropdown-item {
+    padding: 0.25rem 0.5rem;
+    white-space: normal;
+}
+
+.oz-reactor-ops-menu .dropdown-item i {
+    width: 1rem;
+    text-align: center;
+}
+
 .oz-ops-head {
     flex-shrink: 0;
     padding: 0.35rem 0.5rem;
