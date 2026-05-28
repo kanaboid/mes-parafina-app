@@ -17,35 +17,29 @@
 
     <div class="oz-body">
         <section class="oz-left" aria-label="Zbiorniki">
-            <ul class="nav nav-tabs oz-tabs" id="oz-tank-tabs" role="tablist">
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link active" id="tab-reaktory-btn" data-bs-toggle="tab"
-                        data-bs-target="#tab-reaktory" type="button" role="tab"
-                        aria-controls="tab-reaktory" aria-selected="true">Reaktory</button>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="tab-brudne-btn" data-bs-toggle="tab"
-                        data-bs-target="#tab-brudne" type="button" role="tab"
-                        aria-controls="tab-brudne" aria-selected="false">Beczki brudne</button>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="tab-czyste-btn" data-bs-toggle="tab"
-                        data-bs-target="#tab-czyste" type="button" role="tab"
-                        aria-controls="tab-czyste" aria-selected="false">Beczki czyste</button>
-                </li>
-            </ul>
-            <div class="tab-content oz-tab-content" id="oz-tanks-root">
-                <div class="tab-pane fade show active" id="tab-reaktory" role="tabpanel" aria-labelledby="tab-reaktory-btn">
+            <div class="oz-tanks-panel" id="oz-tanks-root">
+                <div class="oz-zone">
+                    <h2 class="oz-zone-title oz-zone-reactor">
+                        <i class="fas fa-industry me-1"></i>Reaktory
+                    </h2>
                     <div id="grid-reaktory" class="oz-tank-grid">
                         <p class="text-muted small mb-0">Ładowanie reaktorów...</p>
                     </div>
                 </div>
-                <div class="tab-pane fade" id="tab-brudne" role="tabpanel" aria-labelledby="tab-brudne-btn">
+                <hr class="oz-zone-divider" aria-hidden="true">
+                <div class="oz-zone">
+                    <h2 class="oz-zone-title oz-zone-dirty">
+                        <i class="fas fa-warehouse me-1"></i>Strefa brudna
+                    </h2>
                     <div id="grid-beczki-brudne" class="oz-tank-grid">
                         <p class="text-muted small mb-0">Ładowanie...</p>
                     </div>
                 </div>
-                <div class="tab-pane fade" id="tab-czyste" role="tabpanel" aria-labelledby="tab-czyste-btn">
+                <hr class="oz-zone-divider" aria-hidden="true">
+                <div class="oz-zone">
+                    <h2 class="oz-zone-title oz-zone-clean">
+                        <i class="fas fa-check-circle me-1"></i>Strefa czysta
+                    </h2>
                     <div id="grid-beczki-czyste" class="oz-tank-grid">
                         <p class="text-muted small mb-0">Ładowanie...</p>
                     </div>

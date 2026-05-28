@@ -57,27 +57,45 @@
     overflow: hidden;
 }
 
-.oz-tabs {
-    flex-shrink: 0;
-    padding: 0.25rem 0.5rem 0;
-    border-bottom: 1px solid #dee2e6;
-}
-
-.oz-tabs .nav-link {
-    font-size: clamp(0.7rem, 0.85vw, 0.8rem);
-    padding: 0.25rem 0.6rem;
-}
-
-.oz-tab-content {
+.oz-tanks-panel {
     flex: 1;
     min-height: 0;
     overflow: hidden;
+    padding: 0.3rem 0.4rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
 }
 
-.oz-tab-content .tab-pane {
-    height: 100%;
-    overflow: auto;
-    padding: 0.35rem;
+.oz-zone {
+    flex-shrink: 0;
+}
+
+.oz-zone-title {
+    font-size: clamp(0.75rem, 0.9vw, 0.85rem);
+    font-weight: 600;
+    margin: 0 0 0.25rem;
+    padding: 0.1rem 0;
+    border-bottom: none;
+}
+
+.oz-zone-title.oz-zone-reactor {
+    color: #d84315;
+}
+
+.oz-zone-title.oz-zone-dirty {
+    color: #dc3545;
+}
+
+.oz-zone-title.oz-zone-clean {
+    color: #198754;
+}
+
+.oz-zone-divider {
+    margin: 0.3rem 0;
+    border: 0;
+    border-top: 2px solid #dee2e6;
+    opacity: 1;
 }
 
 .oz-tank-grid {
