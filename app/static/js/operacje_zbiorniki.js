@@ -11,6 +11,85 @@ document.addEventListener('DOMContentLoaded', () => {
     const activeOperationsContainer = document.getElementById('active-operations-log');
     const lastUpdatedEl = document.getElementById('oz-last-updated');
     const tanksRoot = document.getElementById('oz-tanks-root');
+    const ozViewport = document.getElementById('oz-viewport');
+
+    /** Wstrzymuje przebudowę DOM podczas interakcji (WebSocket ~1s niszczył dropdowny/przyciski). */
+    const uiRenderPauseReasons = new Set();
+    let pendingDashboardData = null;
+    let interactionResumeTimer = null;
+
+    function pauseUiRender(reason) {
+        uiRenderPauseReasons.add(reason);
+    }
+
+    function resumeUiRender(reason) {
+        uiRenderPauseReasons.delete(reason);
+        if (uiRenderPauseReasons.size === 0 && pendingDashboardData) {
+            const data = pendingDashboardData;
+            pendingDashboardData = null;
+            renderDashboardUI(data);
+        }
+    }
+
+    function isUiRenderPaused() {
+        return uiRenderPauseReasons.size > 0;
+    }
+
+    function isInteractiveOverlayOpen() {
+        return Boolean(
+            document.querySelector('.dropdown-menu.show') ||
+            document.querySelector('.modal.show')
+        );
+    }
+
+    function scheduleClickPauseRelease() {
+        clearTimeout(interactionResumeTimer);
+        interactionResumeTimer = setTimeout(() => {
+            if (isInteractiveOverlayOpen()) {
+                return;
+            }
+            resumeUiRender('click');
+        }, 500);
+    }
+
+    function setupUiUpdatePauseControls() {
+        if (tanksRoot) {
+            tanksRoot.addEventListener('show.bs.dropdown', () => pauseUiRender('dropdown'));
+            tanksRoot.addEventListener('hidden.bs.dropdown', () => resumeUiRender('dropdown'));
+        }
+
+        document.querySelectorAll('.modal').forEach((modalEl) => {
+            modalEl.addEventListener('show.bs.modal', () => pauseUiRender('modal'));
+            modalEl.addEventListener('hidden.bs.modal', () => resumeUiRender('modal'));
+        });
+
+        const interactionRoot = ozViewport || document.body;
+        interactionRoot.addEventListener('pointerdown', (e) => {
+            const target = e.target.closest(
+                '.oz-tank-actions button, .oz-tank-actions .dropdown-item, ' +
+                '.oz-ops-list button, .oz-ops-head button'
+            );
+            if (!target || target.classList.contains('dropdown-toggle')) {
+                return;
+            }
+            pauseUiRender('click');
+        });
+
+        interactionRoot.addEventListener('pointerup', (e) => {
+            const target = e.target.closest(
+                '.oz-tank-actions button, .oz-tank-actions .dropdown-item, ' +
+                '.oz-ops-list button, .oz-ops-head button'
+            );
+            if (!target || target.classList.contains('dropdown-toggle')) {
+                return;
+            }
+            scheduleClickPauseRelease();
+        });
+
+        interactionRoot.addEventListener('pointercancel', scheduleClickPauseRelease);
+    }
+
+    setupUiUpdatePauseControls();
 
     const modals = {
         transferTankToTank: new bootstrap.Modal(document.getElementById('transfer-tank-to-tank-modal')),
@@ -353,8 +432,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function updateUI(data) {
-        latestDashboardData = data;
+    function renderDashboardUI(data) {
         renderCompactTanks(gridReaktory, data.all_reactors, { variant: 'reactor' });
         renderCompactTanks(gridBeczkiBrudne, data.beczki_brudne, { variant: 'dirty' });
         renderCompactTanks(gridBeczkiCzyste, data.beczki_czyste, { variant: 'clean' });
@@ -362,6 +440,23 @@ document.addEventListener('DOMContentLoaded', () => {
         if (lastUpdatedEl) {
             lastUpdatedEl.textContent = `Aktualizacja: ${new Date().toLocaleTimeString()}`;
         }
+    }
+
+    function receiveDashboardData(data, forceRender = false) {
+        latestDashboardData = data;
+        if (!forceRender && isUiRenderPaused()) {
+            pendingDashboardData = data;
+            if (lastUpdatedEl) {
+                lastUpdatedEl.textContent = `Dane oczekują (${new Date().toLocaleTimeString()})`;
+            }
+            return;
+        }
+        pendingDashboardData = null;
+        renderDashboardUI(data);
+    }
+
+    function updateUI(data) {
+        receiveDashboardData(data, true);
     }
 
     async function initialLoad() {
@@ -462,9 +557,9 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Socket.IO
+    // Socket.IO – odświeżanie wstrzymywane podczas otwartego menu/modala
     const socket = io();
-    socket.on('dashboard_update', (data) => updateUI(data));
+    socket.on('dashboard_update', (data) => receiveDashboardData(data));
 
     async function handleOpenStartFiltrationModal(mixId, reaktorNazwa, idReaktoraZrodlowego) {
         document.getElementById('start-filtration-mix-id').value = mixId;
