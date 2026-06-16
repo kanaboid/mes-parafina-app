@@ -3,7 +3,7 @@
 #
 # Przykład:
 #   ./scripts/restore-mes.sh ~/mes-backups/mysql/latest.sql.gz
-#   ./scripts/restore-mes.sh ~/mes-backups/mysql/mes_parafina_db_20260615_120000.sql.gz
+#   SKIP_CONFIRM=tak ./scripts/restore-mes.sh ~/mes-backups/mysql/latest.sql.gz
 
 set -euo pipefail
 
@@ -48,10 +48,12 @@ fi
 cd "${APP_DIR}"
 
 log "UWAGA: Ta operacja nadpisze dane w bazie mes_parafina_db."
-read -r -p "Kontynuować? (tak/nie): " CONFIRM
-if [[ "${CONFIRM}" != "tak" ]]; then
-    log "Anulowano."
-    exit 0
+if [[ "${SKIP_CONFIRM:-}" != "tak" ]]; then
+    read -r -p "Kontynuować? (tak/nie): " CONFIRM
+    if [[ "${CONFIRM}" != "tak" ]]; then
+        log "Anulowano."
+        exit 0
+    fi
 fi
 
 if ! docker compose ps --status running db | grep -q "db"; then

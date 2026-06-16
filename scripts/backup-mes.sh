@@ -5,6 +5,8 @@
 # Zmienne opcjonalne:
 #   KEEP_DAYS=14           — retencja lokalnie i na terminal1 (domyślnie 14)
 #   ARCHIVE_KEEP_DAYS=90   — retencja archiwum na oczyszczalnia-aio (domyślnie 90)
+#
+# Wymaga:
 # - działającego stacku Docker (docker compose up)
 # - skonfigurowanego SSH do terminal1 i oczyszczalnia-aio
 # - pliku .env w katalogu aplikacji
