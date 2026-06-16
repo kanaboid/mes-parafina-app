@@ -73,9 +73,9 @@ log "Dump utworzony ($(du -h "${DUMP_FILE}" | cut -f1))."
 cp "${APP_DIR}/.env" "${BACKUP_DIR}/config/env_${DATE}.bak"
 cp "${APP_DIR}/docker-compose.yml" "${BACKUP_DIR}/config/docker-compose_${DATE}.yml"
 
-# Symlink do najnowszego dumpa — ułatwia restore
-ln -sfn "${DUMP_FILE}" "${BACKUP_DIR}/mysql/latest.sql.gz"
-ln -sfn "${BACKUP_DIR}/config/env_${DATE}.bak" "${BACKUP_DIR}/config/env_latest.bak"
+# Symlink względny — działa też na terminal1 po rsync (nie używaj ścieżek absolutnych)
+ln -sfn "mes_parafina_db_${DATE}.sql.gz" "${BACKUP_DIR}/mysql/latest.sql.gz"
+ln -sfn "env_${DATE}.bak" "${BACKUP_DIR}/config/env_latest.bak"
 
 # Usuń stare backupy lokalne
 find "${BACKUP_DIR}/mysql" -name "*.sql.gz" -type f -mtime +"${KEEP_DAYS}" -delete
