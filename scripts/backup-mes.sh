@@ -2,7 +2,9 @@
 # Backup bazy MySQL i konfiguracji MES Parafina.
 # Uruchamiaj na hoście produkcyjnym (terminal3), np. z crona co 6 godzin.
 #
-# Wymaga:
+# Zmienne opcjonalne:
+#   KEEP_DAYS=14           — retencja lokalnie i na terminal1 (domyślnie 14)
+#   ARCHIVE_KEEP_DAYS=90   — retencja archiwum na oczyszczalnia-aio (domyślnie 90)
 # - działającego stacku Docker (docker compose up)
 # - skonfigurowanego SSH do terminal1 i oczyszczalnia-aio
 # - pliku .env w katalogu aplikacji
@@ -12,6 +14,7 @@ set -euo pipefail
 APP_DIR="${APP_DIR:-$HOME/mes-parafina-app}"
 BACKUP_DIR="${BACKUP_DIR:-$HOME/mes-backups}"
 KEEP_DAYS="${KEEP_DAYS:-14}"
+ARCHIVE_KEEP_DAYS="${ARCHIVE_KEEP_DAYS:-90}"
 DATE="$(date +%Y%m%d_%H%M%S)"
 LOG_PREFIX="[$(date '+%Y-%m-%d %H:%M:%S')]"
 
@@ -88,5 +91,9 @@ rsync -az --delete "${BACKUP_DIR}/" "${REMOTE_STANDBY}:${REMOTE_STANDBY_PATH}/"
 log "Wysyłam archiwum dumpa na ${REMOTE_ARCHIVE}:${REMOTE_ARCHIVE_PATH}/mysql/..."
 ssh "${REMOTE_ARCHIVE}" "mkdir -p ${REMOTE_ARCHIVE_PATH}/mysql"
 rsync -az "${DUMP_FILE}" "${REMOTE_ARCHIVE}:${REMOTE_ARCHIVE_PATH}/mysql/"
+
+log "Usuwam archiwum starsze niż ${ARCHIVE_KEEP_DAYS} dni na ${REMOTE_ARCHIVE}..."
+ssh "${REMOTE_ARCHIVE}" \
+    "find ${REMOTE_ARCHIVE_PATH}/mysql -name 'mes_parafina_db_*.sql.gz' -type f -mtime +${ARCHIVE_KEEP_DAYS} -delete"
 
 log "Backup zakończony pomyślnie."
