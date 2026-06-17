@@ -24,3 +24,9 @@
 - Replikacja MySQL terminal3 → terminal1 + skrypty `mysql-replication-*.sh`
 - Dokumentacja: `docs/disaster-recovery.md`, `docs/mysql-replication.md`
 - Compose overrides: `docker-compose.primary.yml`, `docker-compose.standby.yml`, `docker-compose.failover.yml`
+
+### Added (monitoring)
+- Uptime Kuma i Netdata: `monitoring/docker-compose.kuma.yml`, `monitoring/docker-compose.netdata.yml`
+- Skrypty: `monitoring-start.sh`, `monitoring-kuma-push.sh`, `mysql-replication-healthcheck.sh`
+- Integracja push heartbeat w `backup-mes.sh`
+- Dokumentacja: `docs/monitoring.md`

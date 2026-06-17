@@ -6,6 +6,7 @@ Aplikacja MES do zarządzania produkcją parafiny.
 
 - [Odtwarzanie awaryjne (backup, failover)](docs/disaster-recovery.md)
 - [Replikacja MySQL terminal3 → terminal1](docs/mysql-replication.md)
+- [Monitoring (Uptime Kuma + Netdata)](docs/monitoring.md)
 
 ## Szybki start (Docker)
 

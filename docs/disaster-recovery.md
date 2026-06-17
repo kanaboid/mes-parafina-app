@@ -22,7 +22,8 @@ terminal3 (PRIMARY)                         terminal1 (REPLICA / standby)
        └── rsync → oczyszczalnia-aio:~/mes-backups-archive/  (retencja 90 dni)
 ```
 
-Szczegóły replikacji: **[docs/mysql-replication.md](mysql-replication.md)**
+Szczegóły replikacji: **[docs/mysql-replication.md](mysql-replication.md)**  
+Monitoring hostów: **[docs/monitoring.md](monitoring.md)**
 
 ---
 
@@ -34,7 +35,10 @@ Szczegóły replikacji: **[docs/mysql-replication.md](mysql-replication.md)**
 | `restore-mes.sh` | terminal1 | Przywrócenie bazy z `.sql.gz` |
 | `failover-start.sh` | terminal1 | Start aplikacji po awarii |
 | `failover-stop.sh` | terminal1 | Zatrzymanie stacku standby |
-| `monitor-primary.sh` | terminal1 (cron) | Sprawdzenie `http://terminal3/` |
+| `monitor-primary.sh` | terminal1 (cron) | Sprawdzenie `http://terminal3/` — opcjonalnie; zastąpione przez [Uptime Kuma](monitoring.md) |
+| `monitoring-start.sh` | oczyszczalnia-aio / wszystkie | Uruchomienie Kuma lub Netdata |
+| `monitoring-kuma-push.sh` | terminal3, terminal1 | Ping do monitora Push w Kuma |
+| `mysql-replication-healthcheck.sh` | terminal1 (cron) | Replikacja OK + push do Kuma |
 | `mysql-replication-setup-primary.sh` | terminal3 | Binlog + użytkownik `repl` |
 | `mysql-replication-setup-replica.sh` | terminal1 | Jednorazowa inicjalizacja repliki |
 | `mysql-replication-start-db.sh` | terminal1 (@reboot) | Uruchomienie samej bazy |

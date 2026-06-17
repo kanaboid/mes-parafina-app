@@ -99,3 +99,9 @@ ssh "${REMOTE_ARCHIVE}" \
     "find ${REMOTE_ARCHIVE_PATH}/mysql -name 'mes_parafina_db_*.sql.gz' -type f -mtime +${ARCHIVE_KEEP_DAYS} -delete"
 
 log "Backup zakończony pomyślnie."
+
+if [[ -n "${UPTIME_KUMA_BACKUP_PUSH_URL:-}" ]]; then
+    UPTIME_KUMA_PUSH_URL="${UPTIME_KUMA_BACKUP_PUSH_URL}" \
+        UPTIME_KUMA_PUSH_MSG="backup OK ${DATE}" \
+        "${APP_DIR}/scripts/monitoring-kuma-push.sh"
+fi

@@ -1,0 +1,17 @@
+# Uptime Kuma — centralny monitoring dostępności (host: oczyszczalnia-aio).
+# Uruchomienie: ./scripts/monitoring-start.sh kuma
+
+services:
+  uptime-kuma:
+    image: louislam/uptime-kuma:1
+    container_name: uptime-kuma
+    restart: unless-stopped
+    ports:
+      - "${KUMA_PORT:-3001}:3001"
+    volumes:
+      - uptime-kuma-data:/app/data
+    environment:
+      - TZ=Europe/Warsaw
+
+volumes:
+  uptime-kuma-data:
