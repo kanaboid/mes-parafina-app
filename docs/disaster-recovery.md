@@ -6,8 +6,8 @@ Procedura backupu, failover i powrotu na produkcję.
 
 | Host | Rola | Adres aplikacji |
 |------|------|-----------------|
-| **terminal3** | Produkcja (primary) | `http://terminal3/` |
-| **terminal1** | Standby (failover) | `http://terminal1/` |
+| **terminal3** | Produkcja (primary) | `http://terminal3/` (port z `docker-compose.yml`, np. 8080 lub 80) |
+| **terminal1** | Standby (failover) | `http://terminal1/` (**port 80** — plik `docker-compose.standby.yml`) |
 | **oczyszczalnia-aio** | Archiwum backupów | tylko SSH/rsync |
 
 ## Architektura backupu
@@ -44,6 +44,12 @@ git switch terminale-gui
 cp ~/mes-backups/config/env_latest.bak ~/mes-parafina-app/.env
 chmod +x scripts/*.sh
 docker compose build
+
+# Standby uruchamia aplikację na porcie 80 (docker-compose.standby.yml).
+# Skrypt failover-start.sh używa tego pliku automatycznie.
+
+# Otwórz port 80 w firewallu (jeśli UFW włączony):
+# sudo ufw allow 80/tcp
 
 # Standby domyślnie WYŁĄCZONY:
 docker compose down
@@ -139,7 +145,9 @@ docker compose logs -f web
 curl -I http://terminal1/
 ```
 
-Otwórz w przeglądarce: `http://terminal1/` (lub port z `docker-compose.yml`, np. `:8080`).
+Otwórz w przeglądarce: `http://terminal1/` (port **80**).
+
+Skrypty failover używają `docker-compose.standby.yml`, który mapuje `80:5000`.
 
 ### 4. Przekieruj użytkowników
 

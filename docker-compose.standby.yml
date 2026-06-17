@@ -1,0 +1,12 @@
+# Override dla hosta standby (terminal1).
+# Uruchamiaj TYLKO na terminal1 — mapuje aplikację web na port 80.
+#
+# Użycie:
+#   docker compose -f docker-compose.yml -f docker-compose.standby.yml up -d
+#
+# Skrypty failover-start.sh i failover-stop.sh robią to automatycznie.
+
+services:
+  web:
+    ports:
+      - "80:5000"

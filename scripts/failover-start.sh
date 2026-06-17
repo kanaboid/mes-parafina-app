@@ -12,7 +12,7 @@ set -euo pipefail
 APP_DIR="${APP_DIR:-$HOME/mes-parafina-app}"
 BACKUP_DIR="${BACKUP_DIR:-$HOME/mes-backups}"
 DUMP_FILE="${DUMP_FILE:-${BACKUP_DIR}/mysql/latest.sql.gz}"
-APP_URL="${APP_URL:-http://localhost:8080}"
+APP_URL="${APP_URL:-http://localhost/}"
 DB_WAIT_SECONDS="${DB_WAIT_SECONDS:-30}"
 
 DO_RESTORE=1
@@ -40,7 +40,7 @@ Zmienne środowiskowe:
   APP_DIR        Katalog aplikacji (domyślnie ~/mes-parafina-app)
   BACKUP_DIR     Katalog backupów (domyślnie ~/mes-backups)
   DUMP_FILE      Plik dumpa do restore (domyślnie ~/mes-backups/mysql/latest.sql.gz)
-  APP_URL        URL do testu HTTP (domyślnie http://localhost:8080)
+  APP_URL        URL do testu HTTP (domyślnie http://localhost/ — port 80)
 EOF
 }
 
@@ -58,6 +58,13 @@ if [[ ! -d "${APP_DIR}" ]]; then
 fi
 
 cd "${APP_DIR}"
+
+STANDBY_COMPOSE="${APP_DIR}/docker-compose.standby.yml"
+if [[ ! -f "${STANDBY_COMPOSE}" ]]; then
+    fail "Brak pliku docker-compose.standby.yml"
+fi
+export COMPOSE_FILE="${APP_DIR}/docker-compose.yml:${STANDBY_COMPOSE}"
+log "Używam portu 80 (docker-compose.standby.yml)."
 
 if [[ "${SYNC_ENV}" -eq 1 ]]; then
     ENV_BACKUP="${BACKUP_DIR}/config/env_latest.bak"
@@ -104,7 +111,7 @@ fi
 log ""
 log "=== Failover zakończony ==="
 log "Następne kroki:"
-log "  1. Sprawdź aplikację w przeglądarce (http://terminal1/ lub http://terminal1:8080/)"
+log "  1. Sprawdź aplikację w przeglądarce: http://terminal1/"
 log "  2. Przekieruj użytkowników (DNS / /etc/hosts: terminal3 → IP terminal1)"
-log "  3. Logi: docker compose logs -f web"
+log "  3. Logi: docker compose -f docker-compose.yml -f docker-compose.standby.yml logs -f web"
 log "  4. Szczegóły: docs/disaster-recovery.md"

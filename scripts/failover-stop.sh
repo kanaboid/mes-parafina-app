@@ -28,6 +28,11 @@ done
 
 cd "${APP_DIR}"
 
+STANDBY_COMPOSE="${APP_DIR}/docker-compose.standby.yml"
+if [[ -f "${STANDBY_COMPOSE}" ]]; then
+    export COMPOSE_FILE="${APP_DIR}/docker-compose.yml:${STANDBY_COMPOSE}"
+fi
+
 if [[ "${REMOVE_VOLUMES}" -eq 1 ]]; then
     log "UWAGA: Zatrzymuję stack i usuwam wolumeny (dane MySQL w Dockerze zostaną skasowane)."
     read -r -p "Kontynuować? (tak/nie): " CONFIRM
