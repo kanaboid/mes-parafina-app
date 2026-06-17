@@ -120,6 +120,7 @@ docker run --rm --network host mysql:8.0 mysqldump \
     -u root -p"${MYSQL_ROOT_PASSWORD}" \
     --single-transaction \
     --source-data=2 \
+    --set-gtid-purged=OFF \
     --routines \
     --triggers \
     --databases mes_parafina_db \
@@ -160,6 +161,7 @@ log "MASTER_HOST=${PRIMARY_IP} (z ${PRIMARY_HOST})"
 log "Konfiguruję replikację (MASTER_LOG_FILE=${LOG_FILE}, MASTER_LOG_POS=${LOG_POS})..."
 docker compose exec -T db env MYSQL_PWD="${MYSQL_ROOT_PASSWORD}" mysql -h 127.0.0.1 -u root <<EOF
 STOP SLAVE;
+RESET SLAVE ALL;
 CHANGE MASTER TO
   MASTER_HOST='${PRIMARY_IP}',
   MASTER_USER='${REPL_USER}',

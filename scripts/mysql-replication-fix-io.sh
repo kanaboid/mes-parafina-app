@@ -30,10 +30,11 @@ fi
 cd "${APP_DIR}"
 export COMPOSE_FILE="${APP_DIR}/docker-compose.yml:${STANDBY_COMPOSE}"
 
-log "Ustawiam MASTER_HOST=${PRIMARY_IP} (${PRIMARY_HOST})..."
+log "Resetuję replikację i ustawiam MASTER_HOST=${PRIMARY_IP} (${PRIMARY_HOST})..."
 
 docker compose exec -T db env MYSQL_PWD="${MYSQL_ROOT_PASSWORD}" mysql -h 127.0.0.1 -u root <<EOF
 STOP SLAVE;
+RESET SLAVE ALL;
 CHANGE MASTER TO
   MASTER_HOST='${PRIMARY_IP}',
   MASTER_USER='${REPL_USER}',
