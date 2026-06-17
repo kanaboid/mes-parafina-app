@@ -10,3 +10,8 @@ services:
   web:
     ports:
       - "80:5000"
+
+  db:
+    volumes:
+      - ./docker/mysql/replica.cnf:/etc/mysql/conf.d/zzz-replication.cnf:ro
+

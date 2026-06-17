@@ -1,0 +1,8 @@
+# Konfiguracja MySQL PRIMARY (terminal3).
+# Włącza binlog wymagany do replikacji.
+
+[mysqld]
+server-id=1
+log-bin=mysql-bin
+binlog_format=ROW
+expire_logs_days=7

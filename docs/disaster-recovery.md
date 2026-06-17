@@ -29,6 +29,27 @@ Skrypty w katalogu `scripts/`:
 | `failover-start.sh` | terminal1 | Start systemu po awarii |
 | `failover-stop.sh` | terminal1 | Zatrzymanie standby |
 | `monitor-primary.sh` | terminal1 (cron) | Sprawdzenie czy terminal3 żyje |
+| `mysql-replication-*.sh` | terminal3 / terminal1 | Replikacja MySQL — patrz `docs/mysql-replication.md` |
+
+---
+
+## Replikacja MySQL (opcjonalnie)
+
+Ciągła kopia bazy terminal3 → terminal1. Szczegóły: **[docs/mysql-replication.md](mysql-replication.md)**.
+
+Skrót:
+
+```bash
+# terminal3
+./scripts/mysql-replication-setup-primary.sh
+
+# terminal1 (jednorazowo)
+./scripts/mysql-replication-setup-replica.sh
+./scripts/mysql-replication-start-db.sh   # @reboot
+
+# failover z repliką
+./scripts/failover-start.sh --use-replication --sync-env
+```
 
 ---
 

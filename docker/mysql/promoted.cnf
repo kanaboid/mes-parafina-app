@@ -1,0 +1,6 @@
+# Po promocji repliki przy failover — nadpisuje read_only z replica.cnf.
+# Ładowany jako ostatni plik w conf.d (zzzz-).
+
+[mysqld]
+read_only=0
+super_read_only=0

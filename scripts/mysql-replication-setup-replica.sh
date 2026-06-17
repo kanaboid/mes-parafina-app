@@ -1,0 +1,115 @@
+#!/bin/bash
+# Inicjalizacja repliki MySQL na terminal1 (pierwsza synchronizacja + START REPLICA).
+#
+# Uruchom na terminal1 (wymaga działającego PRIMARY na terminal3):
+#   ./scripts/mysql-replication-setup-replica.sh
+#
+# W .env na terminal1 ustaw:
+#   PRIMARY_HOST=terminal3
+#   MYSQL_REPLICATION_USER=repl
+#   MYSQL_REPLICATION_PASSWORD=...  (to samo co na terminal3)
+
+set -euo pipefail
+
+APP_DIR="${APP_DIR:-$HOME/mes-parafina-app}"
+STANDBY_COMPOSE="${APP_DIR}/docker-compose.standby.yml"
+TMP_DUMP="/tmp/mes_replica_init_$$.sql"
+
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
+}
+
+fail() {
+    log "BŁĄD: $*"
+    rm -f "${TMP_DUMP}"
+    exit 1
+}
+
+cleanup() {
+    rm -f "${TMP_DUMP}"
+}
+trap cleanup EXIT
+
+if [[ ! -f "${APP_DIR}/.env" ]]; then
+    fail "Brak pliku ${APP_DIR}/.env"
+fi
+
+set -a
+# shellcheck disable=SC1091
+source "${APP_DIR}/.env"
+set +a
+
+PRIMARY_HOST="${PRIMARY_HOST:-terminal3}"
+REPL_USER="${MYSQL_REPLICATION_USER:-repl}"
+REPL_PASSWORD="${MYSQL_REPLICATION_PASSWORD:-}"
+
+if [[ -z "${MYSQL_ROOT_PASSWORD:-}" || -z "${REPL_PASSWORD}" ]]; then
+    fail "Ustaw MYSQL_ROOT_PASSWORD i MYSQL_REPLICATION_PASSWORD w .env"
+fi
+
+cd "${APP_DIR}"
+export COMPOSE_FILE="${APP_DIR}/docker-compose.yml:${STANDBY_COMPOSE}"
+
+log "Sprawdzam połączenie z PRIMARY (${PRIMARY_HOST}:3306)..."
+if ! docker run --rm mysql:8.0 mysqladmin ping \
+    -h "${PRIMARY_HOST}" -P 3306 -u root -p"${MYSQL_ROOT_PASSWORD}" --silent 2>/dev/null; then
+    fail "Brak połączenia z PRIMARY. Sprawdź firewall na terminal3 (port 3306) i PRIMARY_HOST."
+fi
+
+log "UWAGA: Zostanie nadpisana lokalna baza w Dockerze na terminal1."
+read -r -p "Kontynuować inicjalizację repliki? (tak/nie): " CONFIRM
+if [[ "${CONFIRM}" != "tak" ]]; then
+    log "Anulowano."
+    exit 0
+fi
+
+log "Zatrzymuję lokalny MySQL i usuwam stary wolumen..."
+docker compose stop db web celery-worker flower 2>/dev/null || true
+docker compose rm -f db 2>/dev/null || true
+docker volume rm mes-parafina-app_mysql_data 2>/dev/null || \
+    docker volume rm "$(basename "${APP_DIR}")_mysql_data" 2>/dev/null || true
+
+log "Uruchamiam pusty kontener MySQL (replica)..."
+docker compose up -d db
+sleep 20
+
+log "Pobieram dump z PRIMARY (z pozycją binlog)..."
+docker run --rm mysql:8.0 mysqldump \
+    -h "${PRIMARY_HOST}" -P 3306 \
+    -u root -p"${MYSQL_ROOT_PASSWORD}" \
+    --single-transaction \
+    --source-data=2 \
+    --routines \
+    --triggers \
+    --databases mes_parafina_db \
+    > "${TMP_DUMP}"
+
+log "Przywracam dane na replice..."
+docker compose exec -T db mysql -u root -p"${MYSQL_ROOT_PASSWORD}" < "${TMP_DUMP}"
+
+SOURCE_LINE="$(grep -m1 '^-- CHANGE REPLICATION SOURCE TO' "${TMP_DUMP}" | sed 's/^-- //')"
+if [[ -z "${SOURCE_LINE}" ]]; then
+    fail "Nie znaleziono pozycji binlog w dumpie — czy PRIMARY ma włączony binlog?"
+fi
+
+# Dodaj host i dane logowania do polecenia CHANGE REPLICATION SOURCE TO
+SOURCE_CMD="${SOURCE_LINE%;}"
+SOURCE_CMD="${SOURCE_CMD}, SOURCE_HOST='${PRIMARY_HOST}', SOURCE_USER='${REPL_USER}', SOURCE_PASSWORD='${REPL_PASSWORD}', SOURCE_PORT=3306;"
+
+log "Konfiguruję replikację..."
+docker compose exec -T db mysql -u root -p"${MYSQL_ROOT_PASSWORD}" <<EOF
+STOP REPLICA;
+${SOURCE_CMD}
+START REPLICA;
+EOF
+
+sleep 5
+"${APP_DIR}/scripts/mysql-replication-status.sh"
+
+log ""
+log "=== Replika skonfigurowana ==="
+log "Na terminal1 uruchom tylko bazę (bez aplikacji web):"
+log "  ./scripts/mysql-replication-start-db.sh"
+log ""
+log "Sprawdzaj status:"
+log "  ./scripts/mysql-replication-status.sh"

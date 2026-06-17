@@ -1,0 +1,7 @@
+# Override po promocji repliki (failover na terminal1).
+# Wyłącza read_only na stałe po restarcie kontenera db.
+
+services:
+  db:
+    volumes:
+      - ./docker/mysql/promoted.cnf:/etc/mysql/conf.d/zzzz-promoted.cnf:ro

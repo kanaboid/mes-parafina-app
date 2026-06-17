@@ -17,6 +17,7 @@ DB_WAIT_SECONDS="${DB_WAIT_SECONDS:-30}"
 
 DO_RESTORE=1
 SYNC_ENV=0
+USE_REPLICATION=0
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
@@ -32,9 +33,10 @@ usage() {
 Użycie: $0 [opcje]
 
 Opcje:
-  --no-restore   Uruchom stack bez przywracania bazy (baza już istnieje)
-  --sync-env     Skopiuj .env z ostatniego backupu przed startem
-  -h, --help     Ta pomoc
+  --no-restore        Uruchom stack bez przywracania bazy (baza już istnieje)
+  --use-replication   Promuj replikę MySQL zamiast restore z dumpa (wymaga działającej repliki)
+  --sync-env          Skopiuj .env z ostatniego backupu przed startem
+  -h, --help          Ta pomoc
 
 Zmienne środowiskowe:
   APP_DIR        Katalog aplikacji (domyślnie ~/mes-parafina-app)
@@ -47,6 +49,7 @@ EOF
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --no-restore) DO_RESTORE=0; shift ;;
+        --use-replication) USE_REPLICATION=1; DO_RESTORE=0; shift ;;
         --sync-env) SYNC_ENV=1; shift ;;
         -h|--help) usage; exit 0 ;;
         *) fail "Nieznana opcja: $1 (użyj --help)" ;;
@@ -64,6 +67,16 @@ if [[ ! -f "${STANDBY_COMPOSE}" ]]; then
     fail "Brak pliku docker-compose.standby.yml"
 fi
 export COMPOSE_FILE="${APP_DIR}/docker-compose.yml:${STANDBY_COMPOSE}"
+
+if [[ "${USE_REPLICATION}" -eq 1 ]]; then
+    FAILOVER_COMPOSE="${APP_DIR}/docker-compose.failover.yml"
+    if [[ ! -f "${FAILOVER_COMPOSE}" ]]; then
+        fail "Brak pliku docker-compose.failover.yml"
+    fi
+    export COMPOSE_FILE="${COMPOSE_FILE}:${FAILOVER_COMPOSE}"
+    log "Tryb replikacji — docker-compose.failover.yml (db bez read_only po restarcie)."
+fi
+
 log "Używam portu 80 (docker-compose.standby.yml)."
 
 if [[ "${SYNC_ENV}" -eq 1 ]]; then
@@ -84,7 +97,10 @@ docker compose up -d db
 log "Czekam ${DB_WAIT_SECONDS}s na MySQL..."
 sleep "${DB_WAIT_SECONDS}"
 
-if [[ "${DO_RESTORE}" -eq 1 ]]; then
+if [[ "${USE_REPLICATION}" -eq 1 ]]; then
+    log "Tryb replikacji — promuję bazę zamiast restore z dumpa..."
+    "${APP_DIR}/scripts/mysql-replication-promote.sh"
+elif [[ "${DO_RESTORE}" -eq 1 ]]; then
     if [[ ! -f "${DUMP_FILE}" ]]; then
         fail "Brak pliku dumpa: ${DUMP_FILE}"
     fi

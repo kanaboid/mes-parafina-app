@@ -1,0 +1,12 @@
+# Override dla hosta PRIMARY (terminal3) — włącza binlog.
+#
+# Użycie na terminal3:
+#   export COMPOSE_FILE=docker-compose.yml:docker-compose.primary.yml
+#   docker compose up -d db
+#
+# Skrypt: scripts/mysql-replication-setup-primary.sh
+
+services:
+  db:
+    volumes:
+      - ./docker/mysql/primary.cnf:/etc/mysql/conf.d/zzz-replication.cnf:ro
