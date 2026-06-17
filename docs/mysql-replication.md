@@ -167,7 +167,8 @@ Uproszczony plan:
 
 | Problem | Rozwiązanie |
 |---------|-------------|
-| `Slave_IO_Running: No` | Firewall 3306, hasło `repl`, `PRIMARY_HOST` |
+| `Slave_IO_Running: No` / `Connecting` | Firewall 3306, hasło `repl`, `PRIMARY_HOST` = IP |
+| `Authentication requires secure connection` | Na terminal3: `./scripts/mysql-replication-fix-auth-primary.sh`, potem na terminal1: `./scripts/mysql-replication-fix-io.sh` |
 | `Seconds_Behind_Master` duże | Odczekaj; sprawdź obciążenie sieci/CPU |
 | Brak `SHOW MASTER STATUS` na primary | Uruchom z `docker-compose.primary.yml` |
 | Replikacja po teście restore | Ponów `mysql-replication-setup-replica.sh` |
