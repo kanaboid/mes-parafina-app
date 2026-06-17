@@ -43,6 +43,12 @@ PRIMARY_HOST="${PRIMARY_HOST:-terminal3}"
 REPL_USER="${MYSQL_REPLICATION_USER:-repl}"
 REPL_PASSWORD="${MYSQL_REPLICATION_PASSWORD:-}"
 
+test_primary_connection() {
+    local host="$1"
+    docker run --rm --network host mysql:8.0 mysqladmin ping \
+        -h "${host}" -P 3306 -u root -p"${MYSQL_ROOT_PASSWORD}" --connect-timeout=5 --silent 2>&1
+}
+
 if [[ -z "${MYSQL_ROOT_PASSWORD:-}" || -z "${REPL_PASSWORD}" ]]; then
     fail "Ustaw MYSQL_ROOT_PASSWORD i MYSQL_REPLICATION_PASSWORD w .env"
 fi
@@ -51,10 +57,23 @@ cd "${APP_DIR}"
 export COMPOSE_FILE="${APP_DIR}/docker-compose.yml:${STANDBY_COMPOSE}"
 
 log "Sprawdzam połączenie z PRIMARY (${PRIMARY_HOST}:3306)..."
-if ! docker run --rm mysql:8.0 mysqladmin ping \
-    -h "${PRIMARY_HOST}" -P 3306 -u root -p"${MYSQL_ROOT_PASSWORD}" --silent 2>/dev/null; then
-    fail "Brak połączenia z PRIMARY. Sprawdź firewall na terminal3 (port 3306) i PRIMARY_HOST."
+CONN_ERROR="$(test_primary_connection "${PRIMARY_HOST}" || true)"
+if [[ "${CONN_ERROR}" != *"mysqld is alive"* ]]; then
+    log "Błąd połączenia: ${CONN_ERROR}"
+    log ""
+    log "Diagnostyka na terminal1:"
+    log "  ping -c 2 ${PRIMARY_HOST}"
+    log "  nc -zv ${PRIMARY_HOST} 3306"
+    log "  getent hosts ${PRIMARY_HOST}"
+    log ""
+    log "Jeśli hostname nie działa, ustaw w .env IP terminal3:"
+    log "  PRIMARY_HOST=100.x.x.x"
+    log ""
+    log "Na terminal3 uruchom ponownie (dodaje root@'%'):"
+    log "  ./scripts/mysql-replication-setup-primary.sh"
+    fail "Brak połączenia z PRIMARY."
 fi
+log "Połączenie z PRIMARY OK."
 
 log "UWAGA: Zostanie nadpisana lokalna baza w Dockerze na terminal1."
 read -r -p "Kontynuować inicjalizację repliki? (tak/nie): " CONFIRM
@@ -74,7 +93,7 @@ docker compose up -d db
 sleep 20
 
 log "Pobieram dump z PRIMARY (z pozycją binlog)..."
-docker run --rm mysql:8.0 mysqldump \
+docker run --rm --network host mysql:8.0 mysqldump \
     -h "${PRIMARY_HOST}" -P 3306 \
     -u root -p"${MYSQL_ROOT_PASSWORD}" \
     --single-transaction \

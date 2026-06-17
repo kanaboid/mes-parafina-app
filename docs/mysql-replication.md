@@ -51,6 +51,21 @@ sudo ufw allow from IP_TERMINAL1 to any port 3306 proto tcp
 sudo ufw status
 ```
 
+Skrypt `setup-primary` tworzy też `root@'%'` — potrzebne do zdalnego mysqldump z terminal1.
+
+W `.env` na **terminal1** możesz użyć IP zamiast hostname (np. Tailscale):
+
+```env
+PRIMARY_HOST=100.x.x.x
+```
+
+Test połączenia z **terminal1**:
+
+```bash
+nc -zv terminal3 3306
+docker run --rm --network host mysql:8.0 mysqladmin ping -h terminal3 -uroot -p
+```
+
 ### Auto-start z binlogiem (zaktualizuj cron @reboot na terminal3)
 
 ```cron
