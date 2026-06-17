@@ -30,7 +30,10 @@ Dodaj do `.env` na **terminal3** i **terminal1**:
 MYSQL_REPLICATION_USER=repl
 MYSQL_REPLICATION_PASSWORD=wygeneruj-silne-haslo-tutaj
 PRIMARY_HOST=terminal3
+MYSQLUSER=mes_user
 ```
+
+> **Uwaga:** `MYSQLUSER` nie może być `root` — obraz Docker MySQL odrzuca `MYSQL_USER=root` przy pierwszej inicjalizacji. Użyj `mes_user` (jak w produkcji).
 
 ---
 

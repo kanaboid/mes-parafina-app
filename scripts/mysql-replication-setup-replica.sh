@@ -53,6 +53,12 @@ if [[ -z "${MYSQL_ROOT_PASSWORD:-}" || -z "${REPL_PASSWORD}" ]]; then
     fail "Ustaw MYSQL_ROOT_PASSWORD i MYSQL_REPLICATION_PASSWORD w .env"
 fi
 
+# Obraz MySQL w Dockerze nie pozwala na MYSQL_USER=root przy pierwszej inicjalizacji.
+if [[ "${MYSQLUSER:-root}" == "root" ]]; then
+    log "MYSQLUSER=root w .env — kontener użyje mes_user (wymóg obrazu mysql:8.0)."
+    export MYSQLUSER="mes_user"
+fi
+
 cd "${APP_DIR}"
 export COMPOSE_FILE="${APP_DIR}/docker-compose.yml:${STANDBY_COMPOSE}"
 
