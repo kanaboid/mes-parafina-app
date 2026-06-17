@@ -83,14 +83,29 @@ if [[ "${CONFIRM}" != "tak" ]]; then
 fi
 
 log "Zatrzymuję lokalny MySQL i usuwam stary wolumen..."
+export COMPOSE_FILE="${APP_DIR}/docker-compose.yml:${STANDBY_COMPOSE}"
 docker compose stop db web celery-worker flower 2>/dev/null || true
 docker compose rm -f db 2>/dev/null || true
 docker volume rm mes-parafina-app_mysql_data 2>/dev/null || \
     docker volume rm "$(basename "${APP_DIR}")_mysql_data" 2>/dev/null || true
 
+wait_for_db() {
+    local i
+    for i in $(seq 1 30); do
+        if docker compose exec -T db mysqladmin ping -u root -p"${MYSQL_ROOT_PASSWORD}" --silent 2>/dev/null; then
+            return 0
+        fi
+        sleep 2
+    done
+    log "Logi kontenera db:"
+    docker compose logs --tail 30 db
+    fail "MySQL nie wystartował w czasie 60s."
+}
+
 log "Uruchamiam pusty kontener MySQL (replica)..."
 docker compose up -d db
-sleep 20
+log "Czekam na gotowość MySQL..."
+wait_for_db
 
 log "Pobieram dump z PRIMARY (z pozycją binlog)..."
 docker run --rm --network host mysql:8.0 mysqldump \
@@ -134,6 +149,8 @@ CHANGE MASTER TO
   MASTER_LOG_FILE='${LOG_FILE}',
   MASTER_LOG_POS=${LOG_POS};
 START SLAVE;
+SET GLOBAL read_only=ON;
+SET GLOBAL super_read_only=ON;
 EOF
 
 sleep 5

@@ -1,10 +1,9 @@
 # Konfiguracja MySQL REPLICA (terminal1).
-# read_only — aplikacja nie powinna zapisywać do bazy w trybie standby.
+# read_only ustawiane przez skrypt PO skonfigurowaniu replikacji (nie tutaj —
+# inaczej pusta baza nie może się zainicjalizować przy pierwszym starcie).
 
 [mysqld]
 server-id=2
 relay-log=relay-bin
-read_only=1
-super_read_only=1
 log-bin=mysql-bin
 binlog_format=ROW
