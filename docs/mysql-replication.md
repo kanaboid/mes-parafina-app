@@ -195,5 +195,6 @@ Po powrocie na terminal3 replikację trzeba **skonfigurować od nowa**:
 | `mysql-replication-status.sh` | oba |
 | `mysql-replication-promote.sh` | terminal1 |
 | `mysql-replication-fix-io.sh` | terminal1 |
+| `mysql-replication-restore-standby.sh` | terminal1 (po teście failover) |
 
 Szczegóły failover: [docs/disaster-recovery.md](disaster-recovery.md)

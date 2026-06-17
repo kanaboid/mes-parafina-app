@@ -42,6 +42,7 @@ Szczegóły replikacji: **[docs/mysql-replication.md](mysql-replication.md)**
 | `mysql-replication-promote.sh` | terminal1 | Promocja repliki przy failover |
 | `mysql-replication-fix-auth-primary.sh` | terminal3 | Naprawa `mysql_native_password` dla `repl` |
 | `mysql-replication-fix-io.sh` | terminal1 | Naprawa `MASTER_HOST` (IP) |
+| `mysql-replication-restore-standby.sh` | terminal1 | Po teście failover — przywróć replikę |
 
 ## Pliki Compose
 
@@ -148,8 +149,7 @@ Oczekiwane: `Slave_IO_Running: Yes`, `Slave_SQL_Running: Yes`, `Seconds_Behind_M
 # opcjonalnie test failover (krótko):
 ./scripts/failover-start.sh --use-replication --sync-env
 # sprawdź http://terminal1/
-./scripts/failover-stop.sh
-./scripts/mysql-replication-setup-replica.sh   # przywróć replikę po teście
+./scripts/mysql-replication-restore-standby.sh   # przywróć replikę po teście
 ```
 
 ---
