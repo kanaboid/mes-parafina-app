@@ -1,6 +1,6 @@
 #!/bin/bash
 # Backup bazy MySQL i konfiguracji MES Parafina.
-# Uruchamiaj na hoście produkcyjnym (terminal3), np. z crona co 6 godzin.
+# Uruchamiaj na hoście produkcyjnym (terminal3), np. z crona co godzinę.
 #
 # Zmienne opcjonalne:
 #   KEEP_DAYS=14           — retencja lokalnie i na terminal1 (domyślnie 14)

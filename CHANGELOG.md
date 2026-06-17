@@ -18,3 +18,9 @@
 ### Changed
 - Polityka dobielania: mieszaniny wydmuchowe (`is_wydmuch_mix=True`) mogą być dobielane
 - Jawne ustawianie `process_status='SUROWY'` przy tworzeniu nowych mieszanin w BatchManagementService
+
+### Added (infrastruktura DR)
+- Skrypty backupu i failover: `scripts/backup-mes.sh`, `failover-start.sh`, `failover-stop.sh`
+- Replikacja MySQL terminal3 → terminal1 + skrypty `mysql-replication-*.sh`
+- Dokumentacja: `docs/disaster-recovery.md`, `docs/mysql-replication.md`
+- Compose overrides: `docker-compose.primary.yml`, `docker-compose.standby.yml`, `docker-compose.failover.yml`

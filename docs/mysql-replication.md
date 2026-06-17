@@ -1,75 +1,83 @@
 # Replikacja MySQL — terminal3 → terminal1
 
-Replikacja **asynchroniczna** — dane z produkcji kopiowane na bieżąco do standby.
-Przy failoverze można promować replikę zamiast czekać na ostatni dump (mniejsza utrata danych niż sam backup co godzinę).
+Replikacja **asynchroniczna** — dane z produkcji kopiowane na bieżąco na standby.
+Przy failoverze: `./scripts/failover-start.sh --use-replication` (bez restore z dumpa).
 
 ```
 terminal3 (PRIMARY)                    terminal1 (REPLICA)
-  MySQL binlog  ────── sieć :3306 ────►  MySQL read_only
-  aplikacja web                          tylko db (bez web)
+  MySQL binlog  ────── :3306 ────────►  MySQL (read_only po konfiguracji)
+  aplikacja web                          tylko kontener db
 ```
 
-Backupy (`backup-mes.sh`) **zostają** — to druga linia obrony.
+Backupy (`backup-mes.sh`) **zostają** — druga linia obrony (do 1 h opóźnienia).
 
 ---
 
 ## Wymagania
 
-1. Działający PRIMARY na terminal3
-2. SSH i sieć LAN między hostami
-3. Port **3306** na terminal3 dostępny **tylko z IP terminal1**
-4. Te same hasła w `.env` na obu hostach (root + replikacja)
+1. PRIMARY na terminal3 z `docker-compose.primary.yml` (binlog)
+2. Sieć między hostami (LAN / Tailscale), port **3306** na terminal3
+3. Spójne hasła w `.env` na obu hostach
+4. `MYSQLUSER=mes_user` (nie `root`) — wymóg obrazu Docker MySQL
 
 ---
 
-## Krok 1: Hasła w `.env` (oba hosty)
+## Pliki konfiguracyjne
 
-Dodaj do `.env` na **terminal3** i **terminal1**:
+| Plik | Opis |
+|------|------|
+| `docker/mysql/primary.cnf` | `server-id=1`, binlog |
+| `docker/mysql/replica.cnf` | `server-id=2`, relay-log |
+| `docker/mysql/promoted.cnf` | wyłącza `read_only` po failover |
+| `docker-compose.primary.yml` | override na terminal3 |
+| `docker-compose.standby.yml` | port 80 + replica.cnf na terminal1 |
+| `docker-compose.failover.yml` | promoted.cnf po promocji repliki |
+
+---
+
+## Krok 1: `.env` (oba hosty)
 
 ```env
-MYSQL_REPLICATION_USER=repl
-MYSQL_REPLICATION_PASSWORD=wygeneruj-silne-haslo-tutaj
-PRIMARY_HOST=terminal3
+SECRET_KEY=...
 MYSQLUSER=mes_user
+MYSQL_ROOT_PASSWORD=...
+MYSQL_PASSWORD_FOR_USER=...
+MYSQL_REPLICATION_USER=repl
+MYSQL_REPLICATION_PASSWORD=wygeneruj-silne-haslo
+PRIMARY_HOST=terminal3
 ```
 
-> **Uwaga:** `MYSQLUSER` nie może być `root` — obraz Docker MySQL odrzuca `MYSQL_USER=root` przy pierwszej inicjalizacji. Użyj `mes_user` (jak w produkcji).
+Na terminal1 zalecane IP zamiast hostname (kontener MySQL lepiej łączy się po IP):
+
+```env
+PRIMARY_HOST=100.69.117.56
+```
+
+Skrypt `setup-replica.sh` automatycznie rozwiązuje hostname do IP w `CHANGE MASTER TO`.
 
 ---
 
-## Krok 2: PRIMARY na terminal3
+## Krok 2: PRIMARY (terminal3)
 
 ```bash
 cd ~/mes-parafina-app
 git pull
 chmod +x scripts/*.sh
-
 ./scripts/mysql-replication-setup-primary.sh
 ```
 
-Firewall — tylko terminal1 (podstaw IP):
+Skrypt:
+- włącza binlog (`docker-compose.primary.yml`),
+- tworzy `repl@'%'` z **`mysql_native_password`** (wymagane bez SSL),
+- tworzy `root@'%'` do zdalnego mysqldump.
+
+Firewall:
 
 ```bash
 sudo ufw allow from IP_TERMINAL1 to any port 3306 proto tcp
-sudo ufw status
 ```
 
-Skrypt `setup-primary` tworzy też `root@'%'` — potrzebne do zdalnego mysqldump z terminal1.
-
-W `.env` na **terminal1** możesz użyć IP zamiast hostname (np. Tailscale):
-
-```env
-PRIMARY_HOST=100.x.x.x
-```
-
-Test połączenia z **terminal1**:
-
-```bash
-nc -zv terminal3 3306
-docker run --rm --network host mysql:8.0 mysqladmin ping -h terminal3 -uroot -p
-```
-
-### Auto-start z binlogiem (zaktualizuj cron @reboot na terminal3)
+Auto-start:
 
 ```cron
 @reboot sleep 30 && cd /home/terminal3/mes-parafina-app && COMPOSE_FILE=docker-compose.yml:docker-compose.primary.yml docker compose up -d
@@ -77,38 +85,41 @@ docker run --rm --network host mysql:8.0 mysqladmin ping -h terminal3 -uroot -p
 
 ---
 
-## Krok 3: REPLICA na terminal1 (jednorazowa inicjalizacja)
+## Krok 3: REPLICA (terminal1, jednorazowo)
 
 ```bash
 cd ~/mes-parafina-app
 git pull
 chmod +x scripts/*.sh
 
+docker compose -f docker-compose.yml -f docker-compose.standby.yml down
+docker volume rm mes-parafina-app_mysql_data 2>/dev/null || true
+
 ./scripts/mysql-replication-setup-replica.sh
 ```
 
 Skrypt:
-- kasuje lokalny wolumen MySQL na terminal1,
-- pobiera dump z terminal3 z pozycją binlog,
-- uruchamia `START REPLICA`.
+- czyści lokalny wolumen MySQL,
+- pobiera dump z PRIMARY (`--source-data=2`, `--set-gtid-purged=OFF`),
+- przywraca dane,
+- `RESET SLAVE ALL` + `CHANGE MASTER TO` (IP, nie hostname),
+- `START SLAVE` + `read_only=ON`.
 
 ---
 
-## Krok 4: Utrzymanie repliki (terminal1)
-
-Tylko baza — **bez** aplikacji web:
+## Krok 4: Utrzymanie (terminal1)
 
 ```bash
 ./scripts/mysql-replication-start-db.sh
 ```
 
-Cron `@reboot` na terminal1:
+Cron:
 
 ```cron
 @reboot sleep 30 && /home/terminal1/mes-parafina-app/scripts/mysql-replication-start-db.sh >> /home/terminal1/mes-replica.log 2>&1
 ```
 
-### Status (co kilka godzin lub z crona)
+Status:
 
 ```bash
 ./scripts/mysql-replication-status.sh
@@ -119,47 +130,44 @@ Oczekiwane:
 ```
 Slave_IO_Running: Yes
 Slave_SQL_Running: Yes
-Seconds_Behind_Master: 0   (lub mała liczba)
+Seconds_Behind_Master: 0
+Last_IO_Error:          (puste)
+```
+
+Test połączenia z terminal1:
+
+```bash
+source .env
+nc -zv terminal3 3306
+docker run --rm --network host mysql:8.0 mysqladmin ping \
+  -h terminal3 -uroot -p"${MYSQL_ROOT_PASSWORD}"
 ```
 
 ---
 
 ## Failover z repliką
 
-Gdy terminal3 padł, a replika działa:
-
 ```bash
-cd ~/mes-parafina-app
 ./scripts/failover-start.sh --use-replication --sync-env
 ```
 
-To:
-1. promuje replikę (`mysql-replication-promote.sh`),
-2. uruchamia pełny stack na porcie 80,
-3. **bez** restore z pliku `.sql.gz`.
-
-Alternatywnie ręcznie:
+Ręcznie:
 
 ```bash
 ./scripts/mysql-replication-promote.sh
-./scripts/failover-start.sh --no-restore
+./scripts/failover-start.sh --no-restore --sync-env
 ```
-
-Potem przekieruj użytkowników (`terminal3` → IP terminal1).
 
 ---
 
-## Failback (powrót na terminal3)
+## Failback
 
-Po naprawie terminal3 replikacja wymaga **ponownej konfiguracji** (terminal1 był chwilowo PRIMARY).
+Po powrocie na terminal3 replikację trzeba **skonfigurować od nowa**:
 
-Uproszczony plan:
-
-1. Zatrzymaj aplikację na terminal1: `./scripts/failover-stop.sh`
-2. Zrób dump z terminal1 (jeśli były nowe dane): `backup-mes.sh` lub ręczny mysqldump
-3. Na terminal3: uruchom stack, przywróć dump jeśli trzeba
-4. Na terminal1: ponów `./scripts/mysql-replication-setup-replica.sh`
-5. Przywróć DNS na terminal3
+1. `./scripts/failover-stop.sh` na terminal1
+2. Dump z terminal1 → restore na terminal3 (jeśli były nowe dane)
+3. PRIMARY na terminal3: `docker compose up -d`
+4. `./scripts/mysql-replication-setup-replica.sh` na terminal1
 
 ---
 
@@ -167,11 +175,12 @@ Uproszczony plan:
 
 | Problem | Rozwiązanie |
 |---------|-------------|
-| `Slave_IO_Running: No` / `Connecting` | Firewall 3306, hasło `repl`, `PRIMARY_HOST` = IP |
-| `Authentication requires secure connection` | Na terminal3: `./scripts/mysql-replication-fix-auth-primary.sh`, potem na terminal1: `./scripts/mysql-replication-fix-io.sh` |
-| `Seconds_Behind_Master` duże | Odczekaj; sprawdź obciążenie sieci/CPU |
-| Brak `SHOW MASTER STATUS` na primary | Uruchom z `docker-compose.primary.yml` |
-| Replikacja po teście restore | Ponów `mysql-replication-setup-replica.sh` |
+| `Slave_IO_Running: Connecting` | `PRIMARY_HOST` = IP; `./scripts/mysql-replication-fix-io.sh` |
+| `Authentication requires secure connection` | terminal3: `./scripts/mysql-replication-fix-auth-primary.sh` |
+| `CHANGE MASTER` / błąd MTA | Ponów `./scripts/mysql-replication-setup-replica.sh` |
+| `MYSQL_USER=root` przy init | Ustaw `MYSQLUSER=mes_user` w `.env` |
+| `Access denied` przy restore lokalnym | Skrypt używa `MYSQL_PWD` + `-h 127.0.0.1` |
+| `Seconds_Behind_Master` duże | Odczekaj; sprawdź sieć i obciążenie |
 
 ---
 
@@ -180,9 +189,11 @@ Uproszczony plan:
 | Skrypt | Host |
 |--------|------|
 | `mysql-replication-setup-primary.sh` | terminal3 |
-| `mysql-replication-setup-replica.sh` | terminal1 (raz) |
-| `mysql-replication-start-db.sh` | terminal1 (codziennie/@reboot) |
+| `mysql-replication-fix-auth-primary.sh` | terminal3 |
+| `mysql-replication-setup-replica.sh` | terminal1 |
+| `mysql-replication-start-db.sh` | terminal1 (@reboot) |
 | `mysql-replication-status.sh` | oba |
-| `mysql-replication-promote.sh` | terminal1 (failover) |
+| `mysql-replication-promote.sh` | terminal1 |
+| `mysql-replication-fix-io.sh` | terminal1 |
 
-Szczegóły failover: `docs/disaster-recovery.md`
+Szczegóły failover: [docs/disaster-recovery.md](disaster-recovery.md)

@@ -1,102 +1,106 @@
 # Odtwarzanie awaryjne — MES Parafina
 
-Procedura backupu, failover i powrotu na produkcję.
+Procedura backupu, replikacji MySQL, failover i powrotu na produkcję.
 
 ## Hosty
 
 | Host | Rola | Adres aplikacji |
 |------|------|-----------------|
-| **terminal3** | Produkcja (primary) | `http://terminal3/` (port z `docker-compose.yml`, np. 8080 lub 80) |
-| **terminal1** | Standby (failover) | `http://terminal1/` (**port 80** — plik `docker-compose.standby.yml`) |
+| **terminal3** | Produkcja (PRIMARY) | `http://terminal3/` (port z `docker-compose.yml`, np. 80 lub 8080) |
+| **terminal1** | Standby (REPLICA + failover) | `http://terminal1/` (**port 80** — `docker-compose.standby.yml`) |
 | **oczyszczalnia-aio** | Archiwum backupów | tylko SSH/rsync |
 
-## Architektura backupu
+## Architektura
 
 ```
-terminal3 (produkcja)
-    │
-    ├── co 1 h: mysqldump + .env → ~/mes-backups/
-    ├── rsync --delete → terminal1:~/mes-backups/     (retencja 14 dni)
-    └── rsync → oczyszczalnia-aio:~/mes-backups-archive/mysql/  (retencja 90 dni)
+terminal3 (PRIMARY)                         terminal1 (REPLICA / standby)
+  aplikacja web                               tylko MySQL (replikacja w tle)
+  MySQL binlog ────── :3306 ──────────────►  MySQL read_only
+       │
+       ├── co 1 h: backup-mes.sh → ~/mes-backups/
+       ├── rsync → terminal1:~/mes-backups/           (retencja 14 dni)
+       └── rsync → oczyszczalnia-aio:~/mes-backups-archive/  (retencja 90 dni)
 ```
 
-Skrypty w katalogu `scripts/`:
-
-| Skrypt | Gdzie uruchamiać | Opis |
-|--------|------------------|------|
-| `backup-mes.sh` | terminal3 (cron) | Backup bazy i konfiguracji |
-| `restore-mes.sh` | terminal1 | Ręczne przywrócenie bazy |
-| `failover-start.sh` | terminal1 | Start systemu po awarii |
-| `failover-stop.sh` | terminal1 | Zatrzymanie standby |
-| `monitor-primary.sh` | terminal1 (cron) | Sprawdzenie czy terminal3 żyje |
-| `mysql-replication-*.sh` | terminal3 / terminal1 | Replikacja MySQL — patrz `docs/mysql-replication.md` |
+Szczegóły replikacji: **[docs/mysql-replication.md](mysql-replication.md)**
 
 ---
 
-## Replikacja MySQL (opcjonalnie)
+## Skrypty (`scripts/`)
 
-Ciągła kopia bazy terminal3 → terminal1. Szczegóły: **[docs/mysql-replication.md](mysql-replication.md)**.
+| Skrypt | Host | Opis |
+|--------|------|------|
+| `backup-mes.sh` | terminal3 (cron) | Dump MySQL + `.env` + rsync |
+| `restore-mes.sh` | terminal1 | Przywrócenie bazy z `.sql.gz` |
+| `failover-start.sh` | terminal1 | Start aplikacji po awarii |
+| `failover-stop.sh` | terminal1 | Zatrzymanie stacku standby |
+| `monitor-primary.sh` | terminal1 (cron) | Sprawdzenie `http://terminal3/` |
+| `mysql-replication-setup-primary.sh` | terminal3 | Binlog + użytkownik `repl` |
+| `mysql-replication-setup-replica.sh` | terminal1 | Jednorazowa inicjalizacja repliki |
+| `mysql-replication-start-db.sh` | terminal1 (@reboot) | Uruchomienie samej bazy |
+| `mysql-replication-status.sh` | oba | Status PRIMARY / REPLICA |
+| `mysql-replication-promote.sh` | terminal1 | Promocja repliki przy failover |
+| `mysql-replication-fix-auth-primary.sh` | terminal3 | Naprawa `mysql_native_password` dla `repl` |
+| `mysql-replication-fix-io.sh` | terminal1 | Naprawa `MASTER_HOST` (IP) |
 
-Skrót:
+## Pliki Compose
 
-```bash
-# terminal3
-./scripts/mysql-replication-setup-primary.sh
-
-# terminal1 (jednorazowo)
-./scripts/mysql-replication-setup-replica.sh
-./scripts/mysql-replication-start-db.sh   # @reboot
-
-# failover z repliką
-./scripts/failover-start.sh --use-replication --sync-env
-```
+| Plik | Host | Opis |
+|------|------|------|
+| `docker-compose.yml` | oba | Bazowy stack |
+| `docker-compose.primary.yml` | terminal3 | Binlog MySQL |
+| `docker-compose.standby.yml` | terminal1 | Port 80 + config repliki |
+| `docker-compose.failover.yml` | terminal1 | Wyłącza `read_only` po promocji |
 
 ---
 
-## Przygotowanie standby (jednorazowo na terminal1)
+## Przygotowanie standby (jednorazowo, terminal1)
 
 ```bash
 git clone https://github.com/kanaboid/mes-parafina-app.git ~/mes-parafina-app
 cd ~/mes-parafina-app
 git switch terminale-gui
 
-# Docker — patrz dokumentacja instalacji w README / wcześniejsze instrukcje
-
 cp ~/mes-backups/config/env_latest.bak ~/mes-parafina-app/.env
 chmod +x scripts/*.sh
 docker compose build
 
-# Standby uruchamia aplikację na porcie 80 (docker-compose.standby.yml).
-# Skrypt failover-start.sh używa tego pliku automatycznie.
+# Standby: tylko replika MySQL (bez aplikacji web):
+./scripts/mysql-replication-setup-replica.sh
+./scripts/mysql-replication-start-db.sh
 
-# Otwórz port 80 w firewallu (jeśli UFW włączony):
-# sudo ufw allow 80/tcp
-
-# Standby domyślnie WYŁĄCZONY:
-docker compose down
+sudo ufw allow 80/tcp   # na wypadek failover
 ```
 
-W `.env` na standby ustaw (jeśli brak HTTPS w LAN):
+W `.env` na standby (LAN bez HTTPS):
 
-```
+```env
 FLASK_ENV=development
 ENVIRONMENT=development
+MYSQLUSER=mes_user
+PRIMARY_HOST=terminal3
+MYSQL_REPLICATION_USER=repl
+MYSQL_REPLICATION_PASSWORD=...
 ```
+
+> `MYSQLUSER` nie może być `root` — obraz Docker MySQL tego nie akceptuje przy pierwszej inicjalizacji.
 
 ---
 
-## Backup na produkcji (terminal3)
+## Produkcja (terminal3)
 
-### Cron (co godzinę)
+### Cron — backup co godzinę
 
 ```cron
 0 * * * * /home/terminal3/mes-parafina-app/scripts/backup-mes.sh >> /home/terminal3/mes-backup.log 2>&1
 ```
 
-### Auto-start po restarcie maszyny (terminal3)
+Opcjonalne zmienne: `KEEP_DAYS=14`, `ARCHIVE_KEEP_DAYS=90`
+
+### Auto-start po restarcie
 
 ```cron
-@reboot sleep 30 && cd /home/terminal3/mes-parafina-app && docker compose up -d
+@reboot sleep 30 && cd /home/terminal3/mes-parafina-app && COMPOSE_FILE=docker-compose.yml:docker-compose.primary.yml docker compose up -d
 ```
 
 ### Git na produkcji
@@ -104,6 +108,7 @@ ENVIRONMENT=development
 ```bash
 git config core.fileMode false
 git pull
+chmod +x scripts/*.sh
 ```
 
 ### Logi backupu
@@ -114,13 +119,37 @@ tail -50 ~/mes-backup.log
 
 ---
 
-## Test odtwarzania (co miesiąc, na terminal1)
+## Utrzymanie repliki (terminal1)
+
+### Cron `@reboot`
+
+```cron
+@reboot sleep 30 && /home/terminal1/mes-parafina-app/scripts/mysql-replication-start-db.sh >> /home/terminal1/mes-replica.log 2>&1
+```
+
+### Status (co tydzień)
 
 ```bash
-cd ~/mes-parafina-app
-./scripts/failover-start.sh --sync-env
-# sprawdź http://terminal1/ w przeglądarce
+./scripts/mysql-replication-status.sh
+```
+
+Oczekiwane: `Slave_IO_Running: Yes`, `Slave_SQL_Running: Yes`, `Seconds_Behind_Master: 0`
+
+---
+
+## Test miesięczny (terminal1)
+
+**Replikacja działa — nie uruchamiaj pełnego stacku na co dzień.**
+
+```bash
+# tylko sprawdź replikę:
+./scripts/mysql-replication-status.sh
+
+# opcjonalnie test failover (krótko):
+./scripts/failover-start.sh --use-replication --sync-env
+# sprawdź http://terminal1/
 ./scripts/failover-stop.sh
+./scripts/mysql-replication-setup-replica.sh   # przywróć replikę po teście
 ```
 
 ---
@@ -130,129 +159,71 @@ cd ~/mes-parafina-app
 ### 1. Potwierdź awarię
 
 ```bash
-# z terminal1 lub innego PC w sieci
 curl -I http://terminal3/
-ssh terminal3    # jeśli nie odpowiada — failover
+ssh terminal3
+./scripts/mysql-replication-status.sh   # replika powinna być aktualna
 ```
 
-### 2. Uruchom system na terminal1
+### 2. Uruchom na terminal1
 
-**Pełny failover (restore z ostatniego backupu):**
+**Zalecane (replikacja działa — dane sprzed sekund):**
 
 ```bash
 cd ~/mes-parafina-app
 git pull
-./scripts/failover-start.sh --sync-env
+./scripts/failover-start.sh --use-replication --sync-env
 ```
 
-**Bez restore (baza już była odtworzona wcześniej):**
+**Awaryjnie (restore z backupu, gdy replikacja nie działa):**
+
+```bash
+./scripts/failover-start.sh --sync-env
+# lub konkretny dump:
+DUMP_FILE=~/mes-backups/mysql/latest.sql.gz ./scripts/failover-start.sh --sync-env
+```
+
+**Bez restore (baza już gotowa):**
 
 ```bash
 ./scripts/failover-start.sh --no-restore
 ```
 
-**Konkretny plik backupu:**
+### 3. Sprawdź
 
 ```bash
-DUMP_FILE=~/mes-backups/mysql/mes_parafina_db_20260616_180001.sql.gz \
-  ./scripts/failover-start.sh --sync-env
-```
-
-### 3. Sprawdź działanie
-
-```bash
-docker compose ps
+docker compose -f docker-compose.yml -f docker-compose.standby.yml -f docker-compose.failover.yml ps
 docker compose logs -f web
 curl -I http://terminal1/
 ```
 
-Otwórz w przeglądarce: `http://terminal1/` (port **80**).
-
-Skrypty failover używają `docker-compose.standby.yml`, który mapuje `80:5000`.
-
 ### 4. Przekieruj użytkowników
 
-**Opcja A — zmiana DNS / routera (zalecane):**
-
-Przypisz nazwę `terminal3` do IP maszyny **terminal1**.
-
-**Opcja B — plik hosts na każdym kliencie:**
-
-```
-192.168.x.x   terminal3
-```
-
-(gdzie `192.168.x.x` to IP **terminal1**)
-
-**Opcja C — komunikat:**
-
-„Wchodźcie na `http://terminal1/`”.
+- DNS/router: nazwa `terminal3` → IP **terminal1**, lub
+- `/etc/hosts` na klientach, lub
+- komunikat: „wchodźcie na `http://terminal1/`”
 
 ### 5. Po przełączeniu
 
-- Backup z terminal3 **nie działa** — po naprawie terminal3 uruchom go ponownie.
-- Nowe dane powstają tylko na terminal1 — przed failback zrób dump z terminal1.
+- Backup na terminal3 nie działa — po naprawie wznów cron.
+- Nowe dane tylko na terminal1 — przed failback zrób dump.
 
 ---
 
 ## Failback — powrót na terminal3
 
-Gdy terminal3 wróci do działania:
-
-### 1. Zatrzymaj standby
-
-```bash
-# na terminal1
-cd ~/mes-parafina-app
-./scripts/failover-stop.sh
-```
-
-### 2. Jeśli na terminal1 powstały nowe dane produkcyjne
-
-Zrób dump na terminal1 i przywróć na terminal3:
-
-```bash
-# terminal1 — tymczasowo uruchom tylko db jeśli stack down
-cd ~/mes-parafina-app
-docker compose up -d db
-# ręczny dump (lub uruchom backup-mes.sh jeśli dostosujesz do standby)
-
-# terminal3 — po uruchomieniu stacku
-./scripts/restore-mes.sh /ścieżka/do/dumpa.sql.gz
-```
-
-### 3. Uruchom produkcję na terminal3
-
-```bash
-cd ~/mes-parafina-app
-docker compose up -d
-docker compose exec web alembic upgrade head
-```
-
-### 4. Przywróć DNS / hosts
-
-`terminal3` → z powrotem IP **terminal3**.
-
-### 5. Wznów backup
-
-Sprawdź cron i ręcznie:
-
-```bash
-./scripts/backup-mes.sh
-```
+1. Na terminal1: `./scripts/failover-stop.sh`
+2. Dump z terminal1 (jeśli były nowe dane) → restore na terminal3
+3. Na terminal3: `COMPOSE_FILE=docker-compose.yml:docker-compose.primary.yml docker compose up -d`
+4. Na terminal1: `./scripts/mysql-replication-setup-replica.sh` (odtwórz replikę)
+5. Przywróć DNS: `terminal3` → IP terminal3
+6. Wznów backup: `./scripts/backup-mes.sh`
 
 ---
 
-## Monitoring (opcjonalnie, terminal1)
+## Monitoring (terminal1, opcjonalnie)
 
 ```cron
 */5 * * * * /home/terminal1/mes-parafina-app/scripts/monitor-primary.sh >> /home/terminal1/mes-monitor.log 2>&1
-```
-
-Log awarii:
-
-```bash
-tail -20 ~/mes-monitor.log
 ```
 
 ---
@@ -261,19 +232,18 @@ tail -20 ~/mes-monitor.log
 
 | Problem | Rozwiązanie |
 |---------|-------------|
-| JS się nie ładują | `FLASK_ENV=development`, `ENVIRONMENT=development` w `.env` |
-| `git pull` blokuje się | `git config core.fileMode false` lub `git checkout -- scripts/` |
-| Brak odpowiedzi HTTP | `docker compose logs web`, sprawdź port w `docker-compose.yml` |
-| Restore się nie udaje | `docker compose up -d db`, poczekaj 30 s, ponów restore |
-| Symlink `latest.sql.gz` zły na terminal1 | Uruchom backup ponownie na terminal3 (względny symlink) |
+| JS się nie ładują (HTTP) | `FLASK_ENV=development`, `ENVIRONMENT=development` w `.env` |
+| `git pull` blokuje się | `git config core.fileMode false` |
+| Replika `Connecting` / błąd SSL | terminal3: `mysql-replication-fix-auth-primary.sh`; terminal1: `mysql-replication-fix-io.sh` |
+| Replika w stanie błędu SQL | Ponów `mysql-replication-setup-replica.sh` |
+| Restore nie działa | `MYSQL_PWD` — użyj `restore-mes.sh` z repo |
+| Symlink `latest.sql.gz` zły | Ponów backup na terminal3 |
 
 ---
 
-## Kontakty i notatki
+## Kontakty (uzupełnij ręcznie)
 
-Uzupełnij ręcznie:
-
-- IP terminal3: `________________`
-- IP terminal1: `________________`
+- IP terminal3 (Tailscale): `100.69.117.56`
+- IP terminal1 (Tailscale): `100.69.117.5` / `100.124.169.118`
 - IP oczyszczalnia-aio: `________________`
-- Osoba do powiadomienia przy awarii: `________________`
+- Osoba przy awarii: `________________`
