@@ -150,11 +150,18 @@ if [[ -z "${LOG_FILE}" || -z "${LOG_POS}" ]]; then
     fail "Nie udało się odczytać pozycji binlog z dumpa."
 fi
 
+# Kontener MySQL nie zawsze rozwiązuje hostname — użyj IP dla MASTER_HOST
+PRIMARY_IP="$(getent hosts "${PRIMARY_HOST}" | awk '{print $1}' | head -1)"
+if [[ -z "${PRIMARY_IP}" ]]; then
+    fail "Nie można rozwiązać PRIMARY_HOST=${PRIMARY_HOST} do adresu IP."
+fi
+log "MASTER_HOST=${PRIMARY_IP} (z ${PRIMARY_HOST})"
+
 log "Konfiguruję replikację (MASTER_LOG_FILE=${LOG_FILE}, MASTER_LOG_POS=${LOG_POS})..."
 docker compose exec -T db env MYSQL_PWD="${MYSQL_ROOT_PASSWORD}" mysql -h 127.0.0.1 -u root <<EOF
 STOP SLAVE;
 CHANGE MASTER TO
-  MASTER_HOST='${PRIMARY_HOST}',
+  MASTER_HOST='${PRIMARY_IP}',
   MASTER_USER='${REPL_USER}',
   MASTER_PASSWORD='${REPL_PASSWORD}',
   MASTER_PORT=3306,
