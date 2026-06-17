@@ -98,7 +98,8 @@ docker volume rm mes-parafina-app_mysql_data 2>/dev/null || \
 wait_for_db() {
     local i
     for i in $(seq 1 30); do
-        if docker compose exec -T db mysqladmin ping -u root -p"${MYSQL_ROOT_PASSWORD}" --silent 2>/dev/null; then
+        if docker compose exec -T db env MYSQL_PWD="${MYSQL_ROOT_PASSWORD}" \
+            mysqladmin -h 127.0.0.1 -u root ping --silent 2>/dev/null; then
             return 0
         fi
         sleep 2
@@ -125,7 +126,12 @@ docker run --rm --network host mysql:8.0 mysqldump \
     > "${TMP_DUMP}"
 
 log "Przywracam dane na replice..."
-docker compose exec -T db mysql -u root -p"${MYSQL_ROOT_PASSWORD}" < "${TMP_DUMP}"
+if ! docker compose exec -T db env MYSQL_PWD="${MYSQL_ROOT_PASSWORD}" \
+    mysql -h 127.0.0.1 -u root < "${TMP_DUMP}"; then
+    log "Sprawdź hasło root lokalnie:"
+    log "  docker compose exec db env MYSQL_PWD=\"\$MYSQL_ROOT_PASSWORD\" mysql -h 127.0.0.1 -u root -e \"SELECT 1\""
+    fail "Nie udało się przywrócić dumpa na replice."
+fi
 
 SOURCE_LINE="$(grep -m1 '^-- CHANGE REPLICATION SOURCE TO' "${TMP_DUMP}" | sed 's/^-- //' || true)"
 MASTER_LINE="$(grep -m1 '^-- CHANGE MASTER TO' "${TMP_DUMP}" | sed 's/^-- //' || true)"
@@ -145,7 +151,7 @@ if [[ -z "${LOG_FILE}" || -z "${LOG_POS}" ]]; then
 fi
 
 log "Konfiguruję replikację (MASTER_LOG_FILE=${LOG_FILE}, MASTER_LOG_POS=${LOG_POS})..."
-docker compose exec -T db mysql -u root -p"${MYSQL_ROOT_PASSWORD}" <<EOF
+docker compose exec -T db env MYSQL_PWD="${MYSQL_ROOT_PASSWORD}" mysql -h 127.0.0.1 -u root <<EOF
 STOP SLAVE;
 CHANGE MASTER TO
   MASTER_HOST='${PRIMARY_HOST}',

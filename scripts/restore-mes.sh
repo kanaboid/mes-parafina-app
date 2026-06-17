@@ -64,8 +64,8 @@ fi
 
 log "Przywracam bazę z ${DUMP_FILE}..."
 
-gunzip -c "${DUMP_FILE}" | docker compose exec -T db \
-    mysql -u root -p"${MYSQL_ROOT_PASSWORD}"
+gunzip -c "${DUMP_FILE}" | docker compose exec -T db env MYSQL_PWD="${MYSQL_ROOT_PASSWORD}" \
+    mysql -h 127.0.0.1 -u root
 
 log "Restore zakończony. Sprawdź aplikację:"
 log "  docker compose up -d"
