@@ -39,6 +39,6 @@ echo "=== MySQL ${MODE} — $(date) ==="
 if [[ "${MODE}" == "PRIMARY" ]]; then
     docker compose exec -T db mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "SHOW MASTER STATUS\G"
 else
-    docker compose exec -T db mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "SHOW REPLICA STATUS\G" | \
-        grep -E "Replica_IO_Running|Replica_SQL_Running|Seconds_Behind_Source|Source_Host|Last_Error|Last_SQL_Error"
+    docker compose exec -T db mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "SHOW SLAVE STATUS\G" | \
+        grep -E "Slave_IO_Running|Slave_SQL_Running|Seconds_Behind_Master|Master_Host|Last_Error|Last_SQL_Error"
 fi

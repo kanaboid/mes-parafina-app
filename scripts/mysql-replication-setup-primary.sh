@@ -57,7 +57,7 @@ sleep 10
 log "Tworzę użytkownika replikacji: ${REPL_USER}..."
 docker compose exec -T db mysql -u root -p"${MYSQL_ROOT_PASSWORD}" <<EOF
 CREATE USER IF NOT EXISTS '${REPL_USER}'@'%' IDENTIFIED BY '${REPL_PASSWORD}';
-GRANT REPLICATION REPLICA ON *.* TO '${REPL_USER}'@'%';
+GRANT REPLICATION SLAVE ON *.* TO '${REPL_USER}'@'%';
 FLUSH PRIVILEGES;
 SHOW MASTER STATUS;
 EOF

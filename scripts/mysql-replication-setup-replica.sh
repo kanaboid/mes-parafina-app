@@ -87,20 +87,34 @@ docker run --rm mysql:8.0 mysqldump \
 log "Przywracam dane na replice..."
 docker compose exec -T db mysql -u root -p"${MYSQL_ROOT_PASSWORD}" < "${TMP_DUMP}"
 
-SOURCE_LINE="$(grep -m1 '^-- CHANGE REPLICATION SOURCE TO' "${TMP_DUMP}" | sed 's/^-- //')"
-if [[ -z "${SOURCE_LINE}" ]]; then
+SOURCE_LINE="$(grep -m1 '^-- CHANGE REPLICATION SOURCE TO' "${TMP_DUMP}" | sed 's/^-- //' || true)"
+MASTER_LINE="$(grep -m1 '^-- CHANGE MASTER TO' "${TMP_DUMP}" | sed 's/^-- //' || true)"
+
+if [[ -n "${SOURCE_LINE}" ]]; then
+    LOG_FILE="$(echo "${SOURCE_LINE}" | sed -n "s/.*SOURCE_LOG_FILE='\([^']*\)'.*/\1/p")"
+    LOG_POS="$(echo "${SOURCE_LINE}" | sed -n 's/.*SOURCE_LOG_POS=\([0-9]*\).*/\1/p')"
+elif [[ -n "${MASTER_LINE}" ]]; then
+    LOG_FILE="$(echo "${MASTER_LINE}" | sed -n "s/.*MASTER_LOG_FILE='\([^']*\)'.*/\1/p")"
+    LOG_POS="$(echo "${MASTER_LINE}" | sed -n 's/.*MASTER_LOG_POS=\([0-9]*\).*/\1/p')"
+else
     fail "Nie znaleziono pozycji binlog w dumpie — czy PRIMARY ma włączony binlog?"
 fi
 
-# Dodaj host i dane logowania do polecenia CHANGE REPLICATION SOURCE TO
-SOURCE_CMD="${SOURCE_LINE%;}"
-SOURCE_CMD="${SOURCE_CMD}, SOURCE_HOST='${PRIMARY_HOST}', SOURCE_USER='${REPL_USER}', SOURCE_PASSWORD='${REPL_PASSWORD}', SOURCE_PORT=3306;"
+if [[ -z "${LOG_FILE}" || -z "${LOG_POS}" ]]; then
+    fail "Nie udało się odczytać pozycji binlog z dumpa."
+fi
 
-log "Konfiguruję replikację..."
+log "Konfiguruję replikację (MASTER_LOG_FILE=${LOG_FILE}, MASTER_LOG_POS=${LOG_POS})..."
 docker compose exec -T db mysql -u root -p"${MYSQL_ROOT_PASSWORD}" <<EOF
-STOP REPLICA;
-${SOURCE_CMD}
-START REPLICA;
+STOP SLAVE;
+CHANGE MASTER TO
+  MASTER_HOST='${PRIMARY_HOST}',
+  MASTER_USER='${REPL_USER}',
+  MASTER_PASSWORD='${REPL_PASSWORD}',
+  MASTER_PORT=3306,
+  MASTER_LOG_FILE='${LOG_FILE}',
+  MASTER_LOG_POS=${LOG_POS};
+START SLAVE;
 EOF
 
 sleep 5

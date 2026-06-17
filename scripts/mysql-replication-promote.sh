@@ -36,8 +36,8 @@ fi
 
 log "Promuję replikę do PRIMARY (wyłączam replikację, zdejmuję read_only)..."
 docker compose exec -T db mysql -u root -p"${MYSQL_ROOT_PASSWORD}" <<'EOF'
-STOP REPLICA;
-RESET REPLICA ALL;
+STOP SLAVE;
+RESET SLAVE ALL;
 SET GLOBAL read_only=OFF;
 SET GLOBAL super_read_only=OFF;
 EOF

@@ -99,9 +99,9 @@ Cron `@reboot` na terminal1:
 Oczekiwane:
 
 ```
-Replica_IO_Running: Yes
-Replica_SQL_Running: Yes
-Seconds_Behind_Source: 0   (lub mała liczba)
+Slave_IO_Running: Yes
+Slave_SQL_Running: Yes
+Seconds_Behind_Master: 0   (lub mała liczba)
 ```
 
 ---
@@ -149,8 +149,8 @@ Uproszczony plan:
 
 | Problem | Rozwiązanie |
 |---------|-------------|
-| `Replica_IO_Running: No` | Firewall 3306, hasło `repl`, `PRIMARY_HOST` |
-| `Seconds_Behind_Source` duże | Odczekaj; sprawdź obciążenie sieci/CPU |
+| `Slave_IO_Running: No` | Firewall 3306, hasło `repl`, `PRIMARY_HOST` |
+| `Seconds_Behind_Master` duże | Odczekaj; sprawdź obciążenie sieci/CPU |
 | Brak `SHOW MASTER STATUS` na primary | Uruchom z `docker-compose.primary.yml` |
 | Replikacja po teście restore | Ponów `mysql-replication-setup-replica.sh` |
 
