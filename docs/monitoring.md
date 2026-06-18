@@ -28,7 +28,116 @@ oczyszczalnia-aio                    terminal3 / terminal1
 
 ---
 
-## 2. Uptime Kuma (oczyszczalnia-aio)
+## 2. Instalacja Dockera (oczyszczalnia-aio)
+
+Ten host służył dotąd tylko jako archiwum rsync. Jeśli był tam **Docker Desktop** lub masz problemy z `permission denied` / `docker-credential-desktop` — zrób **czystą reinstalację** (sekcja 2A). Przy pierwszej instalacji wystarczy sekcja 2B.
+
+### 2A. Czysta reinstalacja (usuń wszystko, potem od nowa)
+
+Wykonaj na **oczyszczalnia-aio** jako użytkownik z `sudo`.
+
+**Krok 1 — zatrzymaj usługi**
+
+```bash
+sudo systemctl stop docker docker.socket containerd 2>/dev/null || true
+```
+
+**Krok 2 — usuń pakiety (Desktop, CE i Ubuntu)**
+
+```bash
+sudo apt purge -y \
+  docker-desktop docker-ce docker-ce-cli docker-ce-rootless-extras \
+  docker-buildx-plugin docker-compose-plugin docker-compose-v2 docker.io \
+  containerd containerd.io runc moby-engine moby-cli 2>/dev/null || true
+
+sudo apt autoremove -y --purge
+sudo apt autoclean
+```
+
+**Krok 3 — usuń repozytoria i stare pliki**
+
+```bash
+sudo rm -f /etc/apt/sources.list.d/docker*.list
+sudo rm -f /usr/share/keyrings/docker*.gpg /etc/apt/keyrings/docker*.gpg 2>/dev/null || true
+
+rm -rf ~/.docker
+sudo rm -rf /var/lib/docker /var/lib/containerd /etc/docker
+
+sudo rm -f /usr/local/bin/docker /usr/local/bin/docker-compose /usr/local/bin/com.docker.cli
+sudo rm -rf /opt/docker-desktop 2>/dev/null || true
+```
+
+**Krok 4 — wyczyść powłokę (bash pamięta starą ścieżkę)**
+
+```bash
+grep -n 'docker\|Docker' ~/.bashrc ~/.profile ~/.bash_aliases 2>/dev/null
+# usuń lub zakomentuj linie ze ścieżką /usr/local/bin/docker
+hash -r
+```
+
+**Krok 5 — zrestartuj komputer** (najpewniej odświeża grupy i socket)
+
+```bash
+sudo reboot
+```
+
+**Krok 6 — świeża instalacja (tylko pakiety Ubuntu, bez Desktop)**
+
+Po ponownym logowaniu:
+
+```bash
+sudo apt update
+sudo apt install -y docker.io docker-compose-v2
+sudo systemctl enable --now docker
+sudo usermod -aG docker "$USER"
+```
+
+> Instaluj **`docker-compose-v2` LUB `docker-compose-plugin`** — **nie oba**. Po czystej reinstalacji wybierz `docker-compose-v2` (prostsze, bez repo Docker CE).
+
+**Krok 7 — zamknij wszystkie sesje użytkownika** (grupa `docker` nie działa w starych sesjach)
+
+```bash
+# sprawdź, czy jesteś w grupie (po reboot zwykle tak)
+id
+# powinno być: groups=...(...,docker,...)
+
+# jeśli nadal brak docker w id — wymuś zamknięcie sesji:
+sudo loginctl terminate-user "$USER"
+# zaloguj się ponownie (SSH / pulpit)
+```
+
+**Krok 8 — weryfikacja**
+
+```bash
+which docker                    # /usr/bin/docker
+docker compose version
+ls -la /var/run/docker.sock     # root docker, prawa srw-rw----
+docker ps                       # bez sudo, bez permission denied
+```
+
+**Krok 9 — Kuma**
+
+```bash
+cd ~/mes-parafina-app
+./scripts/monitoring-start.sh kuma
+```
+
+---
+
+### 2B. Pierwsza instalacja (bez reinstalacji)
+
+```bash
+sudo apt update
+sudo apt install -y docker.io docker-compose-v2
+sudo systemctl enable --now docker
+sudo usermod -aG docker "$USER"
+```
+
+Wyloguj się / zrestartuj, potem `docker ps`. Szczegóły problemów: sekcja 7.
+
+---
+
+## 3. Uptime Kuma (oczyszczalnia-aio)
 
 ```bash
 cd ~/mes-parafina-app
@@ -98,7 +207,7 @@ Stary `monitor-primary.sh` możesz **wyłączyć z crona** — te same checki ro
 
 ---
 
-## 3. Netdata (wszystkie hosty)
+## 4. Netdata (wszystkie hosty)
 
 Na **każdym** hoście (terminal3, terminal1, oczyszczalnia-aio):
 
@@ -146,7 +255,7 @@ Bez claim tokena Netdata działa tylko lokalnie na `:19999` — to wystarczy na 
 
 ---
 
-## 4. Podsumowanie cronów
+## 5. Podsumowanie cronów
 
 | Host | Zadanie | Cron |
 |------|---------|------|
@@ -157,7 +266,7 @@ Bez claim tokena Netdata działa tylko lokalnie na `:19999` — to wystarczy na 
 
 ---
 
-## 5. Uprawnienia skryptów (bezpieczeństwo)
+## 6. Uprawnienia skryptów (bezpieczeństwo)
 
 Zostaw **+x** tylko na skryptach wołanych z crona:
 
@@ -169,10 +278,14 @@ Reszta: `chmod -x` i uruchamianie przez `bash scripts/...`.
 
 ---
 
-## 6. Rozwiązywanie problemów
+## 7. Rozwiązywanie problemów
 
 | Problem | Rozwiązanie |
 |---------|-------------|
+| `permission denied` na docker.sock | `sudo usermod -aG docker $USER`, **reboot** lub `sudo loginctl terminate-user $USER`; sprawdź `id` i `ls -la /var/run/docker.sock` |
+| `docker.sock: no such file` | Sekcja 2B; `sudo systemctl start docker` |
+| `/usr/local/bin/docker` nie istnieje | `hash -r`; usuń alias z `.bashrc`; `which docker` → `/usr/bin/docker` |
+| `docker-credential-desktop` | Sekcja 2A — czysta reinstalacja lub `printf '{}' > ~/.docker/config.json` |
 | Kuma nie widzi terminal3 | Ping z oczyszczalnia-aio; DNS/hosts; firewall |
 | Push backup — fałszywy alarm | Sprawdź cron backupu; `UPTIME_KUMA_BACKUP_PUSH_URL` w `.env` terminal3 |
 | Replikacja Push — alert | `./scripts/mysql-replication-status.sh`; napraw replikację |
