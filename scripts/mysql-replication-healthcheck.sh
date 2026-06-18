@@ -39,14 +39,22 @@ if [[ -z "${STATUS_RAW}" ]] || ! echo "${STATUS_RAW}" | grep -qE 'Slave_IO_Runni
     exit 1
 fi
 
+# MySQL wypisuje pola z wcięciem: "             Slave_IO_Running: Yes"
 get_field() {
     local key="$1"
     local alt_key="${2:-}"
-    local value
-    value="$(echo "${STATUS_RAW}" | awk -F': ' -v key="${key}" '$1 == key {gsub(/^[ \t]+/, "", $2); print $2; exit}')"
-    if [[ -z "${value}" && -n "${alt_key}" ]]; then
-        value="$(echo "${STATUS_RAW}" | awk -F': ' -v key="${alt_key}" '$1 == key {gsub(/^[ \t]+/, "", $2); print $2; exit}')"
+    local line value
+
+    line="$(echo "${STATUS_RAW}" | grep -E "[[:space:]]${key}:" | head -1 || true)"
+    if [[ -z "${line}" && -n "${alt_key}" ]]; then
+        line="$(echo "${STATUS_RAW}" | grep -E "[[:space:]]${alt_key}:" | head -1 || true)"
     fi
+    if [[ -z "${line}" ]]; then
+        return 0
+    fi
+    value="${line#*:}"
+    value="${value#"${value%%[![:space:]]*}"}"
+    value="${value%"${value##*[![:space:]]}"}"
     echo "${value}"
 }
 
