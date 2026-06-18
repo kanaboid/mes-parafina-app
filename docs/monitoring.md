@@ -297,7 +297,7 @@ Bez claim tokena Netdata działa tylko lokalnie na `:19999` — to wystarczy na 
 
 Zostaw **+x** tylko na skryptach wołanych z crona:
 
-- terminal3: `backup-mes.sh`, `monitoring-kuma-push.sh` (wołany z backupu)
+- terminal3: `backup-mes.sh` (cron; woła push przez `bash scripts/monitoring-kuma-push.sh`)
 - terminal1: `mysql-replication-healthcheck.sh`, `mysql-replication-start-db.sh`
 - oczyszczalnia-aio: `monitoring-start.sh`
 

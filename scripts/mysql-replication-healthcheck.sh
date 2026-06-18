@@ -76,7 +76,7 @@ fi
 if [[ -n "${UPTIME_KUMA_REPLICATION_PUSH_URL:-}" ]]; then
     UPTIME_KUMA_PUSH_URL="${UPTIME_KUMA_REPLICATION_PUSH_URL}" \
         UPTIME_KUMA_PUSH_MSG="repl OK lag=${LAG:-0}s" \
-        "${APP_DIR}/scripts/monitoring-kuma-push.sh"
+        bash "${APP_DIR}/scripts/monitoring-kuma-push.sh"
 fi
 
 # Domyślnie cisza przy sukcesie (żeby nie zaśmiecać logu crona).

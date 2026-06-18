@@ -103,5 +103,5 @@ log "Backup zakończony pomyślnie."
 if [[ -n "${UPTIME_KUMA_BACKUP_PUSH_URL:-}" ]]; then
     UPTIME_KUMA_PUSH_URL="${UPTIME_KUMA_BACKUP_PUSH_URL}" \
         UPTIME_KUMA_PUSH_MSG="backup OK ${DATE}" \
-        "${APP_DIR}/scripts/monitoring-kuma-push.sh"
+        bash "${APP_DIR}/scripts/monitoring-kuma-push.sh"
 fi
