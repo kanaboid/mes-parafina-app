@@ -176,24 +176,40 @@ sudo ufw allow from 192.168.0.0/16 to any port 3001 proto tcp
 
 1. W Kuma: Add Monitor → typ **Push**.
 2. Heartbeat Interval: **3600** s (1 h), Grace Period: **600** s.
-3. Skopiuj URL Push do `.env` na **terminal3**:
+3. Skopiuj **Push URL** (sam token, bez parametrów) do `.env` na **terminal3**.
+
+> **Ważne:** URL **musi być w cudzysłowach** — znak `&` w `.env` bez cudzysłowów psuje wartość przy `source .env`.
 
 ```env
-UPTIME_KUMA_BACKUP_PUSH_URL=http://oczyszczalnia-aio:3001/api/push/TWOJ_TOKEN?status=up&msg=ok&ping=
+UPTIME_KUMA_BACKUP_PUSH_URL="http://oczyszczalnia-aio:3001/api/push/TWOJ_TOKEN"
 ```
 
-`backup-mes.sh` wyśle ping automatycznie po udanym backupie.
+Test ręczny (od razu, bez czekania na cron):
+
+```bash
+cd ~/mes-parafina-app
+chmod +x scripts/monitoring-kuma-test.sh
+./scripts/monitoring-kuma-test.sh backup
+```
+
+`backup-mes.sh` wyśle ping automatycznie po udanym backupie (cron co 1 h).
 
 **Push — replikacja (terminal1):**
 
 1. Nowy monitor Push, interwał **300** s, grace **120** s.
-2. W `.env` na **terminal1**:
+2. W `.env` na **terminal1** (w cudzysłowach):
 
 ```env
-UPTIME_KUMA_REPLICATION_PUSH_URL=http://oczyszczalnia-aio:3001/api/push/TWOJ_TOKEN?status=up&msg=ok&ping=
+UPTIME_KUMA_REPLICATION_PUSH_URL="http://oczyszczalnia-aio:3001/api/push/TWOJ_TOKEN"
 ```
 
-Cron na terminal1:
+Test:
+
+```bash
+./scripts/monitoring-kuma-test.sh replication
+```
+
+Cron na terminal1 (bez tego **nie będzie** heartbeat co 5 min):
 
 ```cron
 */5 * * * * /home/terminal1/mes-parafina-app/scripts/mysql-replication-healthcheck.sh >> /home/terminal1/mes-replication-health.log 2>&1
@@ -287,7 +303,7 @@ Reszta: `chmod -x` i uruchamianie przez `bash scripts/...`.
 | `/usr/local/bin/docker` nie istnieje | `hash -r`; usuń alias z `.bashrc`; `which docker` → `/usr/bin/docker` |
 | `docker-credential-desktop` | Sekcja 2A — czysta reinstalacja lub `printf '{}' > ~/.docker/config.json` |
 | Kuma nie widzi terminal3 | Ping z oczyszczalnia-aio; DNS/hosts; firewall |
-| Push backup — fałszywy alarm | Sprawdź cron backupu; `UPTIME_KUMA_BACKUP_PUSH_URL` w `.env` terminal3 |
+| Push — brak heartbeat | Cudzysłowy w `.env`; `./scripts/monitoring-kuma-test.sh backup`; cron na terminal1; firewall **na oczyszczalnia-aio** (port 3001 ← terminal3/terminal1) |
 | Replikacja Push — alert | `./scripts/mysql-replication-status.sh`; napraw replikację |
 | Netdata pusty Docker | Uprawnienia do `/var/run/docker.sock`; restart kontenera |
 | Brak miejsca na dysku | Netdata → Disk; wyczyść stare backupy (`KEEP_DAYS`) |
