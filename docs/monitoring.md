@@ -174,19 +174,25 @@ sudo ufw allow from 192.168.0.0/16 to any port 3001 proto tcp
 | Nazwa | Typ | Cel | Interwał |
 |-------|-----|-----|----------|
 | MES produkcja | HTTP(s) | `http://terminal3/` | 60 s |
-| MES standby | HTTP(s) | `http://terminal1/` | 300 s |
+| MES standby | HTTP(s) | `http://terminal1/` | **wyłącz / Pause** — patrz uwaga poniżej |
 | MySQL PRIMARY | Port TCP | `terminal3:3306` | 60 s |
 | MySQL REPLICA | Port TCP | `terminal1:3306` | 60 s |
 | Ping terminal3 | Ping | `terminal3` | 60 s |
 | Ping terminal1 | Ping | `terminal1` | 60 s |
 | Ping oczyszczalnia-aio | Ping | `oczyszczalnia-aio` | 300 s |
-| Backup MES | **Push** | URL z panelu (patrz niżej) | oczekiwany ping co 1 h |
-| Replikacja MySQL | **Push** | URL z panelu | oczekiwany ping co 5 min |
+| Backup MES | **Push** | URL z panelu | Heartbeat **4200** s (~70 min, cron co 1 h) |
+| Replikacja MySQL | **Push** | URL z panelu | Heartbeat **360** s (~6 min, cron co 5 min) |
+
+> **Push w Kuma:** jest tylko pole **Heartbeat Interval** (czas w sekundach). Nie ma osobnego „Grace Period” — bufor dodajesz **do tego interwału** (np. 1 h + 10 min → ustaw **4200** s, nie 3600).
+
+**terminal1 a HTTP :80 — `ECONNREFUSED` to norma w trybie standby.** Na terminal1 działa zwykle **tylko MySQL** (replika), bez aplikacji web. Port 80 nasłuchuje dopiero po `failover-start.sh`. W Kuma:
+- **Pause** monitor „MES standby” na co dzień, albo usuń go i polegaj na Ping + TCP 3306 + Push replikacji;
+- po awarii / teście failover włącz monitor HTTP na terminal1 (albo sprawdź ręcznie `curl http://terminal1/`).
 
 **Push — backup (terminal3):**
 
 1. W Kuma: Add Monitor → typ **Push**.
-2. Heartbeat Interval: **3600** s (1 h), Grace Period: **600** s.
+2. **Heartbeat Interval:** **4200** s (cron co 1 h + ~10 min buforu). Nie ma osobnego Grace Period — cały zapas w tym jednym polu.
 3. Skopiuj **Push URL** do **głównego** `~/mes-parafina-app/.env` na **terminal3** (nie do `monitoring/.env`).
 
 > **Ważne:** URL **musi być w cudzysłowach** — znak `&` w `.env` bez cudzysłowów psuje wartość przy `source .env`.
@@ -207,7 +213,7 @@ chmod +x scripts/monitoring-kuma-test.sh
 
 **Push — replikacja (terminal1):**
 
-1. Nowy monitor Push, interwał **300** s, grace **120** s.
+1. Nowy monitor Push, **Heartbeat Interval: 360** s (cron co 5 min + ~1 min buforu).
 2. W **głównym** `~/mes-parafina-app/.env` na **terminal1** (w cudzysłowach):
 
 ```env
