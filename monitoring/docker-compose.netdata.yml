@@ -1,6 +1,7 @@
 # Netdata — metryki hosta i kontenerów Docker.
 # Uruchom na każdym hoście: ./scripts/monitoring-start.sh netdata
-# Panel: http://<host>:19999
+# Panel lokalny (bez logowania): http://<host>:19999/v3
+# Stary adres :19999/ pokazuje ekran „Sign-in” — to normalne w Netdata 2.x
 
 services:
   netdata:
@@ -16,6 +17,7 @@ services:
     security_opt:
       - apparmor:unconfined
     environment:
+      - NETDATA_DISABLE_CLOUD=1
       - NETDATA_CLAIM_TOKEN=${NETDATA_CLAIM_TOKEN:-}
       - NETDATA_CLAIM_URL=${NETDATA_CLAIM_URL:-https://app.netdata.cloud}
       - NETDATA_CLAIM_ROOMS=${NETDATA_CLAIM_ROOMS:-}

@@ -261,7 +261,9 @@ chmod +x scripts/monitoring-start.sh
 ./scripts/monitoring-start.sh netdata
 ```
 
-Panel lokalny: **http://&lt;host&gt;:19999/**
+Panel lokalny (wykresy): **http://&lt;host&gt;:19999/v3**
+
+> Netdata 2.x na `:19999/` pokazuje ekran „Sign-in” — kliknij **„Skip and use the dashboard anonymously”** albo od razu wejdź na **`/v3`**. Logowanie nie jest wymagane.
 
 Firewall (opcjonalnie, tylko z LAN):
 
