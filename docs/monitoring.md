@@ -137,6 +137,17 @@ Wyloguj się / zrestartuj, potem `docker ps`. Szczegóły problemów: sekcja 7.
 
 ---
 
+## Dwa pliki `.env` — nie pomyl
+
+| Plik | Host | Zawartość |
+|------|------|-----------|
+| **`~/mes-parafina-app/.env`** | terminal3, terminal1 | Hasła MySQL, `SECRET_KEY`, **`UPTIME_KUMA_*_PUSH_URL`** |
+| **`~/mes-parafina-app/monitoring/.env`** | oczyszczalnia-aio (+ Netdata) | `KUMA_PORT`, `MONITORING_HOSTNAME`, Netdata Cloud |
+
+Skrypty `backup-mes.sh` i `mysql-replication-healthcheck.sh` czytają **tylko główny** `.env`.
+
+---
+
 ## 3. Uptime Kuma (oczyszczalnia-aio)
 
 ```bash
@@ -176,7 +187,7 @@ sudo ufw allow from 192.168.0.0/16 to any port 3001 proto tcp
 
 1. W Kuma: Add Monitor → typ **Push**.
 2. Heartbeat Interval: **3600** s (1 h), Grace Period: **600** s.
-3. Skopiuj **Push URL** (sam token, bez parametrów) do `.env` na **terminal3**.
+3. Skopiuj **Push URL** do **głównego** `~/mes-parafina-app/.env` na **terminal3** (nie do `monitoring/.env`).
 
 > **Ważne:** URL **musi być w cudzysłowach** — znak `&` w `.env` bez cudzysłowów psuje wartość przy `source .env`.
 
@@ -197,7 +208,7 @@ chmod +x scripts/monitoring-kuma-test.sh
 **Push — replikacja (terminal1):**
 
 1. Nowy monitor Push, interwał **300** s, grace **120** s.
-2. W `.env` na **terminal1** (w cudzysłowach):
+2. W **głównym** `~/mes-parafina-app/.env` na **terminal1** (w cudzysłowach):
 
 ```env
 UPTIME_KUMA_REPLICATION_PUSH_URL="http://oczyszczalnia-aio:3001/api/push/TWOJ_TOKEN"
@@ -303,7 +314,7 @@ Reszta: `chmod -x` i uruchamianie przez `bash scripts/...`.
 | `/usr/local/bin/docker` nie istnieje | `hash -r`; usuń alias z `.bashrc`; `which docker` → `/usr/bin/docker` |
 | `docker-credential-desktop` | Sekcja 2A — czysta reinstalacja lub `printf '{}' > ~/.docker/config.json` |
 | Kuma nie widzi terminal3 | Ping z oczyszczalnia-aio; DNS/hosts; firewall |
-| Push — brak heartbeat | Cudzysłowy w `.env`; `./scripts/monitoring-kuma-test.sh backup`; cron na terminal1; firewall **na oczyszczalnia-aio** (port 3001 ← terminal3/terminal1) |
+| Push — brak heartbeat | URL w **głównym** `.env`, nie `monitoring/.env`; cudzysłowy; `monitoring-kuma-test.sh`; cron; firewall na oczyszczalnia-aio |
 | Replikacja Push — alert | `./scripts/mysql-replication-status.sh`; napraw replikację |
 | Netdata pusty Docker | Uprawnienia do `/var/run/docker.sock`; restart kontenera |
 | Brak miejsca na dysku | Netdata → Disk; wyczyść stare backupy (`KEEP_DAYS`) |

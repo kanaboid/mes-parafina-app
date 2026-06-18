@@ -39,6 +39,16 @@ else
     exit 1
 fi
 
+if [[ -z "${PUSH_URL}" ]] && [[ -f "${APP_DIR}/monitoring/.env" ]]; then
+    if grep -q 'UPTIME_KUMA_.*_PUSH_URL' "${APP_DIR}/monitoring/.env" 2>/dev/null; then
+        echo "BŁĄD: UPTIME_KUMA_*_PUSH_URL jest w monitoring/.env, a powinno być w głównym pliku:"
+        echo "  ${APP_DIR}/.env"
+        echo ""
+        echo "Przenieś linię Push URL z monitoring/.env do .env (obok MYSQL_ROOT_PASSWORD itd.)."
+        exit 1
+    fi
+fi
+
 if [[ -z "${PUSH_URL}" ]]; then
     echo "BŁĄD: brak URL Push w .env (sprawdź nazwę zmiennej i cudzysłowy wokół URL)."
     exit 1
