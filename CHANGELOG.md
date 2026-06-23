@@ -27,6 +27,7 @@
 
 ### Added (monitoring)
 - Uptime Kuma i Netdata: `monitoring/docker-compose.kuma.yml`, `monitoring/docker-compose.netdata.yml`
+- Panel metryk: `monitoring/docker-compose.dashboard.yml`, `monitoring/dashboard/` (Flask + Netdata API)
 - Skrypty: `monitoring-start.sh`, `monitoring-kuma-push.sh`, `mysql-replication-healthcheck.sh`
 - Integracja push heartbeat w `backup-mes.sh`
 - Dokumentacja: `docs/monitoring.md`

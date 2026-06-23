@@ -21,6 +21,8 @@ oczyszczalnia-aio                    terminal3 / terminal1
 |------|------|
 | `monitoring/docker-compose.kuma.yml` | Uptime Kuma |
 | `monitoring/docker-compose.netdata.yml` | Netdata (host network) |
+| `monitoring/docker-compose.dashboard.yml` | Panel metryk (agreguje Netdata API) |
+| `monitoring/dashboard/` | Aplikacja Flask — dysk, CPU, RAM |
 | `monitoring/.env.example` | Szablon zmiennych |
 | `scripts/monitoring-start.sh` | Uruchomienie Kuma lub Netdata |
 | `scripts/monitoring-kuma-push.sh` | Ping do monitora Push |
@@ -162,6 +164,8 @@ chmod +x scripts/monitoring-start.sh scripts/monitoring-kuma-push.sh
 
 Panel: **http://oczyszczalnia-aio:3001/** — przy pierwszym wejściu utwórz konto admina.
 
+Kuma używa `network_mode: host` (jak Netdata) — port **3001** nasłuchuje bezpośrednio na hoście, bez mapowania Docker bridge. Po zmianie sieci / gateway: jeśli panel niedostępny mimo `docker ps`, zrób `git pull` i `./scripts/monitoring-start.sh kuma` (recreate kontenera).
+
 Firewall (tylko LAN):
 
 ```bash
@@ -288,9 +292,55 @@ Jeden panel dla wszystkich hostów bez otwierania trzech portów 19999:
 
 Bez claim tokena Netdata działa tylko lokalnie na `:19999` — to wystarczy na start.
 
+### API Netdata (lokalne)
+
+Wykres dysku `/` ma ID **`disk_space./`** (nie `disk_space._`):
+
+```bash
+curl -sG 'http://terminal3:19999/api/v1/data' \
+  --data-urlencode 'chart=disk_space./' \
+  --data-urlencode 'points=1' \
+  --data-urlencode 'format=json'
+```
+
 ---
 
-## 5. Podsumowanie cronów
+## 5. Panel metryk (custom dashboard, oczyszczalnia-aio)
+
+Jeden widok WWW z **dyskiem, CPU i RAM** ze wszystkich hostów — bez Netdata Cloud. Kontener odpytuje lokalne API Netdata.
+
+W `monitoring/.env` (na oczyszczalnia-aio):
+
+```env
+METRICS_DASHBOARD_PORT=3080
+NETDATA_HOSTS=terminal3,terminal1,oczyszczalnia-aio
+NETDATA_DISK_CHART=disk_space./
+DASHBOARD_REFRESH_SECONDS=30
+```
+
+Uruchomienie:
+
+```bash
+cd ~/mes-parafina-app
+git pull
+./scripts/monitoring-start.sh dashboard
+```
+
+Panel: **http://oczyszczalnia-aio:3080/**
+
+API JSON (np. dla własnych integracji): `http://oczyszczalnia-aio:3080/api/metrics`
+
+Wymaga działającego Netdata na hostach z listy (`:19999` dostępne z oczyszczalnia-aio). Kontener używa `network_mode: host`, żeby rozwiązywać hostname `terminal3` / `terminal1` jak reszta LAN.
+
+Autostart (@reboot na oczyszczalnia-aio):
+
+```cron
+@reboot sleep 90 && /home/oczyszczalnia/mes-parafina-app/scripts/monitoring-start.sh dashboard >> /home/oczyszczalnia/mes-dashboard.log 2>&1
+```
+
+---
+
+## 6. Podsumowanie cronów
 
 | Host | Zadanie | Cron |
 |------|---------|------|
@@ -298,10 +348,11 @@ Bez claim tokena Netdata działa tylko lokalnie na `:19999` — to wystarczy na 
 | terminal1 | healthcheck replikacji | `*/5 * * * * .../mysql-replication-healthcheck.sh` |
 | terminal1 | start DB @reboot | `@reboot .../mysql-replication-start-db.sh` |
 | oczyszczalnia-aio | Kuma @reboot | `@reboot sleep 60 && .../monitoring-start.sh kuma` |
+| oczyszczalnia-aio | panel metryk @reboot | `@reboot sleep 90 && .../monitoring-start.sh dashboard` |
 
 ---
 
-## 6. Uprawnienia skryptów (bezpieczeństwo)
+## 7. Uprawnienia skryptów (bezpieczeństwo)
 
 Zostaw **+x** tylko na skryptach wołanych z crona:
 
@@ -313,7 +364,7 @@ Reszta: `chmod -x` i uruchamianie przez `bash scripts/...`.
 
 ---
 
-## 7. Rozwiązywanie problemów
+## 8. Rozwiązywanie problemów
 
 | Problem | Rozwiązanie |
 |---------|-------------|
@@ -326,5 +377,7 @@ Reszta: `chmod -x` i uruchamianie przez `bash scripts/...`.
 | Replikacja Push — alert | `./scripts/mysql-replication-status.sh`; napraw replikację |
 | Netdata pusty Docker | Uprawnienia do `/var/run/docker.sock`; restart kontenera |
 | Brak miejsca na dysku | Netdata → Disk; wyczyść stare backupy (`KEEP_DAYS`) |
+| Panel metryk pusty / błąd hosta | `curl http://terminal3:19999/api/v1/charts`; firewall 19999; `NETDATA_HOSTS` w `monitoring/.env` |
+| Kuma niedostępna, kontener działa | `curl -I http://127.0.0.1:3001/` na oczyszczalnia-aio; `git pull` + recreate Kuma (`network_mode: host`); `ufw`; restart Dockera |
 
 Powiązane: [disaster-recovery.md](disaster-recovery.md), [mysql-replication.md](mysql-replication.md)

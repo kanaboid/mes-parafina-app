@@ -1,13 +1,13 @@
 # Uptime Kuma — centralny monitoring dostępności (host: oczyszczalnia-aio).
 # Uruchomienie: ./scripts/monitoring-start.sh kuma
+# Panel: http://<host>:3001/  (network_mode: host — bez mapowania portów Docker)
 
 services:
   uptime-kuma:
     image: louislam/uptime-kuma:1
     container_name: uptime-kuma
     restart: unless-stopped
-    ports:
-      - "${KUMA_PORT:-3001}:3001"
+    network_mode: host
     volumes:
       - uptime-kuma-data:/app/data
     environment:

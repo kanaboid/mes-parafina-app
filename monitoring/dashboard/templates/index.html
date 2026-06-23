@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MES — podgląd metryk</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --card: #1a2332;
+      --text: #e7ecf3;
+      --muted: #8b9bb4;
+      --ok: #3dd68c;
+      --warn: #f5c451;
+      --bad: #ff6b6b;
+      --border: #2a3649;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 1.25rem;
+    }
+    h1 { margin: 0 0 0.25rem; font-size: 1.35rem; }
+    .sub { color: var(--muted); margin-bottom: 1.25rem; font-size: 0.9rem; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1rem;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem 1.1rem;
+    }
+    .card h2 {
+      margin: 0 0 0.75rem;
+      font-size: 1.05rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .badge {
+      font-size: 0.75rem;
+      padding: 0.15rem 0.45rem;
+      border-radius: 999px;
+      background: #243044;
+      color: var(--muted);
+    }
+    .metric {
+      display: flex;
+      justify-content: space-between;
+      padding: 0.35rem 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.92rem;
+    }
+    .metric:last-child { border-bottom: none; }
+    .label { color: var(--muted); }
+    .value { font-variant-numeric: tabular-nums; font-weight: 600; }
+    .bar-wrap {
+      margin-top: 0.75rem;
+      height: 8px;
+      background: #243044;
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .bar { height: 100%; border-radius: 999px; transition: width 0.4s ease; }
+    .err { color: var(--bad); font-size: 0.85rem; }
+    footer {
+      margin-top: 1.25rem;
+      color: var(--muted);
+      font-size: 0.8rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>MES Parafina — metryki hostów</h1>
+  <p class="sub">Źródło: lokalne API Netdata · odświeżanie co {{ refresh_seconds }} s</p>
+  <div id="grid" class="grid"></div>
+  <footer id="status">Ładowanie…</footer>
+
+  <script>
+    const REFRESH_MS = {{ refresh_seconds }} * 1000;
+
+    function barColor(pct) {
+      if (pct >= 90) return 'var(--bad)';
+      if (pct >= 75) return 'var(--warn)';
+      return 'var(--ok)';
+    }
+
+    function fmtMetric(label, value, suffix = '') {
+      if (value === null || value === undefined) {
+        return `<div class="metric"><span class="label">${label}</span><span class="err">błąd</span></div>`;
+      }
+      return `<div class="metric"><span class="label">${label}</span><span class="value">${value}${suffix}</span></div>`;
+    }
+
+    function renderHost(item) {
+      const disk = item.disk || {};
+      const cpu = item.cpu || {};
+      const ram = item.ram || {};
+      const diskPct = disk.ok ? disk.used_pct : null;
+      const cpuPct = cpu.ok ? cpu.busy_pct : null;
+      const ramPct = ram.ok ? ram.used_pct : null;
+
+      let diskDetail = disk.ok
+        ? `${disk.used_gib} / ${(disk.used_gib + disk.avail_gib).toFixed(1)} GiB`
+        : (disk.error || 'błąd');
+
+      return `
+        <article class="card">
+          <h2>${item.host} <span class="badge">Netdata</span></h2>
+          ${fmtMetric('Dysk /', diskPct, disk.ok ? '%' : '')}
+          <div class="metric"><span class="label">Dysk szczegóły</span><span class="value" style="font-size:0.85rem">${diskDetail}</span></div>
+          ${fmtMetric('CPU', cpuPct, cpu.ok ? '%' : '')}
+          ${fmtMetric('RAM', ramPct, ram.ok ? '%' : '')}
+          ${disk.ok ? `<div class="bar-wrap"><div class="bar" style="width:${diskPct}%;background:${barColor(diskPct)}"></div></div>` : ''}
+        </article>
+      `;
+    }
+
+    async function refresh() {
+      const status = document.getElementById('status');
+      const grid = document.getElementById('grid');
+      try {
+        const res = await fetch('/api/metrics');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        grid.innerHTML = (data.hosts || []).map(renderHost).join('');
+        status.textContent = 'Ostatnia aktualizacja: ' + new Date().toLocaleString('pl-PL');
+      } catch (err) {
+        status.textContent = 'Błąd pobierania metryk: ' + err.message;
+      }
+    }
+
+    refresh();
+    setInterval(refresh, REFRESH_MS);
+  </script>
+</body>
+</html>

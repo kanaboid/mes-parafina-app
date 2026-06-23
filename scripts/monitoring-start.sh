@@ -4,6 +4,7 @@
 # Użycie:
 #   ./scripts/monitoring-start.sh kuma     # tylko oczyszczalnia-aio
 #   ./scripts/monitoring-start.sh netdata  # na każdym hoście
+#   ./scripts/monitoring-start.sh dashboard  # tylko oczyszczalnia-aio
 #
 # Przed pierwszym uruchomieniem:
 #   cp monitoring/.env.example monitoring/.env
@@ -16,7 +17,7 @@ MONITORING_DIR="${APP_DIR}/monitoring"
 ENV_FILE="${MONITORING_DIR}/.env"
 
 usage() {
-    echo "Użycie: $0 kuma|netdata"
+    echo "Użycie: $0 kuma|netdata|dashboard"
     exit 1
 }
 
@@ -24,7 +25,7 @@ usage() {
 
 MODE="$1"
 case "${MODE}" in
-    kuma|netdata) ;;
+    kuma|netdata|dashboard) ;;
     *) usage ;;
 esac
 
@@ -79,5 +80,7 @@ if [[ "${MODE}" == "kuma" ]]; then
     set -a && source "${ENV_FILE}" && set +a
     echo "Panel Kuma: http://$(hostname):${KUMA_PORT:-3001}/"
 elif [[ "${MODE}" == "netdata" ]]; then
-  echo "Panel Netdata: http://$(hostname):19999/"
+  echo "Panel Netdata: http://$(hostname):19999/v3"
+elif [[ "${MODE}" == "dashboard" ]]; then
+  echo "Panel metryk: http://$(hostname):${METRICS_DASHBOARD_PORT:-3080}/"
 fi

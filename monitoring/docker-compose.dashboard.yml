@@ -1,0 +1,16 @@
+# Panel agregujący metryki z Netdata (host: oczyszczalnia-aio).
+# Uruchomienie: ./scripts/monitoring-start.sh dashboard
+
+services:
+  metrics-dashboard:
+    build: ./dashboard
+    container_name: mes-metrics-dashboard
+    restart: unless-stopped
+    environment:
+      - NETDATA_HOSTS=${NETDATA_HOSTS:-terminal3,terminal1,oczyszczalnia-aio}
+      - NETDATA_PORT=${NETDATA_PORT:-19999}
+      - NETDATA_DISK_CHART=${NETDATA_DISK_CHART:-disk_space./}
+      - DASHBOARD_REFRESH_SECONDS=${DASHBOARD_REFRESH_SECONDS:-30}
+      - TZ=Europe/Warsaw
+    # network_mode: host — kontener widzi terminal3/terminal1 po hostname w LAN
+    network_mode: host
