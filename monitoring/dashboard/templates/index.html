@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>MES — podgląd metryk</title>
+  <title>MES — podgląd metryk hostów</title>
   <style>
     :root {
       --bg: #0f1419;
@@ -14,20 +14,35 @@
       --warn: #f5c451;
       --bad: #ff6b6b;
       --border: #2a3649;
+      --accent: #5b9cf5;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: system-ui, sans-serif;
+      font-family: system-ui, -apple-system, sans-serif;
       background: var(--bg);
       color: var(--text);
       padding: 1.25rem;
+      line-height: 1.45;
     }
-    h1 { margin: 0 0 0.25rem; font-size: 1.35rem; }
-    .sub { color: var(--muted); margin-bottom: 1.25rem; font-size: 0.9rem; }
+    h1 { margin: 0 0 0.35rem; font-size: 1.35rem; }
+    .sub { color: var(--muted); margin-bottom: 1rem; font-size: 0.9rem; }
+    .legend {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem 1.1rem;
+      margin-bottom: 1.25rem;
+      font-size: 0.88rem;
+    }
+    .legend h2 { margin: 0 0 0.6rem; font-size: 0.95rem; }
+    .legend ul { margin: 0; padding-left: 1.2rem; color: var(--muted); }
+    .legend li { margin-bottom: 0.35rem; }
+    .legend strong { color: var(--text); }
+    .thresholds { margin-top: 0.6rem; color: var(--muted); font-size: 0.82rem; }
     .grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
       gap: 1rem;
     }
     .card {
@@ -36,49 +51,81 @@
       border-radius: 10px;
       padding: 1rem 1.1rem;
     }
-    .card h2 {
-      margin: 0 0 0.75rem;
-      font-size: 1.05rem;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .badge {
-      font-size: 0.75rem;
-      padding: 0.15rem 0.45rem;
-      border-radius: 999px;
-      background: #243044;
-      color: var(--muted);
-    }
-    .metric {
-      display: flex;
-      justify-content: space-between;
-      padding: 0.35rem 0;
+    .card-header {
+      margin-bottom: 1rem;
+      padding-bottom: 0.75rem;
       border-bottom: 1px solid var(--border);
-      font-size: 0.92rem;
     }
-    .metric:last-child { border-bottom: none; }
-    .label { color: var(--muted); }
-    .value { font-variant-numeric: tabular-nums; font-weight: 600; }
+    .card-header h2 { margin: 0 0 0.25rem; font-size: 1.1rem; }
+    .role { color: var(--muted); font-size: 0.85rem; margin: 0 0 0.5rem; }
+    .netdata-link { font-size: 0.8rem; }
+    .netdata-link a { color: var(--accent); text-decoration: none; }
+    .netdata-link a:hover { text-decoration: underline; }
+    .metric-block {
+      margin-bottom: 1rem;
+      padding-bottom: 0.85rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .metric-block:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+    .metric-title { font-weight: 600; font-size: 0.95rem; margin-bottom: 0.2rem; }
+    .metric-desc {
+      color: var(--muted);
+      font-size: 0.78rem;
+      margin-bottom: 0.55rem;
+    }
+    .metric-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.88rem;
+      padding: 0.15rem 0;
+    }
+    .metric-row .k { color: var(--muted); }
+    .metric-row .v { font-variant-numeric: tabular-nums; font-weight: 600; }
+    .metric-main {
+      font-size: 1.35rem;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      margin: 0.25rem 0 0.5rem;
+    }
     .bar-wrap {
-      margin-top: 0.75rem;
       height: 8px;
       background: #243044;
       border-radius: 999px;
       overflow: hidden;
+      margin-top: 0.35rem;
     }
     .bar { height: 100%; border-radius: 999px; transition: width 0.4s ease; }
-    .err { color: var(--bad); font-size: 0.85rem; }
-    footer {
-      margin-top: 1.25rem;
-      color: var(--muted);
-      font-size: 0.8rem;
+    .err {
+      color: var(--bad);
+      font-size: 0.85rem;
+      padding: 0.5rem;
+      background: rgba(255, 107, 107, 0.08);
+      border-radius: 6px;
     }
+    footer { margin-top: 1.25rem; color: var(--muted); font-size: 0.8rem; }
   </style>
 </head>
 <body>
-  <h1>MES Parafina — metryki hostów</h1>
-  <p class="sub">Źródło: lokalne API Netdata · odświeżanie co {{ refresh_seconds }} s</p>
+  <h1>MES Parafina — podgląd metryk hostów</h1>
+  <p class="sub">
+    Dane na żywo z Netdata (API lokalne) · odświeżanie co {{ refresh_seconds }} s ·
+    nie zastępuje Kuma (alerty) ani szczegółowego Netdata
+  </p>
+
+  <section class="legend" aria-label="Objaśnienie metryk">
+    <h2>Co oznaczają wartości?</h2>
+    <ul>
+      <li><strong>Dysk (partycja /)</strong> — zajęte miejsce na głównej partycji systemu (system, Docker, bazy, ~/mes-backups). Pasek = procent zajęcia.</li>
+      <li><strong>CPU „obciążone”</strong> — ile procent czasu procesor nie jest bezczynny (bez idle i czekania na dysk). 100% = stale zajęty.</li>
+      <li><strong>RAM „używane”</strong> — pamięć procesów. „Dostępne” zawiera też cache — na Linuksie to normalne i nie jest awarią.</li>
+    </ul>
+    <p class="thresholds">
+      Kolory paska dysku: <span style="color:var(--ok)">■</span> &lt;75% &nbsp;
+      <span style="color:var(--warn)">■</span> 75–89% &nbsp;
+      <span style="color:var(--bad)">■</span> ≥90%
+    </p>
+  </section>
+
   <div id="grid" class="grid"></div>
   <footer id="status">Ładowanie…</footer>
 
@@ -91,33 +138,79 @@
       return 'var(--ok)';
     }
 
-    function fmtMetric(label, value, suffix = '') {
-      if (value === null || value === undefined) {
-        return `<div class="metric"><span class="label">${label}</span><span class="err">błąd</span></div>`;
+    function metricBlock(title, description, bodyHtml) {
+      return `
+        <div class="metric-block">
+          <div class="metric-title">${title}</div>
+          <div class="metric-desc">${description}</div>
+          ${bodyHtml}
+        </div>
+      `;
+    }
+
+    function renderDisk(disk) {
+      if (!disk.ok) {
+        return metricBlock('Dysk', 'Partycja systemowa — miejsce na backupy i dane', `<div class="err">${disk.error}</div>`);
       }
-      return `<div class="metric"><span class="label">${label}</span><span class="value">${value}${suffix}</span></div>`;
+      return metricBlock(
+        disk.title || 'Zajętość dysku',
+        disk.description || '',
+        `
+          <div class="metric-main" style="color:${barColor(disk.used_pct)}">${disk.used_pct}% zajęte</div>
+          <div class="metric-row"><span class="k">Zajęte</span><span class="v">${disk.used_gib} GiB</span></div>
+          <div class="metric-row"><span class="k">Wolne</span><span class="v">${disk.avail_gib} GiB</span></div>
+          <div class="metric-row"><span class="k">Razem (używane+wolne)</span><span class="v">${disk.total_gib} GiB</span></div>
+          ${disk.reserved_gib > 0 ? `<div class="metric-row"><span class="k">Zarezerwowane dla root</span><span class="v">${disk.reserved_gib} GiB</span></div>` : ''}
+          <div class="bar-wrap" title="Zajętość partycji ${disk.mount}"><div class="bar" style="width:${disk.used_pct}%;background:${barColor(disk.used_pct)}"></div></div>
+        `
+      );
+    }
+
+    function renderCpu(cpu) {
+      if (!cpu.ok) {
+        return metricBlock('CPU', 'Obciążenie procesora', `<div class="err">${cpu.error}</div>`);
+      }
+      return metricBlock(
+        cpu.title || 'CPU',
+        cpu.description || '',
+        `
+          <div class="metric-main">${cpu.busy_pct}% obciążone</div>
+          <div class="metric-row"><span class="k">Bezczynność (idle)</span><span class="v">${cpu.idle_pct}%</span></div>
+          <div class="metric-row"><span class="k">Oczekiwanie na dysk (iowait)</span><span class="v">${cpu.iowait_pct}%</span></div>
+          <div class="metric-row"><span class="k">Procesy użytkownika</span><span class="v">${cpu.user_pct}%</span></div>
+          <div class="metric-row"><span class="k">System (kernel)</span><span class="v">${cpu.system_pct}%</span></div>
+        `
+      );
+    }
+
+    function renderRam(ram) {
+      if (!ram.ok) {
+        return metricBlock('RAM', 'Pamięć operacyjna', `<div class="err">${ram.error}</div>`);
+      }
+      return metricBlock(
+        ram.title || 'RAM',
+        ram.description || '',
+        `
+          <div class="metric-main" style="color:${barColor(ram.used_pct)}">${ram.used_pct}% przez procesy</div>
+          <div class="metric-row"><span class="k">Używane przez procesy</span><span class="v">${ram.used_gib} GiB</span></div>
+          <div class="metric-row"><span class="k">Dostępne (wolne+cache)</span><span class="v">${ram.avail_gib} GiB</span></div>
+          <div class="metric-row"><span class="k">Cache dyskowy w RAM</span><span class="v">${ram.cached_gib} GiB</span></div>
+          <div class="metric-row"><span class="k">Łącznie RAM</span><span class="v">${ram.total_gib} GiB</span></div>
+        `
+      );
     }
 
     function renderHost(item) {
-      const disk = item.disk || {};
-      const cpu = item.cpu || {};
-      const ram = item.ram || {};
-      const diskPct = disk.ok ? disk.used_pct : null;
-      const cpuPct = cpu.ok ? cpu.busy_pct : null;
-      const ramPct = ram.ok ? ram.used_pct : null;
-
-      let diskDetail = disk.ok
-        ? `${disk.used_gib} / ${(disk.used_gib + disk.avail_gib).toFixed(1)} GiB`
-        : (disk.error || 'błąd');
-
       return `
         <article class="card">
-          <h2>${item.host} <span class="badge">Netdata</span></h2>
-          ${fmtMetric('Dysk /', diskPct, disk.ok ? '%' : '')}
-          <div class="metric"><span class="label">Dysk szczegóły</span><span class="value" style="font-size:0.85rem">${diskDetail}</span></div>
-          ${fmtMetric('CPU', cpuPct, cpu.ok ? '%' : '')}
-          ${fmtMetric('RAM', ramPct, ram.ok ? '%' : '')}
-          ${disk.ok ? `<div class="bar-wrap"><div class="bar" style="width:${diskPct}%;background:${barColor(diskPct)}"></div></div>` : ''}
+          <header class="card-header">
+            <h2>${item.host}</h2>
+            <p class="role">${item.role || ''}</p>
+            <p class="netdata-link">Szczegóły: <a href="${item.netdata_url}" target="_blank" rel="noopener">Netdata ↗</a></p>
+          </header>
+          ${renderDisk(item.disk || {})}
+          ${renderCpu(item.cpu || {})}
+          ${renderRam(item.ram || {})}
         </article>
       `;
     }
