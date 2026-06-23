@@ -72,7 +72,11 @@ if ! docker info >/dev/null 2>&1; then
 fi
 
 cd "${MONITORING_DIR}"
-docker compose --env-file "${ENV_FILE}" -f "docker-compose.${MODE}.yml" up -d
+if [[ "${MODE}" == "dashboard" ]]; then
+    docker compose --env-file "${ENV_FILE}" -f "docker-compose.${MODE}.yml" up -d --build
+else
+    docker compose --env-file "${ENV_FILE}" -f "docker-compose.${MODE}.yml" up -d
+fi
 
 echo "Monitoring (${MODE}) uruchomiony."
 if [[ "${MODE}" == "kuma" ]]; then

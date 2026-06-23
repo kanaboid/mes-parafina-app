@@ -3,7 +3,9 @@
 
 services:
   metrics-dashboard:
-    build: ./dashboard
+    build:
+      context: ./dashboard
+      network: host
     container_name: mes-metrics-dashboard
     restart: unless-stopped
     environment:

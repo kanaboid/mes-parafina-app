@@ -332,6 +332,16 @@ API JSON (np. dla własnych integracji): `http://oczyszczalnia-aio:3080/api/metr
 
 Wymaga działającego Netdata na hostach z listy (`:19999` dostępne z oczyszczalnia-aio). Kontener używa `network_mode: host`, żeby rozwiązywać hostname `terminal3` / `terminal1` jak reszta LAN.
 
+Jeśli build pada z `Temporary failure in name resolution` (host jako gateway DNS) — w compose jest `build.network: host`. Ręcznie:
+
+```bash
+cd ~/mes-parafina-app/monitoring
+docker compose -f docker-compose.dashboard.yml --env-file .env build
+docker compose -f docker-compose.dashboard.yml --env-file .env up -d
+```
+
+Sprawdź też DNS na hoście: `ping -c1 pypi.org`. W `/etc/docker/daemon.json` można dodać `"dns": ["8.8.8.8", "1.1.1.1"]` i `sudo systemctl restart docker`.
+
 Autostart (@reboot na oczyszczalnia-aio):
 
 ```cron
@@ -379,5 +389,6 @@ Reszta: `chmod -x` i uruchamianie przez `bash scripts/...`.
 | Brak miejsca na dysku | Netdata → Disk; wyczyść stare backupy (`KEEP_DAYS`) |
 | Panel metryk pusty / błąd hosta | `curl http://terminal3:19999/api/v1/charts`; firewall 19999; `NETDATA_HOSTS` w `monitoring/.env` |
 | Kuma niedostępna, kontener działa | `curl -I http://127.0.0.1:3001/` na oczyszczalnia-aio; `git pull` + recreate Kuma (`network_mode: host`); `ufw`; restart Dockera |
+| Dashboard build — DNS / pip | `build.network: host` w compose; `ping pypi.org`; DNS w `daemon.json` Dockera |
 
 Powiązane: [disaster-recovery.md](disaster-recovery.md), [mysql-replication.md](mysql-replication.md)
