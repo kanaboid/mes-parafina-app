@@ -26,9 +26,9 @@ REQUEST_TIMEOUT = float(os.environ.get("NETDATA_REQUEST_TIMEOUT", "8"))
 
 # Opis roli hosta (można nadpisać: NETDATA_HOST_ROLES=terminal3:Produkcja,terminal1:Standby)
 DEFAULT_HOST_ROLES: dict[str, str] = {
-    "terminal3": "Produkcja — aplikacja MES, MySQL PRIMARY, backupy",
-    "terminal1": "Standby — replika MySQL (bez strony web na co dzień)",
-    "oczyszczalnia-aio": "Monitoring — Kuma, Netdata, archiwum backupów",
+    "terminal3": "produkcja",
+    "terminal1": "standby / replika",
+    "oczyszczalnia-aio": "monitoring",
 }
 
 
@@ -80,13 +80,6 @@ def _last_row(payload: dict[str, Any]) -> dict[str, float]:
     return result
 
 
-def _mount_from_disk_chart(chart_id: str) -> str:
-    """disk_space./ → partycja /"""
-    if chart_id.startswith("disk_space."):
-        mount = chart_id[len("disk_space.") :]
-        return mount if mount else "/"
-    return "/"
-
 
 def _disk_summary(host: str) -> dict[str, Any]:
     payload = _fetch_chart(host, DISK_CHART)
@@ -99,28 +92,17 @@ def _disk_summary(host: str) -> dict[str, Any]:
     dims = _last_row(payload)
     used_gib = dims.get("used", 0.0)
     avail_gib = dims.get("avail", 0.0)
-    reserved_gib = dims.get("reserved_for_root", dims.get("reserved for root", 0.0))
     total_gib = used_gib + avail_gib
     if total_gib <= 0:
         return {"ok": False, "error": "brak danych o dysku"}
 
     used_pct = round(100.0 * used_gib / total_gib, 1)
-    mount = _mount_from_disk_chart(DISK_CHART)
 
     return {
         "ok": True,
-        "mount": mount,
         "used_gib": round(used_gib, 1),
         "avail_gib": round(avail_gib, 1),
-        "reserved_gib": round(reserved_gib, 1),
-        "total_gib": round(total_gib, 1),
         "used_pct": used_pct,
-        "title": f"Zajętość dysku (partycja {mount})",
-        "description": (
-            "Ile miejsca na partycji systemowej jest zajęte przez system, "
-            "aplikacje, Docker i backupy (~/mes-backups). "
-            "Wolne = miejsce na nowe dumpy i logi."
-        ),
     }
 
 
@@ -132,8 +114,6 @@ def _cpu_summary(host: str) -> dict[str, Any]:
     dims = _last_row(payload)
     idle = dims.get("idle", 0.0)
     iowait = dims.get("iowait", 0.0)
-    user = dims.get("user", 0.0)
-    system = dims.get("system", 0.0)
     busy = max(0.0, 100.0 - idle - iowait)
 
     return {
@@ -141,13 +121,6 @@ def _cpu_summary(host: str) -> dict[str, Any]:
         "busy_pct": round(busy, 1),
         "idle_pct": round(idle, 1),
         "iowait_pct": round(iowait, 1),
-        "user_pct": round(user, 1),
-        "system_pct": round(system, 1),
-        "title": "Obciążenie procesora (CPU)",
-        "description": (
-            "Szacunek chwilowego obciążenia: 100% minus czas bezczynności (idle) "
-            "i oczekiwanie na dysk (iowait). Wysokie iowait przy backupie/rsync jest normalne."
-        ),
     }
 
 
@@ -178,12 +151,6 @@ def _ram_summary(host: str) -> dict[str, Any]:
         "total_gib": total_gib,
         "used_pct": used_pct,
         "cached_gib": round(cached_mib / 1024.0, 1),
-        "title": "Pamięć RAM",
-        "description": (
-            "„Zajęte” to pamięć używana przez procesy (MES, MySQL, Docker). "
-            "„Dostępne” obejmuje wolna RAM + cache/bufory — Linux często trzyma "
-            "cache dyskowy; to nie oznacza braku pamięci."
-        ),
     }
 
 
