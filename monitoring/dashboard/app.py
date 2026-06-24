@@ -80,6 +80,51 @@ def _last_row(payload: dict[str, Any]) -> dict[str, float]:
     return result
 
 
+def _avg_dimensions(payload: dict[str, Any]) -> dict[str, float]:
+    """Średnia wartości wymiarów z wielu punktów (stabilniejsze niż ostatnia sekunda)."""
+    labels = payload.get("labels", [])
+    rows = payload.get("data", [])
+    if not labels or not rows:
+        return {}
+
+    sums: dict[str, float] = {}
+    counts: dict[str, int] = {}
+    for row in rows:
+        for index, label in enumerate(labels):
+            if index == 0:
+                continue
+            if index < len(row) and row[index] is not None:
+                key = str(label)
+                sums[key] = sums.get(key, 0.0) + float(row[index])
+                counts[key] = counts.get(key, 0) + 1
+
+    return {key: sums[key] / counts[key] for key in sums if counts.get(key)}
+
+
+def _dim_value(dims: dict[str, float], name: str) -> float:
+    """Pobiera wymiar bez względu na wielkość liter (Netdata zwraca małe litery)."""
+    if name in dims:
+        return dims[name]
+    lowered = name.lower()
+    for key, value in dims.items():
+        if key.lower() == lowered:
+            return value
+    return 0.0
+
+
+# Netdata domyślnie nie zwraca wymiaru idle w /api/v1/data — busy liczymy z aktywnych.
+_CPU_BUSY_DIMS = (
+    "user",
+    "nice",
+    "system",
+    "irq",
+    "softirq",
+    "steal",
+    "guest",
+    "guest_nice",
+)
+
+
 
 def _disk_summary(host: str) -> dict[str, Any]:
     payload = _fetch_chart(host, DISK_CHART)
@@ -107,14 +152,23 @@ def _disk_summary(host: str) -> dict[str, Any]:
 
 
 def _cpu_summary(host: str) -> dict[str, Any]:
-    payload = _fetch_chart(host, "system.cpu")
+    payload = _fetch_chart(host, "system.cpu", points=5)
     if not payload:
         return {"ok": False, "error": "brak danych CPU"}
 
-    dims = _last_row(payload)
-    idle = dims.get("idle", 0.0)
-    iowait = dims.get("iowait", 0.0)
-    busy = max(0.0, 100.0 - idle - iowait)
+    dims = _avg_dimensions(payload)
+    if not dims:
+        return {"ok": False, "error": "brak danych CPU"}
+
+    busy = sum(_dim_value(dims, name) for name in _CPU_BUSY_DIMS)
+    iowait = _dim_value(dims, "iowait")
+    idle = _dim_value(dims, "idle")
+    if idle <= 0.0:
+        # idle nie ma w domyślnej odpowiedzi Netdata — wylicz z pozostałych wymiarów
+        idle = max(0.0, 100.0 - busy - iowait)
+
+    busy = min(100.0, max(0.0, busy))
+    idle = min(100.0, max(0.0, idle))
 
     return {
         "ok": True,
